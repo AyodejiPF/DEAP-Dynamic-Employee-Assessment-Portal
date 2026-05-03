@@ -2983,7 +2983,7 @@ function TestsPanel({
                 Select all
               </button>
               <button className="secondary-button" type="button" onClick={() => setAvailabilityDraft([])}>
-                Clear
+                Deselect all
               </button>
             </div>
             <div className="user-chip-grid availability-user-grid">
