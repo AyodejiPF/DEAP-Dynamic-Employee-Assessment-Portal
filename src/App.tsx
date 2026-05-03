@@ -485,7 +485,7 @@ const defaultQuestionBankMetadata: QuestionBankMetadataMap = {
     description: 'A small built-in sample bank used for demo and fallback assessment testing.',
   },
 }
-export const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
+const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
   {
     title: 'Covering the Cybercrimes Act 2015 and the 2024 Amendment',
     body: 'This assessment covers the Cybercrimes (Prohibition, Prevention, Etc.) Act 2015 and the Cybercrimes (Prohibition, Prevention, Etc.) (Amendment) Act 2024.',
@@ -946,10 +946,10 @@ function displayQuestionText(rawText: string | undefined): string {
     cleaned = cleaned
       .replace(/^\s*(?:\[[^\]]{1,48}\]|\((?:easy|medium|hard|standard|weighted|scenario|curve|mcq|single answer|multiple choice)[^)]{0,32}\))\s*/i, '')
       .replace(/^\s*(?:easy|medium|hard|standard|weighted|scenario|curve|mcq|single-answer|single answer|multiple-choice|multiple choice)(?:\s+(?:question|scenario|item|batch|type))?\s*[:\-–—|]\s*/i, '')
-      .replace(/^\s*(?:question|item|no\.?|number|q)\s*#?\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
-      .replace(/^\s*[sq]\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
-      .replace(/^\s*[a-z]{1,6}\s*q?\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
-      .replace(/^\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/, '')
+      .replace(/^\s*(?:question|item|no\.?|number|q)\s*#?\s*\d{1,5}[a-z]?\s*[).:–—-]\s*/i, '')
+      .replace(/^\s*[sq]\s*\d{1,5}[a-z]?\s*[).:–—-]\s*/i, '')
+      .replace(/^\s*[a-z]{1,6}\s*q?\s*\d{1,5}[a-z]?\s*[).:–—-]\s*/i, '')
+      .replace(/^\s*\d{1,5}[a-z]?\s*[).:–—-]\s*/, '')
       .trim()
   }
   return cleaned || original
@@ -1132,7 +1132,7 @@ function getQuestionBankSummaries(
 /**
  * Calculates the time-decay multiplier from server-authoritative seconds remaining.
  */
-export function getTimeMultiplier(secondsRemaining: number): Decimal {
+function getTimeMultiplier(secondsRemaining: number): Decimal {
   if (secondsRemaining >= 51) return new Decimal(1)
   if (secondsRemaining >= 41) return new Decimal(0.9)
   if (secondsRemaining >= 31) return new Decimal(0.8)
@@ -1145,7 +1145,7 @@ export function getTimeMultiplier(secondsRemaining: number): Decimal {
 /**
  * Returns the configured answer weight for a selected option.
  */
-export function getAnswerWeight(question: Question, selectedOption?: OptionKey): Decimal {
+function getAnswerWeight(question: Question, selectedOption?: OptionKey): Decimal {
   if (!selectedOption) return new Decimal(0)
   if (selectedOption === question.correctAnswer) return new Decimal(question.correctWeight)
   if (selectedOption === question.partialAnswer1) return new Decimal(question.partialWeight1 ?? 0)
@@ -1156,7 +1156,7 @@ export function getAnswerWeight(question: Question, selectedOption?: OptionKey):
 /**
  * Calculates a single question score with decimal-safe arithmetic.
  */
-export function scoreQuestion(
+function scoreQuestion(
   question: Question,
   selectedOption: OptionKey | undefined,
   secondsRemaining: number,
@@ -1767,6 +1767,7 @@ function App() {
       id: `test-${Date.now()}`,
       name: String(form.get('name') || 'Untitled Assessment').slice(0, 120),
       description: String(form.get('description') || '').slice(0, 500),
+      overviewSections: questionBankId === cybercrimesActBankId ? cybercrimesAssessmentOverview : questionBankId === sourceWorkbookVersion ? consentSalesAssessmentOverview : undefined,
       questionCount,
       difficulty,
       questionBankId: questionBankId || undefined,
@@ -2871,8 +2872,10 @@ function TestsPanel({
   onUpdateAvailability: (testId: string, assignedUserIds: string[]) => void
   onTake: (testId: string) => void
 }) {
-  const defaultStart = toDateTimeLocal(new Date())
-  const defaultEnd = toDateTimeLocal(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7))
+  const [defaultAvailabilityWindow] = useState(() => ({
+    start: toDateTimeLocal(new Date()),
+    end: toDateTimeLocal(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
+  }))
   const questionBanks = useMemo(() => getQuestionBankSummaries(questions, questionBankMetadata), [questions, questionBankMetadata])
   const defaultQuestionBankId = questionBanks.find((bank) => bank.id === sourceWorkbookVersion)?.id ?? questionBanks[0]?.id ?? ''
   const employeeUsers = useMemo(
@@ -2971,11 +2974,11 @@ function TestsPanel({
           <div className="form-grid">
             <label>
               Available from
-              <input name="startDate" type="datetime-local" defaultValue={defaultStart} />
+              <input name="startDate" type="datetime-local" defaultValue={defaultAvailabilityWindow.start} />
             </label>
             <label>
               Available until
-              <input name="endDate" type="datetime-local" defaultValue={defaultEnd} />
+              <input name="endDate" type="datetime-local" defaultValue={defaultAvailabilityWindow.end} />
             </label>
           </div>
           <label>
