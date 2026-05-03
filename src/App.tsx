@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Decimal from 'decimal.js'
 import {
   AlertCircle,
   BarChart3,
+  Bot,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Copy,
   Clock3,
@@ -14,11 +17,15 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MessageSquare,
   Moon,
   Play,
+  Plus,
   Search,
+  Send,
   Settings2,
   ShieldCheck,
+  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -217,6 +224,35 @@ interface AnalyticsEvent {
   outcome?: string
   createdAt: string
   metadata?: Record<string, string | number | boolean | undefined>
+}
+
+interface AiChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
+interface AiChatThread {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: AiChatMessage[]
+}
+
+interface AiIntelligencePayload {
+  question: string
+  filters: Record<string, string>
+  chatHistory: Array<Pick<AiChatMessage, 'role' | 'content'>>
+  analytics: Record<string, unknown>
+  questionBankContext: Record<string, unknown>
+}
+
+interface AiIntelligenceResponse {
+  answer: string
+  model?: string
+  citations?: string[]
 }
 
 interface Branding {
@@ -901,6 +937,32 @@ function shortQuestionText(question: Question | undefined): string {
   return question.questionText.length > 76 ? `${question.questionText.slice(0, 73)}...` : question.questionText
 }
 
+function aiThreadTitle(prompt: string): string {
+  const title = prompt.replace(/\s+/g, ' ').trim()
+  return title.length > 58 ? `${title.slice(0, 55)}...` : title || 'New intelligence chat'
+}
+
+function createAiThread(title = 'New intelligence chat'): AiChatThread {
+  const now = new Date().toISOString()
+  return {
+    id: eventId('ai-thread'),
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  }
+}
+
+function questionOption(question: Question, option: OptionKey): string {
+  return String(question[`option${option}` as keyof Question] ?? '')
+}
+
+function relevantQuestionScore(question: Question, terms: string[]): number {
+  if (!terms.length) return 0
+  const haystack = `${question.questionText} ${question.topicTag} ${questionOption(question, 'A')} ${questionOption(question, 'B')} ${questionOption(question, 'C')} ${questionOption(question, 'D')} ${questionOption(question, 'E')}`.toLowerCase()
+  return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0)
+}
+
 function credentialText(user: User): string {
   return `Username: ${user.fullName}\nPassword: ${user.password}`
 }
@@ -927,6 +989,27 @@ async function copyToClipboard(text: string): Promise<void> {
  */
 async function loadSpreadsheetTools() {
   return import('xlsx')
+}
+
+async function requestAiIntelligence(payload: AiIntelligencePayload): Promise<AiIntelligenceResponse> {
+  const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  const endpoint = isLocal ? 'https://iicocece-assessment.web.app/api/analytics-intelligence' : '/api/analytics-intelligence'
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('AI backend is not deployed yet. Upgrade Firebase to Blaze, deploy the function, then try again.')
+  }
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(String(body.error ?? 'AI intelligence request failed.'))
+  return {
+    answer: String(body.answer ?? '').trim() || 'No analysis was returned.',
+    model: typeof body.model === 'string' ? body.model : undefined,
+    citations: Array.isArray(body.citations) ? body.citations.filter((item: unknown): item is string => typeof item === 'string') : [],
+  }
 }
 
 function generatePassword(): string {
@@ -2788,6 +2871,15 @@ function Analytics({
   const [selectedDifficulty, setSelectedDifficulty] = useState('all')
   const [selectedTopic, setSelectedTopic] = useState('all')
   const [selectedRole, setSelectedRole] = useState('all')
+  const [chatThreads, setChatThreads] = useState<AiChatThread[]>(() => {
+    const stored = readStored<AiChatThread[]>('deap-ai-chat-threads', [])
+    return stored.length ? stored : [createAiThread()]
+  })
+  const [selectedChatId, setSelectedChatId] = useState(() => localStorage.getItem('deap-ai-selected-chat-id') ?? '')
+  const [aiDraft, setAiDraft] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
 
   const departments = useMemo(() => Array.from(new Set(users.map((user) => user.department))).sort(), [users])
   const availableTopics = useMemo(() => Array.from(new Set(questions.map((question) => question.topicTag))).sort(), [questions])
@@ -2977,6 +3069,7 @@ function Analytics({
                   ? 'Review: slow response'
                   : 'Stable'
         return {
+          questionId,
           question: shortQuestionText(question),
           topic: question?.topicTag ?? 'Unknown',
           difficulty: question?.difficulty ?? 'Mixed',
@@ -3099,6 +3192,191 @@ function Analytics({
     }
   }, [analyticsEvents, department, departments, questionBankMetadata, questionBanks, questions, range, selectedDifficulty, selectedQuestionBankId, selectedRole, selectedTestId, selectedTopic, selectedUserId, sessions, tests, users])
 
+  const activeChat = useMemo(() => chatThreads.find((thread) => thread.id === selectedChatId) ?? chatThreads[0], [chatThreads, selectedChatId])
+
+  useEffect(() => {
+    localStorage.setItem('deap-ai-chat-threads', JSON.stringify(chatThreads.slice(0, 40)))
+  }, [chatThreads])
+
+  useEffect(() => {
+    if (!chatThreads.length) return
+    const nextSelectedId = chatThreads.some((thread) => thread.id === selectedChatId) ? selectedChatId : chatThreads[0].id
+    if (nextSelectedId !== selectedChatId) setSelectedChatId(nextSelectedId)
+    localStorage.setItem('deap-ai-selected-chat-id', nextSelectedId)
+  }, [chatThreads, selectedChatId])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [activeChat?.messages.length, aiBusy])
+
+  function createChat() {
+    const thread = createAiThread()
+    setChatThreads((existing) => [thread, ...existing])
+    setSelectedChatId(thread.id)
+    setAiDraft('')
+    setAiError('')
+  }
+
+  function deleteChat(threadId: string) {
+    setChatThreads((existing) => {
+      const next = existing.filter((thread) => thread.id !== threadId)
+      return next.length ? next : [createAiThread()]
+    })
+    if (selectedChatId === threadId) setSelectedChatId('')
+  }
+
+  function buildAiPayload(prompt: string, thread: AiChatThread | undefined): AiIntelligencePayload {
+    const selectedUser = users.find((user) => user.id === selectedUserId)
+    const selectedTest = tests.find((test) => test.id === selectedTestId)
+    const selectedBank = questionBanks.find((bank) => bank.id === selectedQuestionBankId)
+    const terms = prompt
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((term) => term.length > 3)
+    const weakTopics = new Set(analytics.topicData.filter((row) => row.score < 70 || row.responses >= 3).slice(0, 8).map((row) => row.topic))
+    const flaggedQuestionIds = new Set(analytics.questionQualityRows.filter((row) => row.flag.startsWith('Review')).map((row) => row.questionId))
+    const scopedQuestions = questions.filter((question) => {
+      if (selectedQuestionBankId !== 'all' && question.importBatchId !== selectedQuestionBankId) return false
+      if (selectedDifficulty !== 'all' && question.difficulty !== selectedDifficulty) return false
+      if (selectedTopic !== 'all' && question.topicTag !== selectedTopic) return false
+      return true
+    })
+    const scoredQuestions = scopedQuestions
+      .map((question) => ({
+        question,
+        score:
+          relevantQuestionScore(question, terms) +
+          (flaggedQuestionIds.has(question.questionId) ? 5 : 0) +
+          (weakTopics.has(question.topicTag) ? 2 : 0),
+      }))
+      .sort((left, right) => right.score - left.score)
+    const samples = (scoredQuestions.some((item) => item.score > 0) ? scoredQuestions.filter((item) => item.score > 0) : scoredQuestions)
+      .slice(0, 36)
+      .map(({ question }) => ({
+        id: question.questionId,
+        bank: documentNameFromBatch(question.importBatchId, questionBankMetadata),
+        topic: question.topicTag,
+        difficulty: question.difficulty,
+        question: question.questionText.slice(0, 700),
+        options: {
+          A: question.optionA.slice(0, 240),
+          B: question.optionB.slice(0, 240),
+          C: question.optionC.slice(0, 240),
+          D: question.optionD.slice(0, 240),
+          E: question.optionE.slice(0, 240),
+        },
+        scoring: {
+          correctAnswer: question.correctAnswer,
+          correctWeight: question.correctWeight,
+          partialAnswer1: question.partialAnswer1,
+          partialWeight1: question.partialWeight1,
+          partialAnswer2: question.partialAnswer2,
+          partialWeight2: question.partialWeight2,
+        },
+      }))
+    const bankContext = questionBanks.map((bank) => {
+      const bankQuestions = questions.filter((question) => question.importBatchId === bank.id)
+      const topicCounts = Array.from(
+        bankQuestions.reduce((map, question) => {
+          map.set(question.topicTag, (map.get(question.topicTag) ?? 0) + 1)
+          return map
+        }, new Map<string, number>()),
+      )
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 18)
+        .map(([topic, count]) => ({ topic, count }))
+      return {
+        id: bank.id,
+        name: bank.name,
+        description: documentDescriptionFromBatch(bank.id, questionBankMetadata),
+        totalQuestions: bank.total,
+        difficultyCounts: {
+          easy: bankQuestions.filter((question) => question.difficulty === 'Easy').length,
+          medium: bankQuestions.filter((question) => question.difficulty === 'Medium').length,
+          hard: bankQuestions.filter((question) => question.difficulty === 'Hard').length,
+        },
+        topicCounts,
+      }
+    })
+
+    return {
+      question: prompt,
+      filters: {
+        range,
+        department,
+        user: selectedUser?.fullName ?? selectedUserId,
+        test: selectedTest?.name ?? selectedTestId,
+        questionBank: selectedBank?.name ?? selectedQuestionBankId,
+        difficulty: selectedDifficulty,
+        topic: selectedTopic,
+        role: selectedRole,
+      },
+      chatHistory: (thread?.messages ?? []).slice(-10).map((message) => ({ role: message.role, content: message.content.slice(0, 1800) })),
+      analytics: {
+        usageMetrics: analytics.usageMetrics,
+        questionBanks: analytics.questionBankRows,
+        departments: analytics.departmentData,
+        topics: analytics.topicData,
+        difficulty: analytics.difficultyTimingData,
+        answerOutcomes: analytics.outcomeData,
+        supportSignals: analytics.supportUsageData,
+        optionPattern: analytics.optionData,
+        interventionPriority: analytics.userRiskData.slice(0, 15),
+        questionQuality: analytics.questionQualityRows.slice(0, 15),
+        connectivity: analytics.connectivityRows.slice(0, 10),
+        operations: analytics.operationRows.slice(0, 12),
+        trend: analytics.trendData.slice(-30),
+      },
+      questionBankContext: {
+        banks: bankContext,
+        relevantQuestionSamples: samples,
+      },
+    }
+  }
+
+  async function submitAiQuestion(event?: FormEvent) {
+    event?.preventDefault()
+    const prompt = aiDraft.trim()
+    if (!prompt || aiBusy) return
+    setAiDraft('')
+    setAiError('')
+    setAiBusy(true)
+    const now = new Date().toISOString()
+    const threadId = activeChat?.id ?? eventId('ai-thread')
+    const userMessage: AiChatMessage = { id: eventId('ai-user'), role: 'user', content: prompt, createdAt: now }
+    const baseThread = activeChat ?? createAiThread(aiThreadTitle(prompt))
+    const nextTitle = baseThread.messages.length ? baseThread.title : aiThreadTitle(prompt)
+    const optimisticThread: AiChatThread = {
+      ...baseThread,
+      id: threadId,
+      title: nextTitle,
+      updatedAt: now,
+      messages: [...baseThread.messages, userMessage],
+    }
+    setSelectedChatId(threadId)
+    setChatThreads((existing) => [optimisticThread, ...existing.filter((thread) => thread.id !== threadId)])
+    try {
+      const result = await requestAiIntelligence(buildAiPayload(prompt, optimisticThread))
+      const assistantMessage: AiChatMessage = {
+        id: eventId('ai-assistant'),
+        role: 'assistant',
+        content: result.answer,
+        createdAt: new Date().toISOString(),
+      }
+      setChatThreads((existing) =>
+        existing.map((thread) =>
+          thread.id === threadId
+            ? { ...thread, updatedAt: assistantMessage.createdAt, messages: [...thread.messages, assistantMessage] }
+            : thread,
+        ),
+      )
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI analysis could not be completed.')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   return (
     <section>
       <PageTitle eyebrow="Analytics" title="Decision intelligence dashboard" />
@@ -3167,6 +3445,80 @@ function Analytics({
               <option value="employee">Employee</option>
             </select>
           </label>
+        </div>
+      </section>
+
+      <section className="panel ai-chat-panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Perplexity intelligence chat</h2>
+            <p>Ask follow-up questions against the current filters, analytics signals, and question-bank context.</p>
+          </div>
+          <button className="secondary-button compact" type="button" onClick={createChat}>
+            <Plus size={16} /> New chat
+          </button>
+        </div>
+        <div className="ai-chat-shell">
+          <aside className="ai-chat-sidebar" aria-label="Saved AI chats">
+            {chatThreads.map((thread) => (
+              <div className={`ai-chat-thread ${activeChat?.id === thread.id ? 'active' : ''}`} key={thread.id}>
+                <button type="button" onClick={() => setSelectedChatId(thread.id)}>
+                  <MessageSquare size={16} />
+                  <span>{thread.title}</span>
+                  <small>{new Date(thread.updatedAt).toLocaleString()}</small>
+                </button>
+                <button className="icon-button" type="button" aria-label={`Delete ${thread.title}`} onClick={() => deleteChat(thread.id)}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </aside>
+          <div className="ai-chat-main">
+            <div className="ai-message-list" aria-live="polite">
+              {activeChat?.messages.length ? (
+                activeChat.messages.map((message) => (
+                  <article className={`ai-message ${message.role}`} key={message.id}>
+                    <div>
+                      {message.role === 'assistant' ? <Bot size={17} /> : <UserRound size={17} />}
+                      <strong>{message.role === 'assistant' ? 'DEAP Intelligence' : 'You'}</strong>
+                      <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                    <p>{message.content}</p>
+                  </article>
+                ))
+              ) : (
+                <EmptyState title="No messages yet" body="Ask about risk flags, weak topics, item quality, completion gaps, or what to do next." />
+              )}
+              {aiBusy && (
+                <article className="ai-message assistant pending">
+                  <div>
+                    <Sparkles size={17} />
+                    <strong>DEAP Intelligence</strong>
+                    <span>Analyzing</span>
+                  </div>
+                  <p>Reading the selected analytics and question-bank context...</p>
+                </article>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            {aiError && <p className="inline-error">{aiError}</p>}
+            <form className="ai-compose" onSubmit={submitAiQuestion}>
+              <textarea
+                value={aiDraft}
+                placeholder="Ask what the data means, who needs intervention, which questions are weak, or what action to take next."
+                onChange={(event) => setAiDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    void submitAiQuestion()
+                  }
+                }}
+              />
+              <button className="primary-button" type="submit" disabled={!aiDraft.trim() || aiBusy}>
+                <Send size={18} /> Ask
+              </button>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -3465,6 +3817,7 @@ function SettingsPanel({
   const [selectedUsers, setSelectedUsers] = useState<string[]>(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))
   const [userFilter, setUserFilter] = useState('')
   const [bulkPermission, setBulkPermission] = useState<PermissionKey>('take_tests')
+  const [openPermissionUserId, setOpenPermissionUserId] = useState<string>()
   const editableUsers = useMemo(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin'), [users])
   const filteredUsers = useMemo(() => {
     const normalized = userFilter.toLowerCase().trim()
@@ -3645,44 +3998,51 @@ function SettingsPanel({
 
           <section className="panel permission-table-panel">
             <h2>Current permission status</h2>
-            <div className="permission-matrix">
-              <table>
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    {permissionCatalog.map((permission) => (
-                      <th key={permission.key}>{permission.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id}>
-                      <td>
+            <div className="permission-accordion-list">
+              {filteredUsers.map((user) => {
+                const isAdminRow = user.role === 'super_admin' || user.role === 'admin'
+                const isOpen = openPermissionUserId === user.id
+                const enabledCount = permissionCatalog.filter((permission) => isAdminRow || (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])).length
+                return (
+                  <article className="permission-accordion-item" key={user.id}>
+                    <button
+                      className="permission-user-button"
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenPermissionUserId((current) => (current === user.id ? undefined : user.id))}
+                    >
+                      {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                      <span>
                         <strong>{user.displayName}</strong>
-                        <small>{user.jobRole}</small>
-                      </td>
-                      {permissionCatalog.map((permission) => {
-                        const isAdminRow = user.role === 'super_admin' || user.role === 'admin'
-                        const checked = isAdminRow ? true : (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])
-                        return (
-                          <td className={isAdminRow ? 'locked-permission' : ''} key={permission.key}>
-                            <label className="toggle-cell">
+                        <small>{user.jobRole} · {user.department}</small>
+                      </span>
+                      <em>{isAdminRow ? 'All permissions locked on' : `${enabledCount} of ${permissionCatalog.length} enabled`}</em>
+                    </button>
+                    {isOpen && (
+                      <div className="permission-detail-grid">
+                        {permissionCatalog.map((permission) => {
+                          const checked = isAdminRow ? true : (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])
+                          return (
+                            <label className={`permission-toggle-card ${isAdminRow ? 'locked-permission' : ''}`} key={permission.key}>
                               <input
                                 type="checkbox"
                                 checked={checked}
                                 disabled={isAdminRow}
                                 onChange={(event) => onSetPermission(user.id, permission.key, event.target.checked)}
                               />
-                              <span>{isAdminRow ? 'Always on' : checked ? 'On' : 'Off'}</span>
+                              <span>
+                                <strong>{permission.label}</strong>
+                                <small>{permission.description}</small>
+                              </span>
+                              <em>{isAdminRow ? 'Always on' : checked ? 'On' : 'Off'}</em>
                             </label>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
             </div>
           </section>
         </section>
