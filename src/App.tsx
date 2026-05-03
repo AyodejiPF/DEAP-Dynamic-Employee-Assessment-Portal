@@ -104,6 +104,13 @@ interface Question {
   importBatchId: string
 }
 
+interface QuestionBankMetadata {
+  name: string
+  description: string
+}
+
+type QuestionBankMetadataMap = Record<string, QuestionBankMetadata>
+
 interface Assessment {
   id: string
   name: string
@@ -368,6 +375,21 @@ const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 const optionKeys: OptionKey[] = ['A', 'B', 'C', 'D', 'E']
 const sourceWorkbookPath = '/questions/nigeria-cybercrime-act-assessment-1500q.xlsx'
 const sourceWorkbookVersion = 'nigeria-cybercrime-act-1500q-v1'
+const consentSalesOutreachBankId = 'batch-177767020403'
+const defaultQuestionBankMetadata: QuestionBankMetadataMap = {
+  [sourceWorkbookVersion]: {
+    name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
+    description: 'Covers the Cybercrimes Act 2015 and the 2024 Amendment across foundational, applied, and advanced legal analysis.',
+  },
+  'seed-bank': {
+    name: 'Sample DEAP Question Bank',
+    description: 'A small built-in sample bank used for demo and fallback assessment testing.',
+  },
+  [consentSalesOutreachBankId]: {
+    name: 'iicocece Consent-Based Sales Outreach — Professional Competency Assessment',
+    description: 'Professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
+  },
+}
 const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
   {
     title: 'Covering the Cybercrimes Act 2015 and the 2024 Amendment',
@@ -737,22 +759,49 @@ function generatePassword(): string {
   return Array.from(values, (value) => chars[value % chars.length]).join('')
 }
 
-function documentNameFromBatch(batchId: string): string {
-  if (batchId === sourceWorkbookVersion) return 'Nigeria Cybercrimes Act Comprehensive Competency Assessment'
+function fallbackDocumentNameFromBatch(batchId: string): string {
   if (batchId === 'seed-bank') return 'Sample DEAP Question Bank'
   if (batchId.startsWith('file:')) return batchId.split(':')[1] || 'Uploaded Question Bank'
   if (batchId.startsWith('batch-')) return `Uploaded Question Bank ${batchId.replace('batch-', '')}`
   return batchId
 }
 
-function getQuestionBankSummaries(questions: Question[]): Array<{ id: string; name: string; total: number }> {
+function normalizeQuestionBankMetadata(metadata: Partial<QuestionBankMetadata> = {}): QuestionBankMetadata {
+  return {
+    name: String(metadata.name ?? '').trim().slice(0, 180),
+    description: String(metadata.description ?? '').trim().slice(0, 600),
+  }
+}
+
+function mergeQuestionBankMetadata(stored: QuestionBankMetadataMap = {}): QuestionBankMetadataMap {
+  const merged: QuestionBankMetadataMap = { ...defaultQuestionBankMetadata }
+  Object.entries(stored).forEach(([batchId, metadata]) => {
+    const normalized = normalizeQuestionBankMetadata(metadata)
+    if (!normalized.name && !normalized.description) return
+    merged[batchId] = normalized
+  })
+  return merged
+}
+
+function documentNameFromBatch(batchId: string, metadata: QuestionBankMetadataMap = defaultQuestionBankMetadata): string {
+  return metadata[batchId]?.name || fallbackDocumentNameFromBatch(batchId)
+}
+
+function documentDescriptionFromBatch(batchId: string, metadata: QuestionBankMetadataMap = defaultQuestionBankMetadata): string {
+  return metadata[batchId]?.description || ''
+}
+
+function getQuestionBankSummaries(
+  questions: Question[],
+  metadata: QuestionBankMetadataMap = defaultQuestionBankMetadata,
+): Array<{ id: string; name: string; total: number }> {
   return Array.from(
     questions.reduce((map, question) => {
       map.set(question.importBatchId, (map.get(question.importBatchId) ?? 0) + 1)
       return map
     }, new Map<string, number>()),
   )
-    .map(([id, total]) => ({ id, name: documentNameFromBatch(id), total }))
+    .map(([id, total]) => ({ id, name: documentNameFromBatch(id, metadata), total }))
     .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name))
 }
 
@@ -999,6 +1048,9 @@ function App() {
     transferPermissions(readStored('deap-permissions', buildDefaultPermissions(seedUsers)), seedUsers),
   )
   const [questions, setQuestions] = useState<Question[]>(() => readStored('deap-questions', seedQuestions))
+  const [questionBankMetadata, setQuestionBankMetadata] = useState<QuestionBankMetadataMap>(() =>
+    mergeQuestionBankMetadata(readStored('deap-question-bank-metadata', defaultQuestionBankMetadata)),
+  )
   const [tests, setTests] = useState<Assessment[]>(() => syncSeedAssessmentMetadata(transferAssignments(readStored('deap-tests', seedTests))))
   const [sessions, setSessions] = useState<TestSession[]>(() => transferSessions(readStored('deap-sessions', [])))
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => readStored<User | undefined>('deap-current-user', undefined))
@@ -1012,6 +1064,7 @@ function App() {
   const [toast, setToast] = useState('')
 
   useEffect(() => localStorage.setItem('deap-questions', JSON.stringify(questions)), [questions])
+  useEffect(() => localStorage.setItem('deap-question-bank-metadata', JSON.stringify(questionBankMetadata)), [questionBankMetadata])
   useEffect(() => localStorage.setItem('deap-users', JSON.stringify(users)), [users])
   useEffect(() => localStorage.setItem('deap-permissions', JSON.stringify(permissions)), [permissions])
   useEffect(() => localStorage.setItem('deap-tests', JSON.stringify(tests)), [tests])
@@ -1155,8 +1208,35 @@ function App() {
       return
     }
     setQuestions((existing) => [...result.questions, ...existing])
+    const batchId = result.questions[0]?.importBatchId
+    if (batchId) {
+      setQuestionBankMetadata((existing) =>
+        mergeQuestionBankMetadata({
+          ...existing,
+          [batchId]: existing[batchId] ?? {
+            name: documentNameFromBatch(batchId, existing),
+            description: `Imported from ${file.name}.`,
+          },
+        }),
+      )
+    }
     recordAudit('Question import', `${result.questions.length} question(s) imported from ${file.name}.`)
     setToast(`${result.questions.length} question(s) imported successfully.`)
+  }
+
+  /**
+   * Updates the editable name and description for a question bank.
+   */
+  function updateQuestionBankMetadata(batchId: string, metadata: QuestionBankMetadata) {
+    const normalized = normalizeQuestionBankMetadata(metadata)
+    if (!normalized.name) {
+      setToast('Question bank name is required.')
+      return
+    }
+
+    setQuestionBankMetadata((existing) => mergeQuestionBankMetadata({ ...existing, [batchId]: normalized }))
+    recordAudit('Question bank updated', `${documentNameFromBatch(batchId, questionBankMetadata)} was renamed to ${normalized.name}.`)
+    setToast('Question bank details saved.')
   }
 
   /**
@@ -1203,8 +1283,8 @@ function App() {
       assignedUserIds,
     }
     setTests((existing) => [next, ...existing])
-    recordAudit('Test launched', `${next.name} assigned to ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId) : 'all question banks'}.`)
-    setToast(`${next.name} is live for ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId) : 'all question banks'}.`)
+    recordAudit('Test launched', `${next.name} assigned to ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId, questionBankMetadata) : 'all question banks'}.`)
+    setToast(`${next.name} is live for ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId, questionBankMetadata) : 'all question banks'}.`)
   }
 
   /**
@@ -1504,8 +1584,17 @@ function App() {
 
       <main className={usesManagementWorkspace ? 'workspace' : 'employee-workspace'}>
         {view === 'dashboard' && <Dashboard tests={tests} questions={questions} sessions={sessions} users={users} />}
-        {view === 'questions' && <QuestionBank questions={questions} query={query} setQuery={setQuery} onImport={handleImport} />}
-        {view === 'tests' && <TestsPanel tests={tests} questions={questions} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
+        {view === 'questions' && (
+          <QuestionBank
+            questions={questions}
+            questionBankMetadata={questionBankMetadata}
+            query={query}
+            setQuery={setQuery}
+            onImport={handleImport}
+            onUpdateMetadata={updateQuestionBankMetadata}
+          />
+        )}
+        {view === 'tests' && <TestsPanel tests={tests} questions={questions} questionBankMetadata={questionBankMetadata} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
         {view === 'employees' && <EmployeesPanel users={users} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} />}
         {view === 'analytics' && <Analytics sessions={sessions} users={users} questions={questions} tests={tests} />}
         {view === 'reports' && <Reports onExport={exportCsv} sessions={sessions} tests={tests} users={users} questions={questions} auditEvents={auditEvents} />}
@@ -1694,15 +1783,22 @@ function Dashboard({ tests, questions, sessions, users }: { tests: Assessment[];
 
 function QuestionBank({
   questions,
+  questionBankMetadata,
   query,
   setQuery,
   onImport,
+  onUpdateMetadata,
 }: {
   questions: Question[]
+  questionBankMetadata: QuestionBankMetadataMap
   query: string
   setQuery: (value: string) => void
   onImport: (file?: File) => void
+  onUpdateMetadata: (batchId: string, metadata: QuestionBankMetadata) => void
 }) {
+  const [editingBatchId, setEditingBatchId] = useState<string>()
+  const [draftName, setDraftName] = useState('')
+  const [draftDescription, setDraftDescription] = useState('')
   const difficultyCounts = useMemo(
     () => Object.fromEntries(difficulties.map((difficulty) => [difficulty, questions.filter((question) => question.difficulty === difficulty).length])) as Record<Difficulty, number>,
     [questions],
@@ -1725,7 +1821,8 @@ function QuestionBank({
         const sortedTopics = Object.entries(topicCounts).sort((left, right) => right[1] - left[1])
         return {
           batchId,
-          name: documentNameFromBatch(batchId),
+          name: documentNameFromBatch(batchId, questionBankMetadata),
+          description: documentDescriptionFromBatch(batchId, questionBankMetadata),
           total: documentQuestions.length,
           easy: documentQuestions.filter((question) => question.difficulty === 'Easy').length,
           medium: documentQuestions.filter((question) => question.difficulty === 'Medium').length,
@@ -1735,9 +1832,24 @@ function QuestionBank({
           topics: sortedTopics.slice(0, 6),
         }
       })
-      .filter((summary) => `${summary.name} ${summary.topics.map(([topic]) => topic).join(' ')}`.toLowerCase().includes(normalizedQuery))
+      .filter((summary) => `${summary.name} ${summary.description} ${summary.topics.map(([topic]) => topic).join(' ')}`.toLowerCase().includes(normalizedQuery))
       .sort((left, right) => right.total - left.total)
-  }, [questions, query])
+  }, [questions, query, questionBankMetadata])
+
+  function startEditing(summary: { batchId: string; name: string; description: string }) {
+    setEditingBatchId(summary.batchId)
+    setDraftName(summary.name)
+    setDraftDescription(summary.description)
+  }
+
+  function saveEditing(batchId: string) {
+    onUpdateMetadata(batchId, {
+      name: draftName,
+      description: draftDescription,
+    })
+    setEditingBatchId(undefined)
+  }
+
   return (
     <section>
       <PageTitle eyebrow="Question bank" title="Uploaded document overview" />
@@ -1757,32 +1869,59 @@ function QuestionBank({
         ))}
       </div>
       <div className="document-overview-list">
-        {documentSummaries.map((summary) => (
-          <article className="document-card" key={summary.batchId}>
-            <header>
-              <FileSpreadsheet size={22} />
-              <div>
-                <h2>{summary.name}</h2>
-                <p>{summary.total.toLocaleString()} imported question(s)</p>
+        {documentSummaries.map((summary) => {
+          const isEditing = editingBatchId === summary.batchId
+          return (
+            <article className="document-card" key={summary.batchId}>
+              <header>
+                <FileSpreadsheet size={22} />
+                <div>
+                  <h2>{summary.name}</h2>
+                  <p>{summary.total.toLocaleString()} imported question(s)</p>
+                </div>
+                <button className="secondary-button compact" type="button" onClick={() => startEditing(summary)}>
+                  <Settings2 size={16} /> Edit name
+                </button>
+              </header>
+              {summary.description && <p>{summary.description}</p>}
+              {isEditing && (
+                <div className="question-bank-editor">
+                  <label>
+                    Question bank name
+                    <input value={draftName} maxLength={180} onChange={(event) => setDraftName(event.target.value)} />
+                  </label>
+                  <label>
+                    Description / internal note
+                    <textarea value={draftDescription} maxLength={600} onChange={(event) => setDraftDescription(event.target.value)} />
+                  </label>
+                  <div className="editor-actions">
+                    <button className="primary-button" type="button" onClick={() => saveEditing(summary.batchId)}>
+                      Save changes
+                    </button>
+                    <button className="secondary-button" type="button" onClick={() => setEditingBatchId(undefined)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="document-stats">
+                <span><strong>{summary.easy}</strong> Easy</span>
+                <span><strong>{summary.medium}</strong> Medium</span>
+                <span><strong>{summary.hard}</strong> Hard</span>
+                <span><strong>{summary.definite}</strong> Definite answer</span>
+                <span><strong>{summary.curve}</strong> Curve / partial scoring</span>
               </div>
-            </header>
-            <div className="document-stats">
-              <span><strong>{summary.easy}</strong> Easy</span>
-              <span><strong>{summary.medium}</strong> Medium</span>
-              <span><strong>{summary.hard}</strong> Hard</span>
-              <span><strong>{summary.definite}</strong> Definite answer</span>
-              <span><strong>{summary.curve}</strong> Curve / partial scoring</span>
-            </div>
-            <div className="topic-pills">
-              {summary.topics.map(([topic, count]) => (
-                <span className="available" key={topic}>
-                  {topic}: {count}
-                </span>
-              ))}
-            </div>
-            <p className="hint">Question text, options, answers, and explanations are hidden from this overview.</p>
-          </article>
-        ))}
+              <div className="topic-pills">
+                {summary.topics.map(([topic, count]) => (
+                  <span className="available" key={topic}>
+                    {topic}: {count}
+                  </span>
+                ))}
+              </div>
+              <p className="hint">Question text, options, answers, and explanations are hidden from this overview.</p>
+            </article>
+          )
+        })}
         {!documentSummaries.length && <EmptyState title="No matching documents" body="Import a question bank or clear the search field." />}
       </div>
     </section>
@@ -1839,19 +1978,21 @@ function getAvailabilityState(test: Assessment): { label: string; detail: string
 function TestsPanel({
   tests,
   questions,
+  questionBankMetadata,
   onCreate,
   onDelete,
   onTake,
 }: {
   tests: Assessment[]
   questions: Question[]
+  questionBankMetadata: QuestionBankMetadataMap
   onCreate: (form: FormData) => void
   onDelete: (testId: string) => void
   onTake: (testId: string) => void
 }) {
   const defaultStart = toDateTimeLocal(new Date())
   const defaultEnd = toDateTimeLocal(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7))
-  const questionBanks = useMemo(() => getQuestionBankSummaries(questions), [questions])
+  const questionBanks = useMemo(() => getQuestionBankSummaries(questions, questionBankMetadata), [questions, questionBankMetadata])
   const defaultQuestionBankId = questionBanks.find((bank) => bank.id === sourceWorkbookVersion)?.id ?? questionBanks[0]?.id ?? ''
   return (
     <section>
@@ -1940,7 +2081,7 @@ function TestsPanel({
                     <span className={`badge ${String(test.difficulty).toLowerCase()}`}>{test.difficulty}</span>
                     <h3>{test.name}</h3>
                     <p>{test.questionCount} questions · {test.assignedUserIds.length} assigned employee(s)</p>
-                    <p className="hint">Question bank: {test.questionBankId ? documentNameFromBatch(test.questionBankId) : 'All question banks'}</p>
+                    <p className="hint">Question bank: {test.questionBankId ? documentNameFromBatch(test.questionBankId, questionBankMetadata) : 'All question banks'}</p>
                     <small>
                       <CalendarDays size={14} /> {new Date(test.startDate).toLocaleString()} to {new Date(test.endDate).toLocaleString()}
                     </small>
@@ -2805,9 +2946,7 @@ function TestDelivery({
             >
               Show hint - lose 50% of this question's possible score
             </button>
-          ) : (
-            <p className="hint">No hint is available for this question.</p>
-          )}
+          ) : null}
           <button
             className="assist-link danger"
             type="button"
