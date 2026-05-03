@@ -727,6 +727,58 @@ textarea {
   width: min(320px, 100%);
 }
 
+.field-label {
+  display: block;
+  margin: 0 0 8px;
+  color: #111827;
+  font-weight: 900;
+}
+
+.availability-picker {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fafb;
+}
+
+.availability-picker-heading,
+.availability-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.availability-picker-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.availability-picker-heading strong,
+.availability-tools span {
+  color: #111827;
+  font-weight: 900;
+}
+
+.availability-picker-heading span {
+  color: #6b7280;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.availability-modal {
+  width: min(920px, 100%);
+}
+
+.availability-user-grid {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .user-chip-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1863,6 +1915,9 @@ details p {
 .admin-test-card h3,
 .employee-test-card h2,
 .question-row h3,
+.field-label,
+.availability-picker-heading strong,
+.availability-tools span,
 .pretest-modal h2,
 .credential-modal h2,
 .result-hero h1,
@@ -1956,6 +2011,7 @@ textarea::placeholder {
 .managed-user-card small,
 .managed-user-card em,
 .user-chip small,
+.availability-picker-heading span,
 .permission-matrix td:first-child small,
 .pretest-modal p,
 details p,
@@ -1965,7 +2021,8 @@ details p,
 
 .lms-band,
 .instruction-box,
-.assessment-description-panel {
+.assessment-description-panel,
+.availability-picker {
   border-color: var(--border);
   background: linear-gradient(180deg, var(--surface), var(--surface-soft));
   box-shadow: var(--shadow-soft);
@@ -1983,6 +2040,7 @@ details p,
 .pretest-facts span,
 .document-stats span,
 .credential-box,
+.user-chip,
 .answers button,
 details {
   border-color: var(--border);

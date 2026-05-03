@@ -199,6 +199,7 @@ type AnalyticsEventType =
   | 'question_import'
   | 'test_created'
   | 'test_deleted'
+  | 'test_availability_changed'
   | 'question_bank_deleted'
   | 'password_reset'
   | 'permission_changed'
@@ -1618,7 +1619,15 @@ function App() {
     recordAudit('Login', `${user.fullName} signed in.`, user.fullName)
     recordAnalytics('login_success', { userId: user.id, outcome: 'signed_in' }, user)
     setCurrentUser(user)
-    const resumable = sessions.find((session) => session.userId === user.id && session.status === 'in_progress')
+    const resumable = sessions.find((session) => {
+      const assignedTest = tests.find((test) => test.id === session.testId)
+      return (
+        session.userId === user.id &&
+        session.status === 'in_progress' &&
+        Boolean(assignedTest?.assignedUserIds.includes(user.id)) &&
+        Boolean(assignedTest && getAvailabilityState(assignedTest).canStart)
+      )
+    })
     if (resumable) {
       setActiveTestId(resumable.testId)
       setActiveSessionId(resumable.id)
@@ -1730,11 +1739,21 @@ function App() {
       setToast(`Not enough ${difficulty} questions in the selected question bank. ${available.length} available, ${questionCount} required.`)
       return
     }
-    const departments = String(form.get('departments') || 'Sales,Operations')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-    const assignedUserIds = users.filter((user) => user.role === 'employee' && departments.includes(user.department)).map((user) => user.id)
+    const employeeUsers = users.filter((user) => user.role === 'employee')
+    const employeeById = new Map(employeeUsers.map((user) => [user.id, user]))
+    const selectedUserIds = uniqueUserIds(form.getAll('assignedUserIds').map((value) => String(value))).filter((userId) => employeeById.has(userId))
+    const assignedUserIds = form.get('availabilityMode') === 'manual' ? selectedUserIds : selectedUserIds.length ? selectedUserIds : employeeUsers.map((user) => user.id)
+    if (!assignedUserIds.length) {
+      setToast('Select at least one employee before launching the test.')
+      return
+    }
+    const departments = Array.from(
+      new Set(
+        assignedUserIds
+          .map((userId) => employeeById.get(userId)?.department)
+          .filter((department): department is string => Boolean(department)),
+      ),
+    )
     const startDate = new Date(String(form.get('startDate') || new Date().toISOString()))
     const endDate = new Date(String(form.get('endDate') || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()))
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
@@ -1790,6 +1809,62 @@ function App() {
       metadata: { removed_sessions: sessions.filter((session) => session.testId === testId).length },
     })
     setToast(`${test.name} has been removed.`)
+  }
+
+  /**
+   * Updates which employees can see and start a launched assessment.
+   */
+  function updateTestAvailability(testId: string, assignedUserIds: string[]) {
+    const test = tests.find((item) => item.id === testId)
+    if (!test) return
+    const employeeUsers = users.filter((user) => user.role === 'employee')
+    const employeeById = new Map(employeeUsers.map((user) => [user.id, user]))
+    const normalizedUserIds = uniqueUserIds(assignedUserIds).filter((userId) => employeeById.has(userId))
+    if (!normalizedUserIds.length) {
+      setToast('Select at least one employee before saving availability.')
+      return
+    }
+    const removedUserIds = test.assignedUserIds.filter((userId) => !normalizedUserIds.includes(userId))
+    const removedUserSet = new Set(removedUserIds)
+    const departments = Array.from(
+      new Set(
+        normalizedUserIds
+          .map((userId) => employeeById.get(userId)?.department)
+          .filter((department): department is string => Boolean(department)),
+      ),
+    )
+    const now = new Date().toISOString()
+    setTests((existing) =>
+      existing.map((item) => (item.id === testId ? { ...item, assignedUserIds: normalizedUserIds, departments } : item)),
+    )
+    setSessions((existing) =>
+      existing.map((session) =>
+        session.testId === testId && session.status === 'in_progress' && removedUserSet.has(session.userId)
+          ? {
+              ...session,
+              status: 'abandoned',
+              currentQuestionStartedAt: undefined,
+              currentQuestionDeadlineAt: undefined,
+              lastSavedAt: now,
+            }
+          : session,
+      ),
+    )
+    recordAudit('Test availability updated', `${test.name} is now available for ${normalizedUserIds.length} employee(s).`)
+    recordAnalytics('test_availability_changed', {
+      testId,
+      testName: test.name,
+      questionBankId: test.questionBankId,
+      difficulty: test.difficulty,
+      value: normalizedUserIds.length,
+      outcome: 'availability_updated',
+      metadata: {
+        assigned_users: normalizedUserIds.length,
+        removed_users: removedUserIds.length,
+        departments: departments.join(', '),
+      },
+    })
+    setToast(`${test.name} availability updated for ${normalizedUserIds.length} employee(s).`)
   }
 
   /**
@@ -1913,6 +1988,10 @@ function App() {
     }
     if (!isAdmin && !hasPermission('take_tests')) {
       setToast('Your permission to take tests is disabled.')
+      return
+    }
+    if (!isAdmin && !test.assignedUserIds.includes(currentUser.id)) {
+      setToast('This test is not available for your account.')
       return
     }
     const now = Date.now()
@@ -2310,7 +2389,18 @@ function App() {
             onDeleteQuestionBank={deleteQuestionBank}
           />
         )}
-        {view === 'tests' && <TestsPanel tests={tests} questions={questions} questionBankMetadata={questionBankMetadata} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
+        {view === 'tests' && (
+          <TestsPanel
+            tests={tests}
+            questions={questions}
+            users={users}
+            questionBankMetadata={questionBankMetadata}
+            onCreate={createAssessment}
+            onDelete={deleteAssessment}
+            onUpdateAvailability={updateTestAvailability}
+            onTake={startTest}
+          />
+        )}
         {view === 'employees' && <EmployeesPanel users={users} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} />}
         {view === 'analytics' && (
           <Analytics
@@ -2719,25 +2809,44 @@ function getAvailabilityState(test: Assessment): { label: string; detail: string
 function TestsPanel({
   tests,
   questions,
+  users,
   questionBankMetadata,
   onCreate,
   onDelete,
+  onUpdateAvailability,
   onTake,
 }: {
   tests: Assessment[]
   questions: Question[]
+  users: User[]
   questionBankMetadata: QuestionBankMetadataMap
   onCreate: (form: FormData) => void
   onDelete: (testId: string) => void
+  onUpdateAvailability: (testId: string, assignedUserIds: string[]) => void
   onTake: (testId: string) => void
 }) {
   const defaultStart = toDateTimeLocal(new Date())
   const defaultEnd = toDateTimeLocal(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7))
   const questionBanks = useMemo(() => getQuestionBankSummaries(questions, questionBankMetadata), [questions, questionBankMetadata])
   const defaultQuestionBankId = questionBanks.find((bank) => bank.id === sourceWorkbookVersion)?.id ?? questionBanks[0]?.id ?? ''
+  const employeeUsers = useMemo(
+    () => users.filter((user) => user.role === 'employee').sort((left, right) => left.fullName.localeCompare(right.fullName)),
+    [users],
+  )
+  const allEmployeeIds = useMemo(() => employeeUsers.map((user) => user.id), [employeeUsers])
+  const [editingAvailabilityTest, setEditingAvailabilityTest] = useState<Assessment>()
+  const [availabilityDraft, setAvailabilityDraft] = useState<string[]>([])
+  function openAvailabilityEditor(test: Assessment) {
+    const assignedIds = test.assignedUserIds.filter((userId) => allEmployeeIds.includes(userId))
+    setEditingAvailabilityTest(test)
+    setAvailabilityDraft(assignedIds.length ? assignedIds : allEmployeeIds)
+  }
+  function toggleAvailabilityUser(userId: string, checked: boolean) {
+    setAvailabilityDraft((existing) => (checked ? uniqueUserIds([...existing, userId]) : existing.filter((item) => item !== userId)))
+  }
   return (
     <section>
-      <PageTitle eyebrow="LMS test builder" title="Assign topic assessments by department" />
+      <PageTitle eyebrow="LMS test builder" title="Assign topic assessments by user" />
       <LearningCatalog questions={questions} />
       <div className="split-layout">
         <form
@@ -2785,10 +2894,26 @@ function TestsPanel({
               </select>
             </label>
           </div>
-          <label>
-            Departments
-            <input name="departments" defaultValue="Operations,Legal,UI/UX & Development,Human Resources,Digital Marketing,Business Development,Digital Content,Executive,Other" />
-          </label>
+          <div className="field-label">Users with access</div>
+          <input type="hidden" name="availabilityMode" value="manual" />
+          <div className="availability-picker">
+            <div className="availability-picker-heading">
+              <div>
+                <strong>Available to employees</strong>
+                <span>All employees are selected by default. Untick anyone who should not see this launched test.</span>
+              </div>
+              <span>{employeeUsers.length} employee(s)</span>
+            </div>
+            <div className="user-chip-grid launch-user-grid">
+              {employeeUsers.map((user) => (
+                <label className="user-chip" key={user.id}>
+                  <input name="assignedUserIds" type="checkbox" value={user.id} defaultChecked />
+                  <span>{user.fullName}</span>
+                  <small>{user.department} · {user.jobRole}</small>
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="form-grid">
             <label>
               Available from
@@ -2832,6 +2957,9 @@ function TestsPanel({
                     <button className="secondary-button" type="button" onClick={() => onTake(test.id)} disabled={!canTake}>
                       <Play size={16} /> Take test myself
                     </button>
+                    <button className="secondary-button" type="button" onClick={() => openAvailabilityEditor(test)}>
+                      <UsersRound size={16} /> Edit availability
+                    </button>
                     <button className="danger-button" type="button" onClick={() => onDelete(test.id)}>
                       <Trash2 size={16} /> Remove
                     </button>
@@ -2843,6 +2971,53 @@ function TestsPanel({
           <p className="hint">Available question stock: {questions.length}. Tests are prevented from launching without enough matching questions.</p>
         </section>
       </div>
+      {editingAvailabilityTest && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setEditingAvailabilityTest(undefined)}>
+          <section className="pretest-modal availability-modal" role="dialog" aria-modal="true" aria-labelledby="availability-title" onClick={(event) => event.stopPropagation()}>
+            <span className={`badge ${String(editingAvailabilityTest.difficulty).toLowerCase()}`}>{editingAvailabilityTest.difficulty}</span>
+            <h2 id="availability-title">Edit test availability</h2>
+            <p>{editingAvailabilityTest.name}</p>
+            <div className="availability-tools">
+              <span>{availabilityDraft.length} of {employeeUsers.length} employee(s) selected</span>
+              <button className="secondary-button" type="button" onClick={() => setAvailabilityDraft(allEmployeeIds)}>
+                Select all
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setAvailabilityDraft([])}>
+                Clear
+              </button>
+            </div>
+            <div className="user-chip-grid availability-user-grid">
+              {employeeUsers.map((user) => (
+                <label className="user-chip" key={user.id}>
+                  <input
+                    type="checkbox"
+                    checked={availabilityDraft.includes(user.id)}
+                    onChange={(event) => toggleAvailabilityUser(user.id, event.target.checked)}
+                  />
+                  <span>{user.fullName}</span>
+                  <small>{user.department} · {user.jobRole}</small>
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!availabilityDraft.length}
+                onClick={() => {
+                  onUpdateAvailability(editingAvailabilityTest.id, availabilityDraft)
+                  setEditingAvailabilityTest(undefined)
+                }}
+              >
+                Save availability
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setEditingAvailabilityTest(undefined)}>
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   )
 }
