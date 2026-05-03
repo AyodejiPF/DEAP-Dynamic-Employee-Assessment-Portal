@@ -565,7 +565,7 @@ textarea {
 }
 
 .pretest-modal {
-  width: min(640px, 100%);
+  width: min(760px, 100%);
   max-height: min(92vh, 820px);
   overflow-y: auto;
   border-radius: 12px;
@@ -583,6 +583,45 @@ textarea {
 .pretest-modal p {
   margin: 0;
   color: #6b7280;
+}
+
+.assessment-description-panel {
+  display: grid;
+  gap: 12px;
+  max-height: 320px;
+  margin-top: 12px;
+  overflow-y: auto;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fbff;
+}
+
+.assessment-summary {
+  color: #374151 !important;
+  font-weight: 800;
+}
+
+.assessment-description-section {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 10px;
+}
+
+.assessment-description-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.assessment-description-section h3 {
+  margin: 0;
+  color: #1b3a6b;
+  font-size: 0.92rem;
+}
+
+.assessment-description-section p {
+  line-height: 1.55;
 }
 
 .pretest-facts {
@@ -1186,6 +1225,57 @@ th {
   gap: 12px;
 }
 
+.question-support {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface-soft);
+}
+
+.assist-link {
+  width: fit-content;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.assist-link.danger {
+  color: var(--error);
+}
+
+.assist-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.support-reveal {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(213, 181, 46, 0.12);
+}
+
+.support-reveal.answer {
+  background: rgba(192, 0, 0, 0.08);
+}
+
+.support-reveal strong {
+  color: var(--text);
+}
+
+.support-reveal p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
 .answers button {
   display: grid;
   grid-template-columns: 40px 1fr;
@@ -1443,6 +1533,7 @@ summary {
 .brand small,
 .page-title span,
 .lms-heading span,
+.assessment-description-section h3,
 .metric-card span,
 .document-card header svg,
 .report-panel svg,
@@ -1533,10 +1624,19 @@ details p,
 }
 
 .lms-band,
-.instruction-box {
+.instruction-box,
+.assessment-description-panel {
   border-color: var(--border);
   background: linear-gradient(180deg, var(--surface), var(--surface-soft));
   box-shadow: var(--shadow-soft);
+}
+
+.assessment-description-section {
+  border-color: var(--border);
+}
+
+.assessment-summary {
+  color: var(--text) !important;
 }
 
 .topic-pills span,

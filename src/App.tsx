@@ -99,6 +99,7 @@ interface Question {
   partialWeight1?: number
   partialWeight2?: number
   topicTag: string
+  hint?: string
   explanation: string
   importBatchId: string
 }
@@ -107,6 +108,7 @@ interface Assessment {
   id: string
   name: string
   description: string
+  overviewSections?: AssessmentOverviewSection[]
   questionCount: 20 | 40 | 60
   difficulty: Difficulty | 'Mixed'
   departments: string[]
@@ -119,6 +121,11 @@ interface Assessment {
   assignedUserIds: string[]
 }
 
+interface AssessmentOverviewSection {
+  title: string
+  body: string
+}
+
 interface ResponseRecord {
   questionId: string
   selectedOption?: OptionKey
@@ -127,6 +134,9 @@ interface ResponseRecord {
   timeMultiplier: string
   marksEarned: string
   responseTime: number
+  hintUsed?: boolean
+  answerRevealed?: boolean
+  scorePenaltyMultiplier?: string
 }
 
 interface TestSession {
@@ -357,6 +367,76 @@ const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 const optionKeys: OptionKey[] = ['A', 'B', 'C', 'D', 'E']
 const sourceWorkbookPath = '/questions/nigeria-cybercrime-act-assessment-1500q.xlsx'
 const sourceWorkbookVersion = 'nigeria-cybercrime-act-1500q-v1'
+const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
+  {
+    title: 'Covering the Cybercrimes Act 2015 and the 2024 Amendment',
+    body: 'This assessment covers the Cybercrimes (Prohibition, Prevention, Etc.) Act 2015 and the Cybercrimes (Prohibition, Prevention, Etc.) (Amendment) Act 2024.',
+  },
+  {
+    title: 'About This Assessment',
+    body: 'This is a rigorous, professional-grade competency evaluation designed to test knowledge of Nigeria\'s primary cybercrime legislation at three levels of depth: foundational recall, applied understanding, and advanced legal analysis. It was developed for legal practitioners, compliance officers, cybersecurity professionals, law enforcement personnel, corporate risk managers, HR professionals, IT governance teams, and organisations operating within Nigeria\'s digital and financial ecosystem.',
+  },
+  {
+    title: 'Legislative Coverage',
+    body: 'The assessment covers the Cybercrimes Act 2015 across all 59 sections and 8 parts, as well as the substantive changes introduced by the 2024 Amendment Act, signed into law on 28 February 2024.',
+  },
+  {
+    title: 'Part I - Critical National Information Infrastructure',
+    body: 'Sections 3 to 5 cover designation criteria, protective obligations, and the consequences of attacks on Critical National Information Infrastructure.',
+  },
+  {
+    title: 'Part II - Offences and Penalties',
+    body: 'Sections 6 to 36 cover the full range of cybercrime offences, including unlawful system access, system interference, data tampering, interception of electronic communications, computer-related forgery and fraud, malware, cyber terrorism, child grooming and child pornography, publication of false information, identity theft, cyberstalking, cybersquatting, racist and xenophobic content, phishing, spam, ATM and POS fraud, card-not-present fraud, SIM swap fraud, and employee or director liability.',
+  },
+  {
+    title: 'Part III - Financial Institutions and Electronic Transactions',
+    body: 'Sections 37 to 40 cover obligations of banks and financial institutions, Know Your Customer requirements, NIN verification mandates, and institutional liability.',
+  },
+  {
+    title: 'Part IV - Administration and the Nigeria Cybersecurity Fund',
+    body: 'Sections 41 to 44 cover the role of the Office of the National Security Adviser, the 0.5% cybersecurity levy on eligible electronic transactions, the structure and administration of the Nigeria Cybersecurity Fund, and Sectoral Computer Emergency Response Teams.',
+  },
+  {
+    title: 'Part V - Enforcement and Forfeiture',
+    body: 'Sections 45 to 49 cover powers of search and seizure, preservation and production orders, forfeiture of assets, and obligations placed on service providers.',
+  },
+  {
+    title: 'Part VI - Jurisdiction and International Cooperation',
+    body: 'Sections 50 to 56 cover Nigerian territorial and extraterritorial jurisdiction, mutual legal assistance treaties, and cross-border cybercrime investigation frameworks.',
+  },
+  {
+    title: 'Parts VII and VIII - Miscellaneous and General Provisions',
+    body: 'Sections 57 to 59 cover interpretation, transitional provisions, and the relationship between the Cybercrimes Act and other legislation.',
+  },
+  {
+    title: '2024 Amendment Key Changes Tested',
+    body: 'The assessment tests the increase of the cybersecurity levy from 0.005% to 0.5% of eligible transaction values, removal of the N10.00 minimum threshold, mandatory 72-hour incident reporting to ngCERT, NIN-linked account verification requirements, establishment of Sectoral CERTs under designated sector regulators, and revised penalties across multiple sections.',
+  },
+  {
+    title: 'Assessment Structure',
+    body: 'The assessment contains 1,500 multiple-choice questions across three difficulty tiers: Easy, Medium, and Hard. Each tier contains 500 questions, made up of 375 standard questions and 125 weighted scenario questions. Each question has five answer options, A through E.',
+  },
+  {
+    title: 'Question Types and Difficulty Levels',
+    body: 'Easy questions test foundational recall such as definitions, section numbers, penalty thresholds, offence classifications, and basic provisions. Medium questions test applied understanding through scenarios that ask the user to identify legal classifications, penalties, or procedures. Hard questions test advanced legal analysis across multiple provisions, closely related offences, defences, exceptions, and the 2024 Amendment changes.',
+  },
+  {
+    title: 'Scoring Methodology',
+    body: 'Standard questions make up 75% of the assessment and have one definitively correct answer. A correct answer scores 1.0 and any other answer scores 0.0. Weighted questions make up 25% of the assessment and are identified by the prefix "S" in the question text. They reward legal judgement: the best answer scores 1.0, the second-best answer scores 0.75, the third-best answer scores 0.50, and incorrect answers score 0.0.',
+  },
+  {
+    title: 'Maximum Possible Score',
+    body: 'The full assessment has a maximum possible score of 1,500.0 points: 1,125.0 points from standard questions and 375.0 points from weighted questions. A score of 1,500.0 represents 100% mastery of all tested provisions.',
+  },
+  {
+    title: 'Recommended Use Cases',
+    body: 'This assessment can support corporate compliance training, professional certification preparation, law enforcement and regulatory capacity building, academic and institutional training, internal audit, and cybercrime awareness risk assessment.',
+  },
+  {
+    title: 'Data Source and Quality',
+    body: 'Questions are grounded in the Cybercrimes Act 2015 and the 2024 Amendment Act. Approximately 80% of questions are derived from the official training slide deck, while the remaining 20% draw on authoritative supplementary sources such as CBN circulars, ngCERT advisories, NITDA guidelines, and the Nigeria Data Protection Act 2023 where it intersects with cybercrime compliance obligations. Penalty figures, section references, timelines, and levy rates reflect the law as amended and in force from 28 February 2024.',
+  },
+]
 
 const departmentCatalog = [
   {
@@ -436,6 +516,7 @@ const seedQuestions: Question[] = Array.from({ length: 60 }, (_, index) => {
     partialWeight1: 0.6,
     partialWeight2: 0.3,
     topicTag: topic,
+    hint: 'Look for the option that combines policy alignment, documentation, and escalation rather than speed alone.',
     explanation: 'The strongest response combines documentation, policy alignment, and timely escalation.',
     importBatchId: 'seed-bank',
   }
@@ -444,8 +525,9 @@ const seedQuestions: Question[] = Array.from({ length: 60 }, (_, index) => {
 const seedTests: Assessment[] = [
   {
     id: 'test-onboarding',
-    name: 'Nigeria Cybercrime Act Compliance Assessment',
-    description: 'A timed organisational LMS assessment covering the Nigeria Cybercrimes Act, offences, penalties, evidence, privacy, and cyber conduct.',
+    name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
+    description: 'A professional competency assessment covering the Cybercrimes Act 2015, the 2024 Amendment, offences, penalties, institutional duties, reporting obligations, and advanced legal analysis.',
+    overviewSections: cybercrimesAssessmentOverview,
     questionCount: 60,
     difficulty: 'Mixed',
     departments: ['Operations', 'Legal', 'UI/UX & Development', 'Human Resources', 'Digital Marketing', 'Business Development', 'Digital Content', 'Executive', 'Other'],
@@ -554,6 +636,20 @@ function transferAssignments(tests: Assessment[]): Assessment[] {
   }))
 }
 
+function syncSeedAssessmentMetadata(tests: Assessment[]): Assessment[] {
+  const source = seedTests[0]
+  return tests.map((test) =>
+    test.id === source.id
+      ? {
+          ...test,
+          name: source.name,
+          description: source.description,
+          overviewSections: source.overviewSections,
+        }
+      : test,
+  )
+}
+
 function transferSessions(sessions: TestSession[]): TestSession[] {
   return sessions.map((session) => ({
     ...session,
@@ -639,7 +735,7 @@ function generatePassword(): string {
 }
 
 function documentNameFromBatch(batchId: string): string {
-  if (batchId === sourceWorkbookVersion) return 'Nigeria Cybercrime Act Assessment 1500Q'
+  if (batchId === sourceWorkbookVersion) return 'Nigeria Cybercrimes Act Comprehensive Competency Assessment'
   if (batchId === 'seed-bank') return 'Sample DEAP Question Bank'
   if (batchId.startsWith('file:')) return batchId.split(':')[1] || 'Uploaded Question Bank'
   if (batchId.startsWith('batch-')) return `Uploaded Question Bank ${batchId.replace('batch-', '')}`
@@ -673,10 +769,16 @@ export function getAnswerWeight(question: Question, selectedOption?: OptionKey):
 /**
  * Calculates a single question score with decimal-safe arithmetic.
  */
-export function scoreQuestion(question: Question, selectedOption: OptionKey | undefined, secondsRemaining: number): ResponseRecord {
+export function scoreQuestion(
+  question: Question,
+  selectedOption: OptionKey | undefined,
+  secondsRemaining: number,
+  support: { hintUsed?: boolean; answerRevealed?: boolean } = {},
+): ResponseRecord {
   const answerWeight = getAnswerWeight(question, selectedOption)
   const timeMultiplier = getTimeMultiplier(secondsRemaining)
-  const marksEarned = new Decimal(1).mul(answerWeight).mul(timeMultiplier)
+  const penaltyMultiplier = support.answerRevealed ? new Decimal(0) : support.hintUsed ? new Decimal(0.5) : new Decimal(1)
+  const marksEarned = new Decimal(1).mul(answerWeight).mul(timeMultiplier).mul(penaltyMultiplier)
   return {
     questionId: question.questionId,
     selectedOption,
@@ -685,6 +787,9 @@ export function scoreQuestion(question: Question, selectedOption: OptionKey | un
     timeMultiplier: timeMultiplier.toFixed(2),
     marksEarned: marksEarned.toFixed(2),
     responseTime: 60 - secondsRemaining,
+    hintUsed: Boolean(support.hintUsed),
+    answerRevealed: Boolean(support.answerRevealed),
+    scorePenaltyMultiplier: penaltyMultiplier.toFixed(2),
   }
 }
 
@@ -741,6 +846,7 @@ function normalizeQuestion(row: Record<string, unknown>, rowNumber: number, batc
       partialWeight1,
       partialWeight2,
       topicTag: String(row.topic_tag ?? 'General').trim().slice(0, 100) || 'General',
+      hint: String(row.hint ?? row.question_hint ?? row.assessment_hint ?? '').trim().slice(0, 500) || undefined,
       explanation: String(row.explanation ?? '').trim().slice(0, 1000),
       importBatchId: batchId,
     },
@@ -795,6 +901,7 @@ function normalizeScoredOptionRow(row: Record<string, unknown>, rowNumber: numbe
       partialWeight1: partials[0] ? Number(new Decimal(partials[0].score).div(correct.score).toFixed(2)) : undefined,
       partialWeight2: partials[1] ? Number(new Decimal(partials[1].score).div(correct.score).toFixed(2)) : undefined,
       topicTag: classifyTopic(questionText),
+      hint: String(row.hint ?? row.Hint ?? row.question_hint ?? row['Question Hint'] ?? '').trim().slice(0, 500) || undefined,
       explanation: `The highest weighted answer is option ${correct.key}. Review the Nigeria Cybercrimes Act context for the governing provision and penalty detail.`,
       importBatchId: batchId,
     },
@@ -878,7 +985,7 @@ function App() {
     transferPermissions(readStored('deap-permissions', buildDefaultPermissions(seedUsers)), seedUsers),
   )
   const [questions, setQuestions] = useState<Question[]>(() => readStored('deap-questions', seedQuestions))
-  const [tests, setTests] = useState<Assessment[]>(() => transferAssignments(readStored('deap-tests', seedTests)))
+  const [tests, setTests] = useState<Assessment[]>(() => syncSeedAssessmentMetadata(transferAssignments(readStored('deap-tests', seedTests))))
   const [sessions, setSessions] = useState<TestSession[]>(() => transferSessions(readStored('deap-sessions', [])))
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => readStored<User | undefined>('deap-current-user', undefined))
   const [view, setView] = useState<AppView>(() => (currentUser ? firstViewForUser(currentUser, permissions) : 'login'))
@@ -918,7 +1025,7 @@ function App() {
   useEffect(() => {
     if (localStorage.getItem('deap-user-directory-version') !== 'iicocece-users-v4') {
       setUsers(seedUsers)
-      setTests((existing) => transferAssignments(existing.length ? existing : seedTests))
+      setTests((existing) => syncSeedAssessmentMetadata(transferAssignments(existing.length ? existing : seedTests)))
       setSessions((existing) => transferSessions(existing))
       setPermissions((existing) => transferPermissions(existing, seedUsers))
       setCurrentUser((existing) => {
@@ -930,14 +1037,16 @@ function App() {
     }
     if (localStorage.getItem('deap-lms-layout-version') !== 'iicocece-org-lms-v1') {
       setTests((existing) =>
-        transferAssignments(existing.map((test) =>
-          test.id === 'test-onboarding'
-            ? {
-                ...seedTests[0],
-                assignedUserIds: uniqueUserIds(test.assignedUserIds.length ? test.assignedUserIds : seedTests[0].assignedUserIds),
-              }
-            : test,
-        )),
+        syncSeedAssessmentMetadata(
+          transferAssignments(existing.map((test) =>
+            test.id === 'test-onboarding'
+              ? {
+                  ...seedTests[0],
+                  assignedUserIds: uniqueUserIds(test.assignedUserIds.length ? test.assignedUserIds : seedTests[0].assignedUserIds),
+                }
+              : test,
+          )),
+        ),
       )
       localStorage.setItem('deap-lms-layout-version', 'iicocece-org-lms-v1')
     }
@@ -1329,6 +1438,17 @@ function App() {
         max_score: session.maxScore,
         percentage: session.percentage,
         status: session.status,
+        correct_answers: session.responses.filter((response) => {
+          const question = questions.find((item) => item.questionId === response.questionId)
+          return question?.correctAnswer === response.selectedOption
+        }).length,
+        wrong_answers: session.responses.filter((response) => response.selectedOption && Number(response.answerWeight) === 0).length,
+        unanswered: session.responses.filter((response) => !response.selectedOption).length,
+        hints_used: session.responses.filter((response) => response.hintUsed).length,
+        answers_revealed: session.responses.filter((response) => response.answerRevealed).length,
+        average_response_time_seconds: session.responses.length
+          ? (session.responses.reduce((total, response) => total + response.responseTime, 0) / session.responses.length).toFixed(1)
+          : '0.0',
         completed_at: session.completedAt,
       }
     })
@@ -1920,8 +2040,17 @@ function EmployeesPanel({
 }
 
 function Analytics({ sessions, users, questions }: { sessions: TestSession[]; users: User[]; questions: Question[]; tests: Assessment[] }) {
-  const { cohortData, topicData, trendData } = useMemo(() => {
+  const { cohortData, topicData, trendData, usageMetrics, difficultyTimingData, supportUsageData, outcomeData } = useMemo(() => {
     const completed = sessions.filter((session) => session.status === 'completed')
+    const questionById = new Map(questions.map((question) => [question.questionId, question]))
+    const allResponses = completed.flatMap((session) => session.responses)
+    const correctResponses = allResponses.filter((response) => questionById.get(response.questionId)?.correctAnswer === response.selectedOption)
+    const partialResponses = allResponses.filter((response) => {
+      const question = questionById.get(response.questionId)
+      return Boolean(response.selectedOption && question && (response.selectedOption === question.partialAnswer1 || response.selectedOption === question.partialAnswer2))
+    })
+    const unansweredResponses = allResponses.filter((response) => !response.selectedOption)
+    const wrongResponses = allResponses.filter((response) => response.selectedOption && Number(response.answerWeight) === 0)
     const completedByUser = completed.reduce((map, session) => {
       const existing = map.get(session.userId) ?? []
       existing.push(session)
@@ -1934,8 +2063,17 @@ function Analytics({ sessions, users, questions }: { sessions: TestSession[]; us
       map.set(question.topicTag, existing)
       return map
     }, new Map<string, Set<string>>())
-    const responses = completed.flatMap((session) => session.responses)
     return {
+      usageMetrics: {
+        completedAttempts: completed.length,
+        totalResponses: allResponses.length,
+        correct: correctResponses.length,
+        partial: partialResponses.length,
+        wrong: wrongResponses.length,
+        unanswered: unansweredResponses.length,
+        hints: allResponses.filter((response) => response.hintUsed).length,
+        revealed: allResponses.filter((response) => response.answerRevealed).length,
+      },
       cohortData: users
         .filter((user) => user.role === 'employee')
         .map((user) => {
@@ -1947,18 +2085,75 @@ function Analytics({ sessions, users, questions }: { sessions: TestSession[]; us
         }),
       topicData: topics.map((topic) => {
         const topicIds = topicQuestionIds.get(topic) ?? new Set<string>()
-        const topicResponses = responses.filter((response) => topicIds.has(response.questionId))
+        const topicResponses = allResponses.filter((response) => topicIds.has(response.questionId))
         const average = topicResponses.length ? topicResponses.reduce((total, response) => total + Number(response.marksEarned), 0) / topicResponses.length : 0
         return { topic, score: Number((average * 100).toFixed(0)) }
       }),
       trendData: completed.map((session, index) => ({ attempt: index + 1, score: Number(session.percentage) })),
+      difficultyTimingData: difficulties.map((difficulty) => {
+        const responses = allResponses.filter((response) => questionById.get(response.questionId)?.difficulty === difficulty)
+        const averageSeconds = responses.length ? responses.reduce((total, response) => total + response.responseTime, 0) / responses.length : 0
+        return { difficulty, seconds: Number(averageSeconds.toFixed(1)), responses: responses.length }
+      }),
+      supportUsageData: [
+        { name: 'Hints used', count: allResponses.filter((response) => response.hintUsed).length },
+        { name: 'Answers revealed', count: allResponses.filter((response) => response.answerRevealed).length },
+      ],
+      outcomeData: [
+        { name: 'Correct', count: correctResponses.length },
+        { name: 'Partial', count: partialResponses.length },
+        { name: 'Wrong', count: wrongResponses.length },
+        { name: 'Unanswered', count: unansweredResponses.length },
+      ],
     }
   }, [questions, sessions, users])
 
   return (
     <section>
       <PageTitle eyebrow="Analytics" title="Performance intelligence dashboard" />
+      <div className="metric-grid">
+        <Metric label="Responses" value={usageMetrics.totalResponses} icon={<ListChecks />} />
+        <Metric label="Correct" value={usageMetrics.correct} icon={<CheckCircle2 />} />
+        <Metric label="Wrong/unanswered" value={usageMetrics.wrong + usageMetrics.unanswered} icon={<AlertCircle />} />
+        <Metric label="Hints/reveals" value={usageMetrics.hints + usageMetrics.revealed} icon={<KeyRound />} />
+      </div>
       <div className="analytics-grid">
+        <section className="panel">
+          <h2>Answer outcomes</h2>
+          <ResponsiveContainer height={270}>
+            <BarChart data={outcomeData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#004331" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="panel">
+          <h2>Average time by difficulty</h2>
+          <ResponsiveContainer height={270}>
+            <BarChart data={difficultyTimingData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="difficulty" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="seconds" fill="#D5B52E" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="panel">
+          <h2>Hint and reveal usage</h2>
+          <ResponsiveContainer height={270}>
+            <BarChart data={supportUsageData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#C00000" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
         <section className="panel">
           <h2>Topic performance</h2>
           <ResponsiveContainer height={270}>
@@ -2328,6 +2523,23 @@ function SettingsPanel({
   )
 }
 
+function AssessmentOverview({ test }: { test: Assessment }) {
+  if (!test.overviewSections?.length) return <p>{test.description}</p>
+  return (
+    <div className="assessment-description-panel">
+      <p className="assessment-summary">{test.description}</p>
+      {test.overviewSections.map((section) => (
+        <section className="assessment-description-section" key={section.title}>
+          <h3>{section.title}</h3>
+          {section.body.split('\n').filter(Boolean).map((paragraph, index) => (
+            <p key={`${section.title}-${index}`}>{paragraph}</p>
+          ))}
+        </section>
+      ))}
+    </div>
+  )
+}
+
 function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User; tests: Assessment[]; sessions: TestSession[]; onStart: (testId: string) => void }) {
   const assigned = tests.filter((test) => test.status === 'Live' && test.assignedUserIds.includes(currentUser.id))
   const [pendingTest, setPendingTest] = useState<Assessment>()
@@ -2378,7 +2590,7 @@ function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User;
           <section className="pretest-modal" role="dialog" aria-modal="true" aria-labelledby="pretest-title" onClick={(event) => event.stopPropagation()}>
             <span className={`badge ${String(pendingTest.difficulty).toLowerCase()}`}>{pendingTest.difficulty}</span>
             <h2 id="pretest-title">{pendingTest.name}</h2>
-            <p>{pendingTest.description}</p>
+            <AssessmentOverview test={pendingTest} />
             <div className="pretest-facts">
               <span><strong>{pendingTest.questionCount}</strong> Questions</span>
               <span><strong>60 sec</strong> Per question</span>
@@ -2394,6 +2606,8 @@ function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User;
                 <li>The live test draws randomly from the approved 1,500-question bank to reduce cheating risk.</li>
                 <li>Some questions have one definite correct answer; others may award partial marks on a curve.</li>
                 <li>Your score combines answer accuracy and response speed.</li>
+                <li>If a hint is available and you open it, the maximum marks for only that question are immediately reduced by 50%.</li>
+                <li>If you reveal the answer, you lose all marks for only that question, even if you answer correctly afterward.</li>
                 <li>You cannot go back after submitting an answer, so read carefully before choosing.</li>
                 <li>If the timer expires, the question is submitted as unanswered.</li>
                 <li>Your progress is saved every few seconds, but the question timer continues even if the internet connection shakes.</li>
@@ -2473,10 +2687,18 @@ function TestDelivery({
   const currentQuestion = sessionQuestions[currentIndex]
   const [seconds, setSeconds] = useState(60)
   const [announcer, setAnnouncer] = useState('')
+  const [hintVisible, setHintVisible] = useState(false)
+  const [answerVisible, setAnswerVisible] = useState(false)
   const submittedRef = useRef('')
+  const hintUsedRef = useRef(false)
+  const answerRevealedRef = useRef(false)
 
   useEffect(() => {
     submittedRef.current = ''
+    hintUsedRef.current = false
+    answerRevealedRef.current = false
+    setHintVisible(false)
+    setAnswerVisible(false)
     const deadline = session.currentQuestionDeadlineAt ? new Date(session.currentQuestionDeadlineAt).getTime() : Date.now() + 60_000
     const frame = window.setInterval(() => {
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
@@ -2503,7 +2725,7 @@ function TestDelivery({
     if (submittedRef.current === currentQuestion.questionId) return
     submittedRef.current = currentQuestion.questionId
     const remaining = forcedSeconds ?? seconds
-    onAnswer(session.id, scoreQuestion(currentQuestion, option, remaining))
+    onAnswer(session.id, scoreQuestion(currentQuestion, option, remaining, { hintUsed: hintUsedRef.current, answerRevealed: answerRevealedRef.current }))
     const isFinal = currentIndex + 1 >= (test?.questionCount ?? sessionQuestions.length)
     if (isFinal) window.setTimeout(onComplete, 150)
   }
@@ -2514,6 +2736,7 @@ function TestDelivery({
   const offset = circumference - (seconds / 60) * circumference
   const timerClass = seconds <= 10 ? 'danger' : seconds <= 20 ? 'warning' : ''
   const optionOrder = currentQuestion ? (session.optionOrderByQuestion?.[currentQuestion.questionId] ?? optionKeys) : optionKeys
+  const revealedAnswerText = `${currentQuestion.correctAnswer}. ${currentQuestion[`option${currentQuestion.correctAnswer}` as keyof Question] as string}`
 
   return (
     <section className="test-delivery">
@@ -2535,6 +2758,47 @@ function TestDelivery({
       <p className="sr-only" aria-live="polite">{announcer}</p>
       <article className="question-stage">
         <h1>{currentQuestion.questionText}</h1>
+        <div className="question-support">
+          {currentQuestion.hint ? (
+            <button
+              className="assist-link"
+              type="button"
+              disabled={hintVisible || answerVisible}
+              onClick={() => {
+                hintUsedRef.current = true
+                setHintVisible(true)
+              }}
+            >
+              Show hint - lose 50% of this question's possible score
+            </button>
+          ) : (
+            <p className="hint">No hint is available for this question.</p>
+          )}
+          <button
+            className="assist-link danger"
+            type="button"
+            disabled={answerVisible}
+            onClick={() => {
+              answerRevealedRef.current = true
+              setAnswerVisible(true)
+            }}
+          >
+            Reveal answer - lose all points for this question
+          </button>
+          {hintVisible && currentQuestion.hint && (
+            <div className="support-reveal">
+              <strong>Hint</strong>
+              <p>{currentQuestion.hint}</p>
+            </div>
+          )}
+          {answerVisible && (
+            <div className="support-reveal answer">
+              <strong>Answer revealed: zero marks for this question</strong>
+              <p>{revealedAnswerText}</p>
+              {currentQuestion.explanation && <p>{currentQuestion.explanation}</p>}
+            </div>
+          )}
+        </div>
         <div className="answers">
           {optionOrder.map((key, index) => (
             <button key={key} type="button" onClick={() => submitAnswer(key)}>
@@ -2571,14 +2835,17 @@ function ResultView({ session, questions, test, onReturn }: { session?: TestSess
         <div className="accordion-list">
           {session.responses.map((response, index) => {
             const question = questions.find((item) => item.questionId === response.questionId)
-            return (
-              <details key={`${response.questionId}-${index}`}>
-                <summary>Q{index + 1}: {response.marksEarned} mark(s) earned</summary>
-                <p>{question?.questionText}</p>
-                <p>Your answer: {response.selectedOption ?? 'No answer'} · Correct answer: {question?.correctAnswer}</p>
-                <p>{question?.explanation}</p>
-              </details>
-            )
+              return (
+                <details key={`${response.questionId}-${index}`}>
+                  <summary>Q{index + 1}: {response.marksEarned} mark(s) earned</summary>
+                  <p>{question?.questionText}</p>
+                  <p>Your answer: {response.selectedOption ?? 'No answer'} · Correct answer: {question?.correctAnswer}</p>
+                  <p>
+                    Hint used: {response.hintUsed ? 'Yes - 50% penalty' : 'No'} · Answer revealed: {response.answerRevealed ? 'Yes - zero marks' : 'No'} · Response time: {response.responseTime}s
+                  </p>
+                  <p>{question?.explanation}</p>
+                </details>
+              )
           })}
         </div>
       </section>
