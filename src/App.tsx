@@ -2836,6 +2836,13 @@ function TestsPanel({
   const allEmployeeIds = useMemo(() => employeeUsers.map((user) => user.id), [employeeUsers])
   const [editingAvailabilityTest, setEditingAvailabilityTest] = useState<Assessment>()
   const [availabilityDraft, setAvailabilityDraft] = useState<string[]>([])
+  const launchFormRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const userCheckboxes = launchFormRef.current?.querySelectorAll<HTMLInputElement>('.launch-user-grid input[type="checkbox"]')
+    userCheckboxes?.forEach((checkbox) => {
+      checkbox.checked = true
+    })
+  }, [tests.length])
   function openAvailabilityEditor(test: Assessment) {
     const assignedIds = test.assignedUserIds.filter((userId) => allEmployeeIds.includes(userId))
     setEditingAvailabilityTest(test)
@@ -2850,6 +2857,7 @@ function TestsPanel({
       <LearningCatalog questions={questions} />
       <div className="split-layout">
         <form
+          ref={launchFormRef}
           className="panel form-panel"
           onSubmit={(event) => {
             event.preventDefault()
