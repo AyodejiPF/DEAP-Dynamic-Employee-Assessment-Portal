@@ -174,6 +174,50 @@ interface AuditEvent {
   createdAt: string
 }
 
+type AnalyticsEventType =
+  | 'login_success'
+  | 'login_failed'
+  | 'logout'
+  | 'view_change'
+  | 'test_instructions_opened'
+  | 'test_agreement_checked'
+  | 'test_started'
+  | 'test_resumed'
+  | 'answer_submitted'
+  | 'hint_opened'
+  | 'answer_revealed'
+  | 'autosave_heartbeat'
+  | 'test_completed'
+  | 'question_import'
+  | 'test_created'
+  | 'test_deleted'
+  | 'password_reset'
+  | 'permission_changed'
+  | 'bulk_permission_changed'
+  | 'logo_updated'
+  | 'logo_restored'
+  | 'export_results'
+
+interface AnalyticsEvent {
+  id: string
+  type: AnalyticsEventType
+  userId?: string
+  userName?: string
+  department?: string
+  role?: Role
+  testId?: string
+  testName?: string
+  questionId?: string
+  questionBankId?: string
+  difficulty?: Difficulty | 'Mixed'
+  topicTag?: string
+  value?: number
+  durationSeconds?: number
+  outcome?: string
+  createdAt: string
+  metadata?: Record<string, string | number | boolean | undefined>
+}
+
 interface Branding {
   logoUrl: string
 }
@@ -725,6 +769,81 @@ function readStored<T>(key: string, fallback: T): T {
   }
 }
 
+function eventId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0]}`
+}
+
+function analyticsEventLabel(type: AnalyticsEventType): string {
+  return type
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function average(values: number[]): number {
+  return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  const midpoint = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[midpoint] : (sorted[midpoint - 1] + sorted[midpoint]) / 2
+}
+
+function standardDeviation(values: number[]): number {
+  if (values.length < 2) return 0
+  const mean = average(values)
+  const variance = average(values.map((value) => (value - mean) ** 2))
+  return Math.sqrt(variance)
+}
+
+function percentile(values: number[], targetPercentile: number): number {
+  if (!values.length) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((targetPercentile / 100) * sorted.length) - 1))
+  return sorted[index]
+}
+
+function percent(part: number, total: number): number {
+  return total ? (part / total) * 100 : 0
+}
+
+function round(value: number, digits = 1): number {
+  return Number(value.toFixed(digits))
+}
+
+function daysAgo(days: number): number {
+  return Date.now() - days * 24 * 60 * 60 * 1000
+}
+
+function dateKey(isoDate?: string): string {
+  if (!isoDate) return 'Unknown'
+  return new Date(isoDate).toISOString().slice(0, 10)
+}
+
+function inDateWindow(isoDate: string | undefined, range: string): boolean {
+  if (!isoDate || range === 'all') return true
+  const timestamp = new Date(isoDate).getTime()
+  if (!Number.isFinite(timestamp)) return false
+  if (range === '7d') return timestamp >= daysAgo(7)
+  if (range === '30d') return timestamp >= daysAgo(30)
+  if (range === '90d') return timestamp >= daysAgo(90)
+  return true
+}
+
+function responseOutcome(question: Question | undefined, response: ResponseRecord): 'Correct' | 'Partial' | 'Wrong' | 'Unanswered' {
+  if (!response.selectedOption) return 'Unanswered'
+  if (question?.correctAnswer === response.selectedOption) return 'Correct'
+  if (question && (response.selectedOption === question.partialAnswer1 || response.selectedOption === question.partialAnswer2)) return 'Partial'
+  return 'Wrong'
+}
+
+function shortQuestionText(question: Question | undefined): string {
+  if (!question) return 'Unknown question'
+  return question.questionText.length > 76 ? `${question.questionText.slice(0, 73)}...` : question.questionText
+}
+
 function credentialText(user: User): string {
   return `Username: ${user.fullName}\nPassword: ${user.password}`
 }
@@ -1056,6 +1175,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => readStored<User | undefined>('deap-current-user', undefined))
   const [view, setView] = useState<AppView>(() => (currentUser ? firstViewForUser(currentUser, permissions) : 'login'))
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => readStored('deap-audit-events', []))
+  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(() => readStored('deap-analytics-events', []))
   const [activeTestId, setActiveTestId] = useState<string>()
   const [activeSessionId, setActiveSessionId] = useState<string>()
   const [branding, setBranding] = useState<Branding>(() => readStored('deap-branding', defaultBranding))
@@ -1070,6 +1190,7 @@ function App() {
   useEffect(() => localStorage.setItem('deap-tests', JSON.stringify(tests)), [tests])
   useEffect(() => localStorage.setItem('deap-sessions', JSON.stringify(sessions)), [sessions])
   useEffect(() => localStorage.setItem('deap-audit-events', JSON.stringify(auditEvents.slice(0, 200))), [auditEvents])
+  useEffect(() => localStorage.setItem('deap-analytics-events', JSON.stringify(analyticsEvents.slice(0, 5000))), [analyticsEvents])
   useEffect(() => localStorage.setItem('deap-current-user', JSON.stringify(currentUser)), [currentUser])
   useEffect(() => localStorage.setItem('deap-branding', JSON.stringify(branding)), [branding])
   useEffect(() => {
@@ -1170,6 +1291,61 @@ function App() {
   }
 
   /**
+   * Stores a structured analytics event that powers the admin intelligence dashboards.
+   */
+  function recordAnalytics(
+    type: AnalyticsEventType,
+    details: Partial<AnalyticsEvent> = {},
+    actor: User | undefined = currentUser,
+  ) {
+    const eventUser = details.userId ? users.find((user) => user.id === details.userId) : actor
+    const eventTest = details.testId ? tests.find((test) => test.id === details.testId) : undefined
+    const eventQuestion = details.questionId ? questions.find((question) => question.questionId === details.questionId) : undefined
+    const event: AnalyticsEvent = {
+      id: eventId('analytics'),
+      type,
+      userId: eventUser?.id ?? details.userId,
+      userName: eventUser?.fullName ?? details.userName,
+      department: eventUser?.department ?? details.department,
+      role: eventUser?.role ?? details.role,
+      testId: eventTest?.id ?? details.testId,
+      testName: eventTest?.name ?? details.testName,
+      questionId: eventQuestion?.questionId ?? details.questionId,
+      questionBankId: eventQuestion?.importBatchId ?? details.questionBankId ?? eventTest?.questionBankId,
+      difficulty: details.difficulty ?? eventQuestion?.difficulty ?? eventTest?.difficulty,
+      topicTag: details.topicTag ?? eventQuestion?.topicTag,
+      value: details.value,
+      durationSeconds: details.durationSeconds,
+      outcome: details.outcome,
+      metadata: details.metadata,
+      createdAt: new Date().toISOString(),
+    }
+    setAnalyticsEvents((existing) => [event, ...existing].slice(0, 5000))
+  }
+
+  /**
+   * Routes users between views while capturing feature adoption and navigation behaviour.
+   */
+  function navigateTo(nextView: AppView) {
+    if (nextView !== view) {
+      recordAnalytics('view_change', {
+        outcome: nextView,
+        metadata: { from_view: view, to_view: nextView },
+      })
+    }
+    setView(nextView)
+  }
+
+  /**
+   * Signs the current user out and records the end of an access session.
+   */
+  function handleLogout() {
+    recordAnalytics('logout', { outcome: 'signed_out' })
+    setCurrentUser(undefined)
+    setView('login')
+  }
+
+  /**
    * Authenticates demo users and routes them to their correct portal.
    */
   function handleLogin(username: string, password: string) {
@@ -1181,15 +1357,27 @@ function App() {
           .some((value) => value.toLowerCase() === normalizedUsername) && candidate.password === password,
     )
     if (!user) {
+      recordAnalytics('login_failed', {
+        userName: username.trim() || 'Unknown',
+        outcome: 'invalid_credentials',
+        metadata: { attempted_username: username.trim().slice(0, 120) },
+      }, undefined)
       setToast('Invalid username or password.')
       return
     }
     recordAudit('Login', `${user.fullName} signed in.`, user.fullName)
+    recordAnalytics('login_success', { userId: user.id, outcome: 'signed_in' }, user)
     setCurrentUser(user)
     const resumable = sessions.find((session) => session.userId === user.id && session.status === 'in_progress')
     if (resumable) {
       setActiveTestId(resumable.testId)
       setActiveSessionId(resumable.id)
+      recordAnalytics('test_resumed', {
+        userId: user.id,
+        testId: resumable.testId,
+        outcome: 'restored_on_login',
+        metadata: { session_id: resumable.id, answered_questions: resumable.responses.length },
+      }, user)
       setToast('Your in-progress test has been restored. The question timer continued while you were away.')
       setView('taking-test')
       return
@@ -1221,6 +1409,12 @@ function App() {
       )
     }
     recordAudit('Question import', `${result.questions.length} question(s) imported from ${file.name}.`)
+    recordAnalytics('question_import', {
+      questionBankId: batchId,
+      value: result.questions.length,
+      outcome: 'imported',
+      metadata: { filename: file.name, imported_questions: result.questions.length },
+    })
     setToast(`${result.questions.length} question(s) imported successfully.`)
   }
 
@@ -1284,6 +1478,15 @@ function App() {
     }
     setTests((existing) => [next, ...existing])
     recordAudit('Test launched', `${next.name} assigned to ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId, questionBankMetadata) : 'all question banks'}.`)
+    recordAnalytics('test_created', {
+      testId: next.id,
+      testName: next.name,
+      questionBankId: next.questionBankId,
+      difficulty: next.difficulty,
+      value: assignedUserIds.length,
+      outcome: 'live',
+      metadata: { question_count: next.questionCount, assigned_users: assignedUserIds.length, departments: departments.join(', ') },
+    })
     setToast(`${next.name} is live for ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId, questionBankMetadata) : 'all question banks'}.`)
   }
 
@@ -1298,6 +1501,13 @@ function App() {
     setTests((existing) => existing.filter((item) => item.id !== testId))
     setSessions((existing) => existing.filter((session) => session.testId !== testId))
     recordAudit('Test removed', `${test.name} and linked local attempts were removed.`)
+    recordAnalytics('test_deleted', {
+      testId,
+      testName: test.name,
+      questionBankId: test.questionBankId,
+      outcome: 'removed',
+      metadata: { removed_sessions: sessions.filter((session) => session.testId === testId).length },
+    })
     setToast(`${test.name} has been removed.`)
   }
 
@@ -1308,6 +1518,7 @@ function App() {
     const user = users.find((item) => item.id === userId)
     setUsers((existing) => existing.map((user) => (user.id === userId ? { ...user, password: generatePassword() } : user)))
     recordAudit('Password reset', `${user?.fullName ?? 'A user'} received a new generated password.`)
+    recordAnalytics('password_reset', { userId, outcome: 'reset' })
     setToast('Password reset. Click the hidden password button to copy the updated credential.')
   }
 
@@ -1330,6 +1541,11 @@ function App() {
       },
     }))
     recordAudit('Permission changed', `${permission} was turned ${enabled ? 'on' : 'off'} for ${user?.fullName ?? userId}.`)
+    recordAnalytics('permission_changed', {
+      userId,
+      outcome: enabled ? 'enabled' : 'disabled',
+      metadata: { permission },
+    })
   }
 
   /**
@@ -1354,6 +1570,11 @@ function App() {
       return next
     })
     recordAudit('Bulk permission changed', `${permission} was turned ${enabled ? 'on' : 'off'} for ${editableUserIds.length} non-admin user(s).`)
+    recordAnalytics('bulk_permission_changed', {
+      value: editableUserIds.length,
+      outcome: enabled ? 'enabled' : 'disabled',
+      metadata: { permission, affected_users: editableUserIds.length },
+    })
     setToast(`${enabled ? 'Enabled' : 'Disabled'} ${permissionCatalog.find((item) => item.key === permission)?.label ?? permission} for ${editableUserIds.length} non-admin user(s). Admin access stayed locked on.`)
   }
 
@@ -1374,6 +1595,7 @@ function App() {
     reader.onload = () => {
       setBranding({ logoUrl: String(reader.result) })
       recordAudit('Logo updated', `${file.name} was uploaded as the platform logo.`)
+      recordAnalytics('logo_updated', { outcome: 'uploaded', metadata: { filename: file.name, bytes: file.size } })
       setToast('Platform logo updated. It now appears across the LMS.')
     }
     reader.onerror = () => setToast('Logo upload failed. Please try another image file.')
@@ -1386,6 +1608,7 @@ function App() {
   function resetPlatformLogo() {
     setBranding(defaultBranding)
     recordAudit('Logo restored', 'The default iicocece logo was restored.')
+    recordAnalytics('logo_restored', { outcome: 'default_restored' })
     setToast('The default iicocece logo has been restored.')
   }
 
@@ -1438,6 +1661,12 @@ function App() {
       }
       setActiveTestId(testId)
       setActiveSessionId(existingSession.id)
+      recordAnalytics('test_resumed', {
+        testId,
+        userId: currentUser.id,
+        outcome: 'manual_resume',
+        metadata: { session_id: existingSession.id, answered_questions: existingSession.responses.length },
+      })
       setToast('Resuming your in-progress test. The timer continued from the saved question deadline.')
       setView('taking-test')
       return
@@ -1477,15 +1706,106 @@ function App() {
     }
     setSessions((existing) => [session, ...existing])
     recordAudit('Test started', `${currentUser.fullName} started ${test.name}.`, currentUser.fullName)
+    recordAnalytics('test_started', {
+      testId,
+      userId: currentUser.id,
+      questionBankId: test.questionBankId,
+      difficulty: test.difficulty,
+      value: selectedQuestionIds.length,
+      outcome: 'randomized_started',
+      metadata: {
+        session_id: session.id,
+        question_count: selectedQuestionIds.length,
+        available_pool: availableQuestions.length,
+        randomization_signature: selectedQuestionIds.slice(0, 5).join('|'),
+      },
+    })
     setActiveTestId(testId)
     setActiveSessionId(session.id)
     setView('taking-test')
   }
 
   /**
+   * Captures pre-test agreement and instruction behaviour.
+   */
+  function recordPreTestEvent(type: 'test_instructions_opened' | 'test_agreement_checked', testId: string) {
+    const test = tests.find((item) => item.id === testId)
+    recordAnalytics(type, {
+      testId,
+      questionBankId: test?.questionBankId,
+      difficulty: test?.difficulty,
+      outcome: type === 'test_instructions_opened' ? 'opened' : 'accepted',
+      metadata: { question_count: test?.questionCount ?? 0 },
+    })
+  }
+
+  /**
+   * Captures real-time hint and reveal-answer decisions before the answer is submitted.
+   */
+  function recordQuestionSupportEvent(type: 'hint_opened' | 'answer_revealed', session: TestSession, question: Question) {
+    recordAnalytics(type, {
+      testId: session.testId,
+      userId: session.userId,
+      questionId: question.questionId,
+      questionBankId: question.importBatchId,
+      difficulty: question.difficulty,
+      topicTag: question.topicTag,
+      outcome: type === 'hint_opened' ? 'half_score_penalty' : 'zero_score_penalty',
+      metadata: { session_id: session.id, question_number: session.responses.length + 1 },
+    })
+  }
+
+  /**
    * Completes a session after adding the newest question response.
    */
   function recordAnswer(sessionId: string, response: ResponseRecord) {
+    const currentSession = sessions.find((session) => session.id === sessionId)
+    const test = currentSession ? tests.find((item) => item.id === currentSession.testId) : undefined
+    const question = questions.find((item) => item.questionId === response.questionId)
+    if (currentSession) {
+      const nextResponseCount = currentSession.responses.length + 1
+      const complete = nextResponseCount >= (test?.questionCount ?? 0)
+      const nextScore = currentSession.responses
+        .concat(response)
+        .reduce((total, item) => total.plus(item.marksEarned), new Decimal(0))
+      const nextPercentage = nextScore.div(test?.questionCount ?? nextResponseCount).mul(100)
+      recordAnalytics('answer_submitted', {
+        testId: currentSession.testId,
+        userId: currentSession.userId,
+        questionId: response.questionId,
+        questionBankId: question?.importBatchId,
+        difficulty: question?.difficulty,
+        topicTag: question?.topicTag,
+        value: Number(response.marksEarned),
+        durationSeconds: response.responseTime,
+        outcome: responseOutcome(question, response),
+        metadata: {
+          session_id: currentSession.id,
+          selected_option: response.selectedOption ?? 'none',
+          seconds_remaining: response.secondsRemaining,
+          answer_weight: response.answerWeight,
+          time_multiplier: response.timeMultiplier,
+          hint_used: Boolean(response.hintUsed),
+          answer_revealed: Boolean(response.answerRevealed),
+        },
+      })
+      if (complete) {
+        recordAnalytics('test_completed', {
+          testId: currentSession.testId,
+          userId: currentSession.userId,
+          questionBankId: test?.questionBankId,
+          value: Number(nextPercentage.toFixed(2)),
+          durationSeconds: Math.round((Date.now() - new Date(currentSession.startedAt).getTime()) / 1000),
+          outcome: nextPercentage.greaterThanOrEqualTo(test?.passMark ?? 50) ? 'passed' : 'failed',
+          metadata: {
+            session_id: currentSession.id,
+            score: nextScore.toFixed(2),
+            percentage: nextPercentage.toFixed(2),
+            responses: nextResponseCount,
+          },
+        })
+      }
+    }
     setSessions((existing) =>
       existing.map((session) => {
         if (session.id !== sessionId) return session
@@ -1516,6 +1836,15 @@ function App() {
    * Saves a heartbeat for an in-progress session so reconnects resume cleanly.
    */
   function autosaveSession(sessionId: string) {
+    const session = sessions.find((item) => item.id === sessionId)
+    if (session?.status === 'in_progress') {
+      recordAnalytics('autosave_heartbeat', {
+        testId: session.testId,
+        userId: session.userId,
+        outcome: 'saved',
+        metadata: { session_id: session.id, answered_questions: session.responses.length },
+      })
+    }
     setSessions((existing) =>
       existing.map((session) =>
         session.id === sessionId && session.status === 'in_progress' ? { ...session, lastSavedAt: new Date().toISOString() } : session,
@@ -1528,6 +1857,11 @@ function App() {
    */
   async function exportCsv() {
     const spreadsheet = await loadSpreadsheetTools()
+    recordAnalytics('export_results', {
+      value: sessions.length,
+      outcome: 'xlsx_generated',
+      metadata: { sessions: sessions.length, analytics_events: analyticsEvents.length },
+    })
     const rows = sessions.map((session) => {
       const test = tests.find((item) => item.id === session.testId)
       const user = users.find((item) => item.id === session.userId)
@@ -1553,9 +1887,79 @@ function App() {
         completed_at: session.completedAt,
       }
     })
+    const analyticsRows = analyticsEvents.map((event) => ({
+      time: event.createdAt,
+      event_type: analyticsEventLabel(event.type),
+      user: event.userName,
+      department: event.department,
+      role: event.role,
+      test: event.testName,
+      question_id: event.questionId,
+      question_bank: event.questionBankId ? documentNameFromBatch(event.questionBankId, questionBankMetadata) : '',
+      difficulty: event.difficulty,
+      topic: event.topicTag,
+      value: event.value,
+      duration_seconds: event.durationSeconds,
+      outcome: event.outcome,
+      metadata: event.metadata ? JSON.stringify(event.metadata) : '',
+    }))
+    const questionById = new Map(questions.map((question) => [question.questionId, question]))
+    const responseEvents = sessions.flatMap((session) =>
+      session.responses.map((response) => {
+        const question = questionById.get(response.questionId)
+        return { session, response, question }
+      }),
+    )
+    const questionQualityRows = questions
+      .map((question) => {
+        const records = responseEvents.filter((item) => item.response.questionId === question.questionId)
+        const correct = records.filter((item) => responseOutcome(item.question, item.response) === 'Correct').length
+        const hints = records.filter((item) => item.response.hintUsed).length
+        const reveals = records.filter((item) => item.response.answerRevealed).length
+        return {
+          question_id: question.questionId,
+          question_bank: documentNameFromBatch(question.importBatchId, questionBankMetadata),
+          topic: question.topicTag,
+          difficulty: question.difficulty,
+          attempts: records.length,
+          correct_rate_percent: round(percent(correct, records.length), 1),
+          average_response_seconds: round(average(records.map((item) => item.response.responseTime)), 1),
+          hints_used: hints,
+          answers_revealed: reveals,
+          review_flag: records.length >= 3 && percent(correct, records.length) < 35 ? 'Review: low correctness' : records.length >= 3 && percent(reveals, records.length) > 30 ? 'Review: high answer reveals' : '',
+          question: shortQuestionText(question),
+        }
+      })
+      .filter((row) => row.attempts > 0)
+    const userRiskRows = users
+      .filter((user) => user.role === 'employee')
+      .map((user) => {
+        const userSessions = sessions.filter((session) => session.userId === user.id)
+        const completed = userSessions.filter((session) => session.status === 'completed')
+        const responses = userSessions.flatMap((session) => session.responses)
+        const avgScore = round(average(completed.map((session) => Number(session.percentage))), 1)
+        const supportRate = round(percent(responses.filter((response) => response.hintUsed || response.answerRevealed).length, responses.length), 1)
+        const completionRate = round(percent(completed.length, userSessions.length), 1)
+        const riskScore = Math.min(100, Math.round((100 - avgScore) * 0.45 + (100 - completionRate) * 0.35 + supportRate * 0.2))
+        return {
+          employee: user.fullName,
+          department: user.department,
+          attempts: userSessions.length,
+          completed: completed.length,
+          completion_rate_percent: completionRate,
+          average_score_percent: avgScore,
+          average_response_seconds: round(average(responses.map((response) => response.responseTime)), 1),
+          support_rate_percent: supportRate,
+          risk_score: riskScore,
+          recommendation: riskScore >= 70 ? 'Urgent coaching and supervised retest' : riskScore >= 45 ? 'Targeted topic support' : 'Maintain current path',
+        }
+      })
     const worksheet = spreadsheet.utils.json_to_sheet(rows)
     const workbook = spreadsheet.utils.book_new()
     spreadsheet.utils.book_append_sheet(workbook, worksheet, 'DEAP Results')
+    spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(analyticsRows), 'Analytics Events')
+    spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(questionQualityRows), 'Question Quality')
+    spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(userRiskRows), 'User Risk')
     spreadsheet.writeFile(workbook, `DEAP_Results_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
@@ -1574,12 +1978,12 @@ function App() {
         <BrandHeader branding={branding} subtitle="iicocece-assessment" />
         <nav>
           {visibleNavigation.map(([itemView, Icon, label]) => (
-            <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => setView(itemView)}>
+            <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => navigateTo(itemView)}>
               <Icon size={18} /> {label}
             </button>
           ))}
         </nav>
-        <UserFooter currentUser={currentUser} theme={theme} onToggleTheme={toggleTheme} onLogout={() => setCurrentUser(undefined)} />
+        <UserFooter currentUser={currentUser} theme={theme} onToggleTheme={toggleTheme} onLogout={handleLogout} />
       </aside>
 
       <main className={usesManagementWorkspace ? 'workspace' : 'employee-workspace'}>
@@ -1596,7 +2000,16 @@ function App() {
         )}
         {view === 'tests' && <TestsPanel tests={tests} questions={questions} questionBankMetadata={questionBankMetadata} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
         {view === 'employees' && <EmployeesPanel users={users} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} />}
-        {view === 'analytics' && <Analytics sessions={sessions} users={users} questions={questions} tests={tests} />}
+        {view === 'analytics' && (
+          <Analytics
+            sessions={sessions}
+            users={users}
+            questions={questions}
+            tests={tests}
+            analyticsEvents={analyticsEvents}
+            questionBankMetadata={questionBankMetadata}
+          />
+        )}
         {view === 'reports' && <Reports onExport={exportCsv} sessions={sessions} tests={tests} users={users} questions={questions} auditEvents={auditEvents} />}
         {view === 'settings' && (
           <SettingsPanel
@@ -1611,7 +2024,16 @@ function App() {
             onToast={setToast}
           />
         )}
-        {view === 'my-tests' && <MyTests currentUser={currentUser} tests={tests} sessions={sessions} onStart={startTest} />}
+        {view === 'my-tests' && (
+          <MyTests
+            currentUser={currentUser}
+            tests={tests}
+            sessions={sessions}
+            onStart={startTest}
+            onInstructionOpen={(testId) => recordPreTestEvent('test_instructions_opened', testId)}
+            onAgreementAccept={(testId) => recordPreTestEvent('test_agreement_checked', testId)}
+          />
+        )}
         {view === 'my-results' && <MyResults currentUser={currentUser} sessions={sessions} tests={tests} />}
         {view === 'taking-test' && activeSession && (
           <TestDelivery
@@ -1622,6 +2044,7 @@ function App() {
             currentUser={currentUser}
             onAnswer={recordAnswer}
             onAutosave={autosaveSession}
+            onSupportEvent={recordQuestionSupportEvent}
             onComplete={() => setView('result')}
           />
         )}
@@ -2214,89 +2637,457 @@ function EmployeesPanel({
   )
 }
 
-function Analytics({ sessions, users, questions }: { sessions: TestSession[]; users: User[]; questions: Question[]; tests: Assessment[] }) {
-  const { cohortData, topicData, trendData, usageMetrics, difficultyTimingData, supportUsageData, outcomeData } = useMemo(() => {
-    const completed = sessions.filter((session) => session.status === 'completed')
+function Analytics({
+  sessions,
+  users,
+  questions,
+  tests,
+  analyticsEvents,
+  questionBankMetadata,
+}: {
+  sessions: TestSession[]
+  users: User[]
+  questions: Question[]
+  tests: Assessment[]
+  analyticsEvents: AnalyticsEvent[]
+  questionBankMetadata: QuestionBankMetadataMap
+}) {
+  const [range, setRange] = useState('all')
+  const [department, setDepartment] = useState('all')
+  const [selectedUserId, setSelectedUserId] = useState('all')
+  const [selectedTestId, setSelectedTestId] = useState('all')
+  const [selectedQuestionBankId, setSelectedQuestionBankId] = useState('all')
+  const [selectedDifficulty, setSelectedDifficulty] = useState('all')
+  const [selectedTopic, setSelectedTopic] = useState('all')
+  const [selectedRole, setSelectedRole] = useState('all')
+
+  const departments = useMemo(() => Array.from(new Set(users.map((user) => user.department))).sort(), [users])
+  const availableTopics = useMemo(() => Array.from(new Set(questions.map((question) => question.topicTag))).sort(), [questions])
+  const questionBanks = useMemo(() => getQuestionBankSummaries(questions, questionBankMetadata), [questionBankMetadata, questions])
+
+  const analytics = useMemo(() => {
+    const userById = new Map(users.map((user) => [user.id, user]))
+    const testById = new Map(tests.map((test) => [test.id, test]))
     const questionById = new Map(questions.map((question) => [question.questionId, question]))
-    const allResponses = completed.flatMap((session) => session.responses)
-    const correctResponses = allResponses.filter((response) => questionById.get(response.questionId)?.correctAnswer === response.selectedOption)
-    const partialResponses = allResponses.filter((response) => {
-      const question = questionById.get(response.questionId)
-      return Boolean(response.selectedOption && question && (response.selectedOption === question.partialAnswer1 || response.selectedOption === question.partialAnswer2))
+    const userMatches = (user?: User) => {
+      if (!user) return false
+      if (department !== 'all' && user.department !== department) return false
+      if (selectedUserId !== 'all' && user.id !== selectedUserId) return false
+      if (selectedRole !== 'all' && user.role !== selectedRole) return false
+      return true
+    }
+    const testMatches = (test?: Assessment) => {
+      if (!test) return false
+      if (selectedTestId !== 'all' && test.id !== selectedTestId) return false
+      if (selectedQuestionBankId !== 'all' && test.questionBankId !== selectedQuestionBankId) return false
+      if (selectedDifficulty !== 'all' && test.difficulty !== selectedDifficulty && test.difficulty !== 'Mixed') return false
+      return true
+    }
+    const questionMatches = (question?: Question) => {
+      if (!question) return selectedQuestionBankId === 'all' && selectedDifficulty === 'all' && selectedTopic === 'all'
+      if (selectedQuestionBankId !== 'all' && question.importBatchId !== selectedQuestionBankId) return false
+      if (selectedDifficulty !== 'all' && question.difficulty !== selectedDifficulty) return false
+      if (selectedTopic !== 'all' && question.topicTag !== selectedTopic) return false
+      return true
+    }
+    const scopedTests = tests.filter((test) => testMatches(test))
+    const scopedSessions = sessions.filter((session) => {
+      const user = userById.get(session.userId)
+      const test = testById.get(session.testId)
+      if (!userMatches(user) || !testMatches(test)) return false
+      if (!inDateWindow(session.completedAt ?? session.startedAt, range)) return false
+      if (selectedTopic !== 'all') return session.responses.some((response) => questionMatches(questionById.get(response.questionId)))
+      return true
     })
-    const unansweredResponses = allResponses.filter((response) => !response.selectedOption)
-    const wrongResponses = allResponses.filter((response) => response.selectedOption && Number(response.answerWeight) === 0)
-    const completedByUser = completed.reduce((map, session) => {
-      const existing = map.get(session.userId) ?? []
-      existing.push(session)
-      map.set(session.userId, existing)
+    const scopedEvents = analyticsEvents.filter((event) => {
+      const user = event.userId ? userById.get(event.userId) : undefined
+      if (event.userId && !userMatches(user)) return false
+      if (department !== 'all' && event.department !== department) return false
+      if (selectedUserId !== 'all' && event.userId !== selectedUserId) return false
+      if (selectedRole !== 'all' && event.role !== selectedRole) return false
+      if (selectedTestId !== 'all' && event.testId !== selectedTestId) return false
+      if (selectedQuestionBankId !== 'all' && event.questionBankId !== selectedQuestionBankId) return false
+      if (selectedDifficulty !== 'all' && event.difficulty !== selectedDifficulty) return false
+      if (selectedTopic !== 'all' && event.topicTag !== selectedTopic) return false
+      return inDateWindow(event.createdAt, range)
+    })
+    const scopedResponseRecords = scopedSessions.flatMap((session) =>
+      session.responses
+        .map((response) => ({ session, response, question: questionById.get(response.questionId), user: userById.get(session.userId), test: testById.get(session.testId) }))
+        .filter((record) => questionMatches(record.question)),
+    )
+    const completed = scopedSessions.filter((session) => session.status === 'completed')
+    const completedScores = completed.map((session) => Number(session.percentage))
+    const assignedSeats = scopedTests.reduce((total, test) => total + test.assignedUserIds.filter((userId) => userMatches(userById.get(userId))).length, 0)
+    const correct = scopedResponseRecords.filter((record) => responseOutcome(record.question, record.response) === 'Correct').length
+    const partial = scopedResponseRecords.filter((record) => responseOutcome(record.question, record.response) === 'Partial').length
+    const wrong = scopedResponseRecords.filter((record) => responseOutcome(record.question, record.response) === 'Wrong').length
+    const unanswered = scopedResponseRecords.filter((record) => responseOutcome(record.question, record.response) === 'Unanswered').length
+    const hints = scopedResponseRecords.filter((record) => record.response.hintUsed).length
+    const reveals = scopedResponseRecords.filter((record) => record.response.answerRevealed).length
+    const activeUsers = new Set(scopedEvents.filter((event) => event.userId && ['login_success', 'view_change', 'test_started', 'answer_submitted'].includes(event.type)).map((event) => event.userId))
+    const loginSuccesses = scopedEvents.filter((event) => event.type === 'login_success')
+    const failedLogins = scopedEvents.filter((event) => event.type === 'login_failed')
+    const autosaves = scopedEvents.filter((event) => event.type === 'autosave_heartbeat')
+    const resumedAttempts = scopedEvents.filter((event) => event.type === 'test_resumed')
+    const instructionOpens = scopedEvents.filter((event) => event.type === 'test_instructions_opened')
+    const agreements = scopedEvents.filter((event) => event.type === 'test_agreement_checked')
+    const responseTimes = scopedResponseRecords.map((record) => record.response.responseTime)
+
+    const userRiskData = users
+      .filter((user) => user.role === 'employee' && userMatches(user))
+      .map((user) => {
+        const userSessions = scopedSessions.filter((session) => session.userId === user.id)
+        const userCompleted = userSessions.filter((session) => session.status === 'completed')
+        const userResponses = scopedResponseRecords.filter((record) => record.session.userId === user.id)
+        const avgScore = average(userCompleted.map((session) => Number(session.percentage)))
+        const completionRate = percent(userCompleted.length, Math.max(userSessions.length, tests.filter((test) => test.assignedUserIds.includes(user.id)).length))
+        const supportRate = percent(userResponses.filter((record) => record.response.hintUsed || record.response.answerRevealed).length, userResponses.length)
+        const wrongRate = percent(userResponses.filter((record) => ['Wrong', 'Unanswered'].includes(responseOutcome(record.question, record.response))).length, userResponses.length)
+        const avgSpeed = average(userResponses.map((record) => record.response.responseTime))
+        const lastLogin = scopedEvents.find((event) => event.type === 'login_success' && event.userId === user.id)?.createdAt
+        const riskScore = Math.min(100, Math.round((100 - avgScore) * 0.36 + (100 - completionRate) * 0.28 + supportRate * 0.18 + wrongRate * 0.18))
+        const recommendation =
+          riskScore >= 70
+            ? 'Urgent HR coaching and supervised retest'
+            : riskScore >= 45
+              ? 'Targeted support on weak topics'
+              : !userSessions.length
+                ? 'Prompt to start assigned assessment'
+                : 'Maintain current training path'
+        return {
+          name: user.fullName,
+          department: user.department,
+          attempts: userSessions.length,
+          completed: userCompleted.length,
+          completionRate: round(completionRate, 1),
+          avgScore: round(avgScore, 1),
+          avgSpeed: round(avgSpeed, 1),
+          supportRate: round(supportRate, 1),
+          wrongRate: round(wrongRate, 1),
+          riskScore,
+          lastLogin: lastLogin ? new Date(lastLogin).toLocaleString() : 'No login recorded',
+          recommendation,
+        }
+      })
+      .sort((left, right) => right.riskScore - left.riskScore || left.name.localeCompare(right.name))
+
+    const groupByDepartment = departments.map((dept) => {
+      const departmentUsers = users.filter((user) => user.department === dept && userMatches(user))
+      const ids = new Set(departmentUsers.map((user) => user.id))
+      const departmentSessions = scopedSessions.filter((session) => ids.has(session.userId))
+      const departmentCompleted = departmentSessions.filter((session) => session.status === 'completed')
+      const departmentResponses = scopedResponseRecords.filter((record) => ids.has(record.session.userId))
+      return {
+        department: dept,
+        users: departmentUsers.length,
+        attempts: departmentSessions.length,
+        completed: departmentCompleted.length,
+        score: round(average(departmentCompleted.map((session) => Number(session.percentage))), 1),
+        completion: round(percent(departmentCompleted.length, departmentSessions.length), 1),
+        support: round(percent(departmentResponses.filter((record) => record.response.hintUsed || record.response.answerRevealed).length, departmentResponses.length), 1),
+      }
+    }).filter((row) => row.users || row.attempts)
+
+    const topicsInScope = Array.from(new Set(scopedResponseRecords.map((record) => record.question?.topicTag).filter(Boolean) as string[]))
+    const topicData = topicsInScope
+      .map((topic) => {
+        const records = scopedResponseRecords.filter((record) => record.question?.topicTag === topic)
+        const score = percent(records.reduce((total, record) => total + Number(record.response.marksEarned), 0), records.length)
+        return { topic, score: round(score, 1), responses: records.length }
+      })
+      .sort((left, right) => right.responses - left.responses)
+      .slice(0, 12)
+
+    const difficultyTimingData = difficulties.map((difficulty) => {
+      const records = scopedResponseRecords.filter((record) => record.question?.difficulty === difficulty)
+      return {
+        difficulty,
+        seconds: round(average(records.map((record) => record.response.responseTime)), 1),
+        score: round(percent(records.reduce((total, record) => total + Number(record.response.marksEarned), 0), records.length), 1),
+        responses: records.length,
+      }
+    })
+
+    const trendDates = Array.from(new Set([...scopedEvents.map((event) => dateKey(event.createdAt)), ...completed.map((session) => dateKey(session.completedAt))])).sort()
+    const trendData = trendDates.map((day) => ({
+      day: day.slice(5),
+      logins: scopedEvents.filter((event) => event.type === 'login_success' && dateKey(event.createdAt) === day).length,
+      starts: scopedEvents.filter((event) => event.type === 'test_started' && dateKey(event.createdAt) === day).length,
+      completions: completed.filter((session) => dateKey(session.completedAt) === day).length,
+    }))
+
+    const cohortData = users
+      .filter((user) => user.role === 'employee' && userMatches(user))
+      .map((user) => {
+        const userCompleted = completed.filter((session) => session.userId === user.id)
+        const userResponses = scopedResponseRecords.filter((record) => record.session.userId === user.id)
+        return {
+          name: user.displayName,
+          score: round(average(userCompleted.map((session) => Number(session.percentage))), 1),
+          speed: round(average(userResponses.map((record) => record.response.responseTime)), 1),
+          support: round(percent(userResponses.filter((record) => record.response.hintUsed || record.response.answerRevealed).length, userResponses.length), 1),
+        }
+      })
+
+    const questionQualityRows = Array.from(new Set(scopedResponseRecords.map((record) => record.response.questionId)))
+      .map((questionId) => {
+        const records = scopedResponseRecords.filter((record) => record.response.questionId === questionId)
+        const question = questionById.get(questionId)
+        const correctRate = percent(records.filter((record) => responseOutcome(record.question, record.response) === 'Correct').length, records.length)
+        const supportRate = percent(records.filter((record) => record.response.hintUsed || record.response.answerRevealed).length, records.length)
+        const avgTime = average(records.map((record) => record.response.responseTime))
+        const flag = records.length < 2
+          ? 'Needs more data'
+          : correctRate < 35
+            ? 'Review: too hard/confusing'
+            : correctRate > 95
+              ? 'Review: too easy'
+              : supportRate > 35
+                ? 'Review: high support use'
+                : avgTime > 45
+                  ? 'Review: slow response'
+                  : 'Stable'
+        return {
+          question: shortQuestionText(question),
+          topic: question?.topicTag ?? 'Unknown',
+          difficulty: question?.difficulty ?? 'Mixed',
+          attempts: records.length,
+          correctRate: round(correctRate, 1),
+          avgTime: round(avgTime, 1),
+          hints: records.filter((record) => record.response.hintUsed).length,
+          reveals: records.filter((record) => record.response.answerRevealed).length,
+          flag,
+        }
+      })
+      .sort((left, right) => {
+        const priority = (flag: string) => (flag.startsWith('Review') ? 2 : flag === 'Needs more data' ? 1 : 0)
+        return priority(right.flag) - priority(left.flag) || right.attempts - left.attempts
+      })
+      .slice(0, 10)
+
+    const optionData = optionKeys.map((option) => ({
+      option,
+      count: scopedResponseRecords.filter((record) => record.response.selectedOption === option).length,
+    }))
+
+    const questionBankRows = questionBanks.map((bank) => {
+      const bankQuestions = questions.filter((question) => question.importBatchId === bank.id)
+      const bankResponses = scopedResponseRecords.filter((record) => record.question?.importBatchId === bank.id)
+      const linkedTests = tests.filter((test) => test.questionBankId === bank.id)
+      return {
+        bank: bank.name,
+        questions: bankQuestions.length,
+        easy: bankQuestions.filter((question) => question.difficulty === 'Easy').length,
+        medium: bankQuestions.filter((question) => question.difficulty === 'Medium').length,
+        hard: bankQuestions.filter((question) => question.difficulty === 'Hard').length,
+        liveTests: linkedTests.filter((test) => test.status === 'Live').length,
+        responses: bankResponses.length,
+        avgScore: round(percent(bankResponses.reduce((total, record) => total + Number(record.response.marksEarned), 0), bankResponses.length), 1),
+      }
+    })
+
+    const connectivityRows = scopedSessions
+      .filter((session) => session.status === 'in_progress' || autosaves.some((event) => event.metadata?.session_id === session.id) || resumedAttempts.some((event) => event.metadata?.session_id === session.id))
+      .map((session) => {
+        const user = userById.get(session.userId)
+        const test = testById.get(session.testId)
+        return {
+          employee: user?.fullName ?? 'Unknown',
+          test: test?.name ?? 'Assessment',
+          status: session.status,
+          answered: session.responses.length,
+          autosaves: autosaves.filter((event) => event.metadata?.session_id === session.id).length,
+          resumed: resumedAttempts.filter((event) => event.metadata?.session_id === session.id).length,
+          lastSaved: session.lastSavedAt ? new Date(session.lastSavedAt).toLocaleString() : 'Not saved',
+        }
+      })
+      .slice(0, 10)
+
+    const operationRows = Array.from(scopedEvents.reduce((map, event) => {
+      const label = analyticsEventLabel(event.type)
+      map.set(label, (map.get(label) ?? 0) + 1)
       return map
-    }, new Map<string, TestSession[]>())
-    const topicQuestionIds = questions.reduce((map, question) => {
-      const existing = map.get(question.topicTag) ?? new Set<string>()
-      existing.add(question.questionId)
-      map.set(question.topicTag, existing)
-      return map
-    }, new Map<string, Set<string>>())
+    }, new Map<string, number>()))
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 12)
+      .map(([event, count]) => ({ event, count }))
+
     return {
       usageMetrics: {
+        activeUsers: activeUsers.size,
+        loginSuccesses: loginSuccesses.length,
+        failedLogins: failedLogins.length,
+        assignedSeats,
+        startedAttempts: scopedSessions.length,
         completedAttempts: completed.length,
-        totalResponses: allResponses.length,
-        correct: correctResponses.length,
-        partial: partialResponses.length,
-        wrong: wrongResponses.length,
-        unanswered: unansweredResponses.length,
-        hints: allResponses.filter((response) => response.hintUsed).length,
-        revealed: allResponses.filter((response) => response.answerRevealed).length,
+        completionRate: round(percent(completed.length, scopedSessions.length), 1),
+        startConversion: round(percent(scopedSessions.length, assignedSeats), 1),
+        avgScore: round(average(completedScores), 1),
+        medianScore: round(median(completedScores), 1),
+        scoreStdDev: round(standardDeviation(completedScores), 1),
+        p25: round(percentile(completedScores, 25), 1),
+        p75: round(percentile(completedScores, 75), 1),
+        p90: round(percentile(completedScores, 90), 1),
+        totalResponses: scopedResponseRecords.length,
+        correct,
+        partial,
+        wrong,
+        unanswered,
+        avgResponseTime: round(average(responseTimes), 1),
+        medianResponseTime: round(median(responseTimes), 1),
+        hints,
+        reveals,
+        supportRate: round(percent(hints + reveals, scopedResponseRecords.length), 1),
+        autosaves: autosaves.length,
+        resumed: resumedAttempts.length,
+        instructionOpens: instructionOpens.length,
+        agreements: agreements.length,
+        riskFlags: userRiskData.filter((user) => user.riskScore >= 45).length,
       },
-      cohortData: users
-        .filter((user) => user.role === 'employee')
-        .map((user) => {
-          const userSessions = completedByUser.get(user.id) ?? []
-          const average = userSessions.length ? userSessions.reduce((total, session) => total + Number(session.percentage), 0) / userSessions.length : 0
-          const responseTimes = userSessions.flatMap((session) => session.responses.map((response) => response.responseTime))
-          const speed = responseTimes.length ? responseTimes.reduce((total, value) => total + value, 0) / responseTimes.length : 0
-          return { name: user.fullName.split(' ')[0], score: Number(average.toFixed(2)), speed: Number(speed.toFixed(1)), department: user.department }
-        }),
-      topicData: topics.map((topic) => {
-        const topicIds = topicQuestionIds.get(topic) ?? new Set<string>()
-        const topicResponses = allResponses.filter((response) => topicIds.has(response.questionId))
-        const average = topicResponses.length ? topicResponses.reduce((total, response) => total + Number(response.marksEarned), 0) / topicResponses.length : 0
-        return { topic, score: Number((average * 100).toFixed(0)) }
-      }),
-      trendData: completed.map((session, index) => ({ attempt: index + 1, score: Number(session.percentage) })),
-      difficultyTimingData: difficulties.map((difficulty) => {
-        const responses = allResponses.filter((response) => questionById.get(response.questionId)?.difficulty === difficulty)
-        const averageSeconds = responses.length ? responses.reduce((total, response) => total + response.responseTime, 0) / responses.length : 0
-        return { difficulty, seconds: Number(averageSeconds.toFixed(1)), responses: responses.length }
-      }),
-      supportUsageData: [
-        { name: 'Hints used', count: allResponses.filter((response) => response.hintUsed).length },
-        { name: 'Answers revealed', count: allResponses.filter((response) => response.answerRevealed).length },
-      ],
       outcomeData: [
-        { name: 'Correct', count: correctResponses.length },
-        { name: 'Partial', count: partialResponses.length },
-        { name: 'Wrong', count: wrongResponses.length },
-        { name: 'Unanswered', count: unansweredResponses.length },
+        { name: 'Correct', count: correct },
+        { name: 'Partial', count: partial },
+        { name: 'Wrong', count: wrong },
+        { name: 'Unanswered', count: unanswered },
       ],
+      supportUsageData: [
+        { name: 'Hints', count: hints },
+        { name: 'Reveals', count: reveals },
+        { name: 'Autosaves', count: autosaves.length },
+        { name: 'Resumes', count: resumedAttempts.length },
+      ],
+      trendData,
+      difficultyTimingData,
+      topicData,
+      cohortData,
+      departmentData: groupByDepartment,
+      questionQualityRows,
+      optionData,
+      questionBankRows,
+      userRiskData,
+      connectivityRows,
+      operationRows,
     }
-  }, [questions, sessions, users])
+  }, [analyticsEvents, department, departments, questionBankMetadata, questionBanks, questions, range, selectedDifficulty, selectedQuestionBankId, selectedRole, selectedTestId, selectedTopic, selectedUserId, sessions, tests, users])
 
   return (
     <section>
-      <PageTitle eyebrow="Analytics" title="Performance intelligence dashboard" />
-      <div className="metric-grid">
-        <Metric label="Responses" value={usageMetrics.totalResponses} icon={<ListChecks />} />
-        <Metric label="Correct" value={usageMetrics.correct} icon={<CheckCircle2 />} />
-        <Metric label="Wrong/unanswered" value={usageMetrics.wrong + usageMetrics.unanswered} icon={<AlertCircle />} />
-        <Metric label="Hints/reveals" value={usageMetrics.hints + usageMetrics.revealed} icon={<KeyRound />} />
+      <PageTitle eyebrow="Analytics" title="Decision intelligence dashboard" />
+      <section className="panel analytics-control-panel">
+        <div>
+          <h2>Analytics filters</h2>
+          <p>Slice every metric by time, department, user, test, question bank, difficulty, topic, and role.</p>
+        </div>
+        <div className="analytics-filter-grid">
+          <label>
+            Date range
+            <select value={range} onChange={(event) => setRange(event.target.value)}>
+              <option value="all">All time</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+            </select>
+          </label>
+          <label>
+            Department
+            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+              <option value="all">All departments</option>
+              {departments.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            User
+            <select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
+              <option value="all">All users</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
+            </select>
+          </label>
+          <label>
+            Test
+            <select value={selectedTestId} onChange={(event) => setSelectedTestId(event.target.value)}>
+              <option value="all">All tests</option>
+              {tests.map((test) => <option key={test.id} value={test.id}>{test.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Question bank
+            <select value={selectedQuestionBankId} onChange={(event) => setSelectedQuestionBankId(event.target.value)}>
+              <option value="all">All banks</option>
+              {questionBanks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Difficulty
+            <select value={selectedDifficulty} onChange={(event) => setSelectedDifficulty(event.target.value)}>
+              <option value="all">All difficulty levels</option>
+              {difficulties.map((difficulty) => <option key={difficulty} value={difficulty}>{difficulty}</option>)}
+            </select>
+          </label>
+          <label>
+            Topic
+            <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
+              <option value="all">All topics</option>
+              {availableTopics.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
+            </select>
+          </label>
+          <label>
+            Role
+            <select value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
+              <option value="all">All roles</option>
+              <option value="super_admin">Admin</option>
+              <option value="employee">Employee</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <div className="metric-grid analytics-metrics">
+        <Metric label="Active users" value={analytics.usageMetrics.activeUsers} icon={<UsersRound />} />
+        <Metric label="Failed logins" value={analytics.usageMetrics.failedLogins} icon={<AlertCircle />} />
+        <Metric label="Start conversion" value={`${analytics.usageMetrics.startConversion}%`} icon={<Play />} />
+        <Metric label="Completion rate" value={`${analytics.usageMetrics.completionRate}%`} icon={<CheckCircle2 />} />
+        <Metric label="Average score" value={`${analytics.usageMetrics.avgScore}%`} icon={<Gauge />} />
+        <Metric label="Median score" value={`${analytics.usageMetrics.medianScore}%`} icon={<BarChart3 />} />
+        <Metric label="Avg response" value={`${analytics.usageMetrics.avgResponseTime}s`} icon={<Clock3 />} />
+        <Metric label="Risk flags" value={analytics.usageMetrics.riskFlags} icon={<ShieldCheck />} />
       </div>
+
+      <section className="panel analytics-summary-panel">
+        <h2>Score distribution and support dependence</h2>
+        <div className="analytics-stat-strip">
+          <span><strong>{analytics.usageMetrics.totalResponses}</strong> responses</span>
+          <span><strong>{analytics.usageMetrics.correct}</strong> correct</span>
+          <span><strong>{analytics.usageMetrics.partial}</strong> partial</span>
+          <span><strong>{analytics.usageMetrics.wrong + analytics.usageMetrics.unanswered}</strong> wrong/unanswered</span>
+          <span><strong>{analytics.usageMetrics.supportRate}%</strong> hint/reveal rate</span>
+          <span><strong>{analytics.usageMetrics.scoreStdDev}</strong> score spread</span>
+          <span><strong>{analytics.usageMetrics.p25}%</strong> P25</span>
+          <span><strong>{analytics.usageMetrics.p75}%</strong> P75</span>
+          <span><strong>{analytics.usageMetrics.p90}%</strong> P90</span>
+        </div>
+      </section>
+
       <div className="analytics-grid">
+        <section className="panel">
+          <h2>Access, starts, and completions</h2>
+          <ResponsiveContainer height={270}>
+            <LineChart data={analytics.trendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="logins" stroke="#004331" strokeWidth={3} />
+              <Line type="monotone" dataKey="starts" stroke="#D5B52E" strokeWidth={3} />
+              <Line type="monotone" dataKey="completions" stroke="#2E75B6" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </section>
         <section className="panel">
           <h2>Answer outcomes</h2>
           <ResponsiveContainer height={270}>
-            <BarChart data={outcomeData}>
+            <BarChart data={analytics.outcomeData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis allowDecimals={false} />
@@ -2306,21 +3097,23 @@ function Analytics({ sessions, users, questions }: { sessions: TestSession[]; us
           </ResponsiveContainer>
         </section>
         <section className="panel">
-          <h2>Average time by difficulty</h2>
+          <h2>Difficulty mastery and timing</h2>
           <ResponsiveContainer height={270}>
-            <BarChart data={difficultyTimingData}>
+            <BarChart data={analytics.difficultyTimingData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="difficulty" />
               <YAxis />
               <Tooltip />
+              <Legend />
+              <Bar dataKey="score" fill="#004331" radius={[6, 6, 0, 0]} />
               <Bar dataKey="seconds" fill="#D5B52E" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </section>
         <section className="panel">
-          <h2>Hint and reveal usage</h2>
+          <h2>Hint, reveal, and recovery signals</h2>
           <ResponsiveContainer height={270}>
-            <BarChart data={supportUsageData}>
+            <BarChart data={analytics.supportUsageData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis allowDecimals={false} />
@@ -2330,14 +3123,14 @@ function Analytics({ sessions, users, questions }: { sessions: TestSession[]; us
           </ResponsiveContainer>
         </section>
         <section className="panel">
-          <h2>Topic performance</h2>
+          <h2>Topic mastery</h2>
           <ResponsiveContainer height={270}>
-            <BarChart data={topicData}>
+            <BarChart data={analytics.topicData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="topic" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="topic" tick={{ fontSize: 10 }} interval={0} angle={-18} textAnchor="end" height={84} />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="score" fill="#1B3A6B" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="score" fill="#2E75B6" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </section>
@@ -2349,22 +3142,116 @@ function Analytics({ sessions, users, questions }: { sessions: TestSession[]; us
               <XAxis dataKey="speed" name="Avg seconds" />
               <YAxis dataKey="score" name="Score %" />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter data={cohortData} fill="#F0A500" />
+              <Scatter data={analytics.cohortData} fill="#F0A500" />
             </ScatterChart>
           </ResponsiveContainer>
         </section>
-        <section className="panel wide">
-          <h2>Cohort trend</h2>
-          <ResponsiveContainer height={260}>
-            <LineChart data={trendData}>
+        <section className="panel">
+          <h2>Department comparison</h2>
+          <ResponsiveContainer height={270}>
+            <BarChart data={analytics.departmentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="attempt" />
+              <XAxis dataKey="department" tick={{ fontSize: 10 }} interval={0} angle={-18} textAnchor="end" height={78} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="score" stroke="#2E75B6" strokeWidth={3} dot />
-            </LineChart>
+              <Bar dataKey="score" fill="#004331" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="completion" fill="#D5B52E" radius={[6, 6, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
+        </section>
+        <section className="panel">
+          <h2>Option selection pattern</h2>
+          <ResponsiveContainer height={270}>
+            <BarChart data={analytics.optionData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="option" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#1B3A6B" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      </div>
+
+      <section className="panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Intervention priority list</h2>
+            <p>Who needs help first, based on score, completion, wrong answers, and hint/reveal dependence.</p>
+          </div>
+        </div>
+        <DataTable
+          columns={['Employee', 'Dept', 'Attempts', 'Done', 'Score', 'Speed', 'Support', 'Risk', 'Recommendation']}
+          rows={analytics.userRiskData.slice(0, 12).map((row) => [
+            row.name,
+            row.department,
+            row.attempts,
+            row.completed,
+            `${row.avgScore}%`,
+            `${row.avgSpeed}s`,
+            `${row.supportRate}%`,
+            row.riskScore,
+            row.recommendation,
+          ])}
+        />
+      </section>
+
+      <div className="split-layout">
+        <section className="panel">
+          <h2>Question/item quality review</h2>
+          <DataTable
+            columns={['Question', 'Topic', 'Diff', 'Attempts', 'Correct', 'Avg time', 'Hints', 'Reveals', 'Flag']}
+            rows={analytics.questionQualityRows.map((row) => [
+              row.question,
+              row.topic,
+              row.difficulty,
+              row.attempts,
+              `${row.correctRate}%`,
+              `${row.avgTime}s`,
+              row.hints,
+              row.reveals,
+              row.flag,
+            ])}
+          />
+        </section>
+        <section className="panel">
+          <h2>Question-bank intelligence</h2>
+          <DataTable
+            columns={['Bank', 'Qs', 'Easy', 'Medium', 'Hard', 'Live', 'Responses', 'Avg score']}
+            rows={analytics.questionBankRows.map((row) => [
+              row.bank,
+              row.questions,
+              row.easy,
+              row.medium,
+              row.hard,
+              row.liveTests,
+              row.responses,
+              `${row.avgScore}%`,
+            ])}
+          />
+        </section>
+        <section className="panel">
+          <h2>Autosave and recovery monitor</h2>
+          <DataTable
+            columns={['Employee', 'Test', 'Status', 'Answered', 'Autosaves', 'Resumes', 'Last saved']}
+            rows={analytics.connectivityRows.map((row) => [
+              row.employee,
+              row.test,
+              row.status,
+              row.answered,
+              row.autosaves,
+              row.resumed,
+              row.lastSaved,
+            ])}
+          />
+        </section>
+        <section className="panel">
+          <h2>Admin and app operations</h2>
+          <DataTable
+            columns={['Event', 'Count']}
+            rows={analytics.operationRows.map((row) => [row.event, row.count])}
+          />
         </section>
       </div>
     </section>
@@ -2715,7 +3602,21 @@ function AssessmentOverview({ test }: { test: Assessment }) {
   )
 }
 
-function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User; tests: Assessment[]; sessions: TestSession[]; onStart: (testId: string) => void }) {
+function MyTests({
+  currentUser,
+  tests,
+  sessions,
+  onStart,
+  onInstructionOpen,
+  onAgreementAccept,
+}: {
+  currentUser: User
+  tests: Assessment[]
+  sessions: TestSession[]
+  onStart: (testId: string) => void
+  onInstructionOpen: (testId: string) => void
+  onAgreementAccept: (testId: string) => void
+}) {
   const assigned = tests.filter((test) => test.status === 'Live' && test.assignedUserIds.includes(currentUser.id))
   const [pendingTest, setPendingTest] = useState<Assessment>()
   const [agreementAccepted, setAgreementAccepted] = useState(false)
@@ -2748,6 +3649,7 @@ function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User;
                   disabled={!availability.canStart}
                   title={availability.canStart ? 'Open test instructions' : availability.detail}
                   onClick={() => {
+                    onInstructionOpen(test.id)
                     setPendingTest(test)
                     setAgreementAccepted(false)
                   }}
@@ -2791,7 +3693,14 @@ function MyTests({ currentUser, tests, sessions, onStart }: { currentUser: User;
             </div>
             <p className="encouragement">Take a breath. Read calmly, answer confidently, and do your best.</p>
             <label className="agreement-row">
-              <input type="checkbox" checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={agreementAccepted}
+                onChange={(event) => {
+                  setAgreementAccepted(event.target.checked)
+                  if (event.target.checked) onAgreementAccept(pendingTest.id)
+                }}
+              />
               I understand the test instructions and agree to proceed honestly.
             </label>
             <div className="modal-actions">
@@ -2842,6 +3751,7 @@ function TestDelivery({
   currentUser,
   onAnswer,
   onAutosave,
+  onSupportEvent,
   onComplete,
 }: {
   session: TestSession
@@ -2850,6 +3760,7 @@ function TestDelivery({
   currentUser: User
   onAnswer: (sessionId: string, response: ResponseRecord) => void
   onAutosave: (sessionId: string) => void
+  onSupportEvent: (type: 'hint_opened' | 'answer_revealed', session: TestSession, question: Question) => void
   onComplete: () => void
 }) {
   const sessionQuestions = useMemo(() => {
@@ -2942,6 +3853,7 @@ function TestDelivery({
               onClick={() => {
                 hintUsedRef.current = true
                 setHintVisible(true)
+                onSupportEvent('hint_opened', session, currentQuestion)
               }}
             >
               Show hint - lose 50% of this question's possible score
@@ -2954,6 +3866,7 @@ function TestDelivery({
             onClick={() => {
               answerRevealedRef.current = true
               setAnswerVisible(true)
+              onSupportEvent('answer_revealed', session, currentQuestion)
             }}
           >
             Reveal answer - lose all points for this question

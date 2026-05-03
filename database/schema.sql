@@ -5,6 +5,30 @@ CREATE TYPE question_difficulty AS ENUM ('easy', 'medium', 'hard');
 CREATE TYPE option_key AS ENUM ('a', 'b', 'c', 'd', 'e');
 CREATE TYPE test_status AS ENUM ('draft', 'live', 'archived');
 CREATE TYPE session_status AS ENUM ('in_progress', 'completed', 'abandoned', 'expired');
+CREATE TYPE analytics_event_type AS ENUM (
+  'login_success',
+  'login_failed',
+  'logout',
+  'view_change',
+  'test_instructions_opened',
+  'test_agreement_checked',
+  'test_started',
+  'test_resumed',
+  'answer_submitted',
+  'hint_opened',
+  'answer_revealed',
+  'autosave_heartbeat',
+  'test_completed',
+  'question_import',
+  'test_created',
+  'test_deleted',
+  'password_reset',
+  'permission_changed',
+  'bulk_permission_changed',
+  'logo_updated',
+  'logo_restored',
+  'export_results'
+);
 
 CREATE TABLE departments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,6 +50,8 @@ CREATE TABLE users (
 CREATE TABLE import_batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   filename VARCHAR(255) NOT NULL,
+  display_name VARCHAR(180),
+  description VARCHAR(600),
   imported_by UUID REFERENCES users(id),
   row_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -65,6 +91,7 @@ CREATE TABLE tests (
   question_count INTEGER NOT NULL CHECK (question_count IN (20, 40, 60)),
   difficulty question_difficulty,
   mixed_difficulty BOOLEAN NOT NULL DEFAULT false,
+  question_bank_id UUID REFERENCES import_batches(id),
   start_at TIMESTAMPTZ NOT NULL,
   end_at TIMESTAMPTZ NOT NULL,
   allow_reattempt BOOLEAN NOT NULL DEFAULT false,
@@ -88,6 +115,11 @@ CREATE TABLE test_sessions (
   test_id UUID NOT NULL REFERENCES tests(id),
   user_id UUID NOT NULL REFERENCES users(id),
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  question_ids JSONB NOT NULL DEFAULT '[]',
+  option_order_by_question JSONB NOT NULL DEFAULT '{}',
+  current_question_started_at TIMESTAMPTZ,
+  current_question_deadline_at TIMESTAMPTZ,
+  last_saved_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   total_score NUMERIC(6,2) NOT NULL DEFAULT 0,
   max_possible_score NUMERIC(6,2) NOT NULL,
@@ -104,9 +136,30 @@ CREATE TABLE question_responses (
   seconds_remaining SMALLINT NOT NULL CHECK (seconds_remaining >= 0 AND seconds_remaining <= 60),
   answer_weight NUMERIC(4,2) NOT NULL,
   time_decay_multiplier NUMERIC(4,2) NOT NULL,
+  hint_used BOOLEAN NOT NULL DEFAULT false,
+  answer_revealed BOOLEAN NOT NULL DEFAULT false,
+  score_penalty_multiplier NUMERIC(4,2) NOT NULL DEFAULT 1.00,
+  response_time_seconds SMALLINT NOT NULL DEFAULT 0,
   marks_earned NUMERIC(5,2) NOT NULL,
   submitted_at TIMESTAMPTZ,
   UNIQUE (session_id, question_id)
+);
+
+CREATE TABLE analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type analytics_event_type NOT NULL,
+  user_id UUID REFERENCES users(id),
+  test_id UUID REFERENCES tests(id),
+  question_id UUID REFERENCES questions(id),
+  question_bank_id UUID REFERENCES import_batches(id),
+  department_id UUID REFERENCES departments(id),
+  difficulty question_difficulty,
+  topic_tag VARCHAR(100),
+  value NUMERIC(12,2),
+  duration_seconds INTEGER,
+  outcome VARCHAR(120),
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE audit_logs (
@@ -122,4 +175,9 @@ CREATE INDEX idx_questions_topic ON questions(topic_tag);
 CREATE INDEX idx_sessions_user ON test_sessions(user_id);
 CREATE INDEX idx_sessions_test ON test_sessions(test_id);
 CREATE INDEX idx_responses_session ON question_responses(session_id);
+CREATE INDEX idx_responses_question ON question_responses(question_id);
+CREATE INDEX idx_analytics_event_type_created ON analytics_events(event_type, created_at DESC);
+CREATE INDEX idx_analytics_user_created ON analytics_events(user_id, created_at DESC);
+CREATE INDEX idx_analytics_test_created ON analytics_events(test_id, created_at DESC);
+CREATE INDEX idx_analytics_question_bank ON analytics_events(question_bank_id, created_at DESC);
 CREATE INDEX idx_audit_actor_created ON audit_logs(actor_id, created_at DESC);
