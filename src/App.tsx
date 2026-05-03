@@ -419,12 +419,22 @@ const topics = ['Compliance', 'Customer Strategy', 'Operations', 'Ethics', 'Data
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 const optionKeys: OptionKey[] = ['A', 'B', 'C', 'D', 'E']
 const sourceWorkbookPath = '/questions/iicocece-consent-based-sales-outreach-1500q.xlsx'
+const cybercrimesWorkbookPath = '/questions/nigeria-cybercrimes-act-comprehensive-competency-1500q.xlsx'
 const legacyCybercrimeBankId = 'nigeria-cybercrime-act-1500q-v1'
+const cybercrimesActBankId = 'nigeria-cybercrimes-act-comprehensive-1500-v2'
 const sourceWorkbookVersion = 'iicocece-cso-1500-v1'
+const bundledQuestionBanks = [
+  { id: sourceWorkbookVersion, path: sourceWorkbookPath },
+  { id: cybercrimesActBankId, path: cybercrimesWorkbookPath },
+] as const
 const defaultQuestionBankMetadata: QuestionBankMetadataMap = {
   [sourceWorkbookVersion]: {
     name: 'iicocece Consent-Based Sales Outreach — Professional Competency Assessment',
     description: 'Assessment Code: ICOCECE-CSO-1500. A 1,500-question professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
+  },
+  [cybercrimesActBankId]: {
+    name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
+    description: 'Covers the Cybercrimes (Prohibition, Prevention, Etc.) Act 2015 and the Cybercrimes (Amendment) Act 2024. A 1,500-question professional competency assessment for legal practitioners, compliance officers, cybersecurity professionals, law enforcement personnel, corporate risk managers, HR professionals, IT governance teams, and organisations operating within Nigeria’s digital and financial ecosystem.',
   },
   [legacyCybercrimeBankId]: {
     name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
@@ -600,6 +610,15 @@ const topicRules: Array<[RegExp, string]> = [
   [/rollout|implementation|launch|milestone|go.?no.?go|post.?launch|training/i, 'Rollout and Implementation Plan'],
   [/nhf|national housing fund|pmb|loan|mortgage|contribution|interest rate|housing/i, 'NHF Product Knowledge'],
   [/real estate|property|title|c of o|certificate of occupancy|deed|governor'?s consent|land use act|lasrera|developer|due diligence|lagos/i, 'Nigerian Real Estate Context'],
+  [/cnii|critical national information infrastructure|infrastructure|protected system/i, 'Critical National Information Infrastructure'],
+  [/section|act|law|court|jurisdiction|order|warrant|statutory|legislation/i, 'Legal Foundations'],
+  [/penalty|fine|imprisonment|liable|conviction|years|million|offence|offense/i, 'Offences and Penalties'],
+  [/phishing|identity|card|forgery|theft|scam|atm|pos|sim swap|card-not-present|fraud/i, 'Electronic Fraud'],
+  [/malware|harmful program|system access|system interference|data tampering|interception|cyber terrorism/i, 'Cybercrime Offences'],
+  [/search|seizure|forfeiture|preservation|production order|service provider|enforcement/i, 'Enforcement and Forfeiture'],
+  [/levy|cybersecurity fund|onsa|sectoral cert|ngcert|incident report|72-hour|72 hour/i, 'Administration and Reporting'],
+  [/cbn|nitda|ndpc|kyc|nin|financial institution|bank/i, 'Financial Institutions and Electronic Transactions'],
+  [/mlat|mutual legal assistance|international cooperation|extraterritorial|cross-border/i, 'Jurisdiction and International Cooperation'],
 ]
 
 const seedQuestions: Question[] = Array.from({ length: 60 }, (_, index) => {
@@ -926,7 +945,7 @@ function fallbackDocumentNameFromBatch(batchId: string): string {
 function normalizeQuestionBankMetadata(metadata: Partial<QuestionBankMetadata> = {}): QuestionBankMetadata {
   return {
     name: String(metadata.name ?? '').trim().slice(0, 180),
-    description: String(metadata.description ?? '').trim().slice(0, 600),
+    description: String(metadata.description ?? '').trim().slice(0, 1600),
   }
 }
 
@@ -1077,7 +1096,11 @@ function normalizeQuestion(row: Record<string, unknown>, rowNumber: number, batc
  * Classifies an imported sales outreach question into an iicocece competency area.
  */
 function classifyTopic(questionText: string): string {
-  return topicRules.find(([pattern]) => pattern.test(questionText))?.[1] ?? 'Consent Philosophy'
+  const matched = topicRules.find(([pattern]) => pattern.test(questionText))?.[1]
+  if (matched) return matched
+  return /cyber|crime|act|section|penalty|ngcert|cnii|cbn|nitda|ndpc|phishing|fraud/i.test(questionText)
+    ? 'Cybercrime Act General Knowledge'
+    : 'Consent Philosophy'
 }
 
 /**
@@ -1148,6 +1171,8 @@ async function parseQuestionFile(file: File, existingIds: Set<string>): Promise<
   if (headers.includes('Question') && (headers.includes('A Score') || headers.includes('Score A'))) {
     const allRows = workbook.SheetNames.flatMap((sheetName: string) => {
       const sheetRows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' })
+      const sheetHeaders = Object.keys(sheetRows[0] ?? {})
+      if (!sheetHeaders.includes('Question') || !(sheetHeaders.includes('A Score') || sheetHeaders.includes('Score A'))) return []
       const sheetDifficulty = sheetName.match(/Easy/i) ? 'Easy' : sheetName.match(/Hard/i) ? 'Hard' : sheetName.match(/Medium/i) ? 'Medium' : undefined
       return sheetRows.map((row, index) => ({ row, sheetName, sheetDifficulty: sheetDifficulty as Difficulty | undefined, rowNumber: index + 2 }))
     })
@@ -1205,18 +1230,20 @@ function parseScoredOptionRows(
 /**
  * Loads the bundled first question bank from Firebase Hosting assets.
  */
-async function loadBundledQuestionBank(): Promise<Question[]> {
-  const response = await fetch(sourceWorkbookPath)
+async function loadBundledQuestionBank(bank: { id: string; path: string }): Promise<Question[]> {
+  const response = await fetch(bank.path)
   if (!response.ok) throw new Error('Unable to load bundled question bank.')
   const spreadsheet = await loadSpreadsheetTools()
   const buffer = await response.arrayBuffer()
   const workbook = spreadsheet.read(buffer, { type: 'array' })
   const rows = workbook.SheetNames.flatMap((sheetName: string) => {
     const sheetRows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' })
+    const sheetHeaders = Object.keys(sheetRows[0] ?? {})
+    if (!sheetHeaders.includes('Question') || !(sheetHeaders.includes('A Score') || sheetHeaders.includes('Score A'))) return []
     const sheetDifficulty = sheetName.match(/Easy/i) ? 'Easy' : sheetName.match(/Hard/i) ? 'Hard' : sheetName.match(/Medium/i) ? 'Medium' : undefined
     return sheetRows.map((row, index) => ({ row, sheetName, sheetDifficulty: sheetDifficulty as Difficulty | undefined, rowNumber: index + 2 }))
   })
-  const result = parseScoredOptionRows(rows, new Set(), sourceWorkbookVersion)
+  const result = parseScoredOptionRows(rows, new Set(), bank.id)
   if (result.errors.length) throw new Error(result.errors[0])
   return result.questions
 }
@@ -1300,21 +1327,22 @@ function App() {
       )
       localStorage.setItem('deap-lms-layout-version', 'iicocece-org-lms-v1')
     }
-    if (
-      deletedQuestionBankIds.includes(sourceWorkbookVersion) ||
-      localStorage.getItem('deap-source-workbook-version') === sourceWorkbookVersion &&
-      questions.some((question) => question.importBatchId === sourceWorkbookVersion)
-    ) {
-      return
-    }
-    loadBundledQuestionBank()
-      .then((loadedQuestions) => {
+    const bundledVersionKey = `deap-bundled-question-banks-${bundledQuestionBanks.map((bank) => bank.id).join('|')}`
+    const missingBundledBanks = bundledQuestionBanks.filter(
+      (bank) => !deletedQuestionBankIds.includes(bank.id) && !questions.some((question) => question.importBatchId === bank.id),
+    )
+    if (!missingBundledBanks.length && localStorage.getItem(bundledVersionKey) === 'loaded') return
+    Promise.all(missingBundledBanks.map((bank) => loadBundledQuestionBank(bank)))
+      .then((loadedGroups) => {
+        const loadedQuestions = loadedGroups.flat()
+        const loadedBankIds = new Set<string>(missingBundledBanks.map((bank) => bank.id))
         setQuestions((existing) => [
           ...loadedQuestions,
-          ...existing.filter((question) => !question.questionId.startsWith('seed-') && !question.questionId.startsWith('cybercrime-act-') && question.importBatchId !== legacyCybercrimeBankId && question.importBatchId !== sourceWorkbookVersion),
+          ...existing.filter((question) => !question.questionId.startsWith('seed-') && !question.questionId.startsWith('cybercrime-act-') && question.importBatchId !== legacyCybercrimeBankId && !loadedBankIds.has(question.importBatchId)),
         ])
         localStorage.setItem('deap-source-workbook-version', sourceWorkbookVersion)
-        setToast(`${loadedQuestions.length} iicocece Consent-Based Sales Outreach questions are now available in the LMS.`)
+        localStorage.setItem(bundledVersionKey, 'loaded')
+        setToast(`${loadedQuestions.length} bundled question(s) were added to the LMS.`)
       })
       .catch(() => setToast('The bundled question bank could not be loaded. You can still import it manually from Question Bank.'))
   }, [])
@@ -2415,7 +2443,7 @@ function QuestionBank({
                   </label>
                   <label>
                     Description / internal note
-                    <textarea value={draftDescription} maxLength={600} onChange={(event) => setDraftDescription(event.target.value)} />
+                    <textarea value={draftDescription} maxLength={1600} onChange={(event) => setDraftDescription(event.target.value)} />
                   </label>
                   <div className="editor-actions">
                     <button className="primary-button" type="button" onClick={() => saveEditing(summary.batchId)}>
