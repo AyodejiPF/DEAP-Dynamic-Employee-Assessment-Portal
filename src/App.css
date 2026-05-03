@@ -239,7 +239,8 @@ textarea {
   color: #1b3a6b;
 }
 
-.secondary-button.compact {
+.secondary-button.compact,
+.danger-button.compact {
   min-height: 34px;
   padding: 7px 10px;
 }

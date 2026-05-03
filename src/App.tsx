@@ -191,6 +191,7 @@ type AnalyticsEventType =
   | 'question_import'
   | 'test_created'
   | 'test_deleted'
+  | 'question_bank_deleted'
   | 'password_reset'
   | 'permission_changed'
   | 'bulk_permission_changed'
@@ -417,24 +418,24 @@ const seedUsers: User[] = [
 const topics = ['Compliance', 'Customer Strategy', 'Operations', 'Ethics', 'Data Interpretation']
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 const optionKeys: OptionKey[] = ['A', 'B', 'C', 'D', 'E']
-const sourceWorkbookPath = '/questions/nigeria-cybercrime-act-assessment-1500q.xlsx'
-const sourceWorkbookVersion = 'nigeria-cybercrime-act-1500q-v1'
-const consentSalesOutreachBankId = 'batch-177767020403'
+const sourceWorkbookPath = '/questions/iicocece-consent-based-sales-outreach-1500q.xlsx'
+const legacyCybercrimeBankId = 'nigeria-cybercrime-act-1500q-v1'
+const sourceWorkbookVersion = 'iicocece-cso-1500-v1'
 const defaultQuestionBankMetadata: QuestionBankMetadataMap = {
   [sourceWorkbookVersion]: {
+    name: 'iicocece Consent-Based Sales Outreach — Professional Competency Assessment',
+    description: 'Assessment Code: ICOCECE-CSO-1500. A 1,500-question professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
+  },
+  [legacyCybercrimeBankId]: {
     name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
-    description: 'Covers the Cybercrimes Act 2015 and the 2024 Amendment across foundational, applied, and advanced legal analysis.',
+    description: 'Legacy question bank retained only when previously imported; it can be deleted from Question Bank if no longer needed.',
   },
   'seed-bank': {
     name: 'Sample DEAP Question Bank',
     description: 'A small built-in sample bank used for demo and fallback assessment testing.',
   },
-  [consentSalesOutreachBankId]: {
-    name: 'iicocece Consent-Based Sales Outreach — Professional Competency Assessment',
-    description: 'Professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
-  },
 }
-const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
+export const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
   {
     title: 'Covering the Cybercrimes Act 2015 and the 2024 Amendment',
     body: 'This assessment covers the Cybercrimes (Prohibition, Prevention, Etc.) Act 2015 and the Cybercrimes (Prohibition, Prevention, Etc.) (Amendment) Act 2024.',
@@ -505,63 +506,100 @@ const cybercrimesAssessmentOverview: AssessmentOverviewSection[] = [
   },
 ]
 
+const consentSalesAssessmentOverview: AssessmentOverviewSection[] = [
+  {
+    title: 'Assessment Code: ICOCECE-CSO-1500',
+    body: 'This is a 1,500-question professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
+  },
+  {
+    title: 'Overview',
+    body: 'The assessment measures knowledge, judgement, and applied skill across the full iicocece operational framework: consent-based outreach philosophy, NDPR compliance, sales scripts, CRM management, NHF financing, and Nigerian real estate due diligence.',
+  },
+  {
+    title: 'Structure and Batches',
+    body: 'The assessment is organised into three progressive batches: Batch 1 Easy with 500 foundational questions, Batch 2 Medium with 500 applied process questions, and Batch 3 Hard with 500 advanced judgement questions.',
+  },
+  {
+    title: 'Question Types and Scoring',
+    body: 'Each question has five options, A through E. Standard questions have one definitively correct answer. Weighted scenario questions award calibrated partial credit to measure professional judgement in realistic sales and compliance situations.',
+  },
+  {
+    title: '14 Competency Areas',
+    body: 'The assessment covers Consent Philosophy, NDPR Compliance, Six Strategic Principles, Seven-Stage Funnel, CRM Taxonomy, Lead Qualification and BANT, Team Structure and Roles, Scripts and Templates, Email Nurture Sequences, KPIs and Metrics, Risk Register, Rollout and Implementation Plan, NHF Product Knowledge, and Nigerian Real Estate Context.',
+  },
+  {
+    title: 'Recommended Use Cases',
+    body: 'Use this assessment for pre-employment screening, onboarding verification, ongoing professional development, promotion readiness assessment, team leader evaluation, management review, and iicocece professional certification.',
+  },
+  {
+    title: 'Reporting Guidance',
+    body: 'Results should be reviewed by overall score, difficulty batch, competency area, standard versus weighted scenario performance, response speed, hint or answer-reveal dependence, and percentile ranking once enough candidates complete the assessment.',
+  },
+]
+
 const departmentCatalog = [
   {
     name: 'Operations',
-    description: 'Operational compliance, reporting discipline, risk controls, and continuity decisions.',
-    topics: ['Operational Compliance', 'Reporting Obligations', 'Business Continuity', 'Risk Controls'],
+    description: 'Operational rollout discipline, CRM process control, risk escalation, and sales execution governance.',
+    topics: ['Seven-Stage Funnel', 'CRM Taxonomy', 'Risk Register', 'Rollout and Implementation Plan'],
   },
   {
     name: 'Legal',
-    description: 'Cybercrime Act interpretation, penalties, lawful procedures, and regulatory duties.',
-    topics: ['Legal Foundations', 'Offences and Penalties', 'Investigation and Enforcement', 'Privacy and Data Protection'],
+    description: 'NDPR obligations, consent capture standards, client data rights, and property due diligence.',
+    topics: ['NDPR Compliance', 'Consent Philosophy', 'Nigerian Real Estate Context', 'Risk Register'],
   },
   {
     name: 'UI/UX & Development',
-    description: 'Secure product design, access controls, evidence handling, and cyber-aware development decisions.',
-    topics: ['System Security', 'Critical Infrastructure', 'Incident Response', 'Evidence Handling'],
+    description: 'CRM usability, data hygiene, lead-stage visibility, reporting flows, and product support for sales operations.',
+    topics: ['CRM Taxonomy', 'KPIs and Metrics', 'Seven-Stage Funnel', 'Rollout and Implementation Plan'],
   },
   {
     name: 'Human Resources',
-    description: 'Employee conduct, cyberstalking awareness, acceptable use, and internal training accountability.',
-    topics: ['Employee Conduct', 'Cyber Ethics', 'Awareness Training', 'Disciplinary Risk'],
+    description: 'Agent readiness, role accountability, training verification, and promotion-readiness decisions.',
+    topics: ['Team Structure and Roles', 'Scripts and Templates', 'KPIs and Metrics', 'Risk Register'],
   },
   {
     name: 'Digital Marketing',
-    description: 'Safe campaign operations, phishing awareness, brand protection, and digital communication risk.',
-    topics: ['Electronic Fraud', 'Audit Trail Management', 'Transaction Monitoring', 'Internal Controls'],
+    description: 'Consent-safe messaging, email nurture design, content sequencing, and campaign performance interpretation.',
+    topics: ['Consent Philosophy', 'Email Nurture Sequences', 'Scripts and Templates', 'KPIs and Metrics'],
   },
   {
     name: 'Business Development',
-    description: 'Client-facing cyber conduct, fraud awareness, risk escalation, and evidence-conscious communication.',
-    topics: ['Electronic Fraud', 'Reporting Obligations', 'Cyber Ethics', 'Risk Controls'],
+    description: 'Lead qualification, BANT judgement, prospect follow-up, financing knowledge, and transaction readiness.',
+    topics: ['Lead Qualification and BANT', 'Seven-Stage Funnel', 'NHF Product Knowledge', 'Nigerian Real Estate Context'],
   },
   {
     name: 'Digital Content',
-    description: 'Responsible publishing, online conduct, cyberstalking awareness, and digital evidence sensitivity.',
-    topics: ['Employee Conduct', 'Privacy and Data Protection', 'Cyber Ethics', 'Evidence Handling'],
+    description: 'Consent-aligned copy, objection-handling language, nurture content, and trust-building communication.',
+    topics: ['Scripts and Templates', 'Email Nurture Sequences', 'Consent Philosophy', 'Six Strategic Principles'],
   },
   {
     name: 'Executive',
-    description: 'Leadership-level oversight of cyber risk, compliance culture, accountability, and workforce readiness.',
-    topics: ['Legal Foundations', 'Risk Controls', 'Reporting Obligations', 'Business Continuity'],
+    description: 'Leadership oversight of sales readiness, compliance culture, pipeline quality, and certification decisions.',
+    topics: ['KPIs and Metrics', 'Risk Register', 'Rollout and Implementation Plan', 'Team Structure and Roles'],
   },
   {
     name: 'Other',
-    description: 'General organisational cybercrime awareness for team members outside a named department.',
-    topics: ['Cybercrime Act General Knowledge', 'Employee Conduct', 'Awareness Training', 'Reporting Obligations'],
+    description: 'General organisational understanding of the iicocece consent-based sales model.',
+    topics: ['Consent Philosophy', 'NDPR Compliance', 'Seven-Stage Funnel', 'Lead Qualification and BANT'],
   },
 ]
 
 const topicRules: Array<[RegExp, string]> = [
-  [/section|act|law|court|jurisdiction|order|warrant/i, 'Legal Foundations'],
-  [/penalty|fine|imprisonment|liable|conviction|years|million/i, 'Offences and Penalties'],
-  [/fraud|phishing|identity|card|forgery|theft|scam/i, 'Electronic Fraud'],
-  [/critical|infrastructure|protected|system|access|interference|computer/i, 'System Security'],
-  [/evidence|investigation|search|seizure|forensic|preserve|record/i, 'Investigation and Enforcement'],
-  [/data|privacy|personal|subscriber|traffic|interception|message/i, 'Privacy and Data Protection'],
-  [/report|notify|escalat|incident|response/i, 'Incident Response'],
-  [/employee|conduct|stalking|harassment|ethic|abuse/i, 'Employee Conduct'],
+  [/consent|permission|trust|opt.?in|outreach philosophy|broadcast/i, 'Consent Philosophy'],
+  [/ndpr|ndpc|data protection|lawful basis|personal data|data subject|privacy|processing/i, 'NDPR Compliance'],
+  [/six strategic|strategic principles|principle/i, 'Six Strategic Principles'],
+  [/seven.?stage|funnel|journey|stage|pipeline/i, 'Seven-Stage Funnel'],
+  [/crm|tag|taxonomy|record|data hygiene|pipeline stage|audit trail/i, 'CRM Taxonomy'],
+  [/bant|budget|authority|need|timeline|qualification|qualify|readiness/i, 'Lead Qualification and BANT'],
+  [/team|role|agent|leader|manager|crm manager|content creator|accountability/i, 'Team Structure and Roles'],
+  [/script|template|objection|follow.?up|re.?engagement|initial contact|message/i, 'Scripts and Templates'],
+  [/email|nurture|sequence|open rate|engagement rate|trigger/i, 'Email Nurture Sequences'],
+  [/kpi|metric|conversion|velocity|cost of acquisition|referral|performance/i, 'KPIs and Metrics'],
+  [/risk|mitigation|escalation|reputational|commercial|likelihood|impact/i, 'Risk Register'],
+  [/rollout|implementation|launch|milestone|go.?no.?go|post.?launch|training/i, 'Rollout and Implementation Plan'],
+  [/nhf|national housing fund|pmb|loan|mortgage|contribution|interest rate|housing/i, 'NHF Product Knowledge'],
+  [/real estate|property|title|c of o|certificate of occupancy|deed|governor'?s consent|land use act|lasrera|developer|due diligence|lagos/i, 'Nigerian Real Estate Context'],
 ]
 
 const seedQuestions: Question[] = Array.from({ length: 60 }, (_, index) => {
@@ -592,9 +630,9 @@ const seedQuestions: Question[] = Array.from({ length: 60 }, (_, index) => {
 const seedTests: Assessment[] = [
   {
     id: 'test-onboarding',
-    name: 'Nigeria Cybercrimes Act Comprehensive Competency Assessment',
-    description: 'A professional competency assessment covering the Cybercrimes Act 2015, the 2024 Amendment, offences, penalties, institutional duties, reporting obligations, and advanced legal analysis.',
-    overviewSections: cybercrimesAssessmentOverview,
+    name: 'iicocece Consent-Based Sales Outreach — Professional Competency Assessment',
+    description: 'Assessment Code: ICOCECE-CSO-1500. A professional competency assessment for sales agents, team leaders, and managers operating within the iicocece consent-based real estate sales outreach model.',
+    overviewSections: consentSalesAssessmentOverview,
     questionCount: 60,
     difficulty: 'Mixed',
     questionBankId: sourceWorkbookVersion,
@@ -1036,19 +1074,24 @@ function normalizeQuestion(row: Record<string, unknown>, rowNumber: number, batc
 }
 
 /**
- * Classifies an imported cybercrime question into an LMS topic area.
+ * Classifies an imported sales outreach question into an iicocece competency area.
  */
 function classifyTopic(questionText: string): string {
-  return topicRules.find(([pattern]) => pattern.test(questionText))?.[1] ?? 'Cybercrime Act General Knowledge'
+  return topicRules.find(([pattern]) => pattern.test(questionText))?.[1] ?? 'Consent Philosophy'
 }
 
 /**
  * Converts the supplied workbook's compact score-column format to DEAP questions.
  */
-function normalizeScoredOptionRow(row: Record<string, unknown>, rowNumber: number, batchId: string): { question?: Question; error?: string } {
+function normalizeScoredOptionRow(
+  row: Record<string, unknown>,
+  rowNumber: number,
+  batchId: string,
+  difficultyHint?: Difficulty,
+): { question?: Question; error?: string } {
   const rawQuestion = String(row.Question ?? '').trim()
   const difficultyMatch = rawQuestion.match(/^\[(Easy|Medium|Hard)(?:-[^\]]+)?\]\s*/i)
-  const difficulty = (difficultyMatch?.[1] ?? 'Medium').replace(/^./, (letter) => letter.toUpperCase()) as Difficulty
+  const difficulty = (difficultyMatch?.[1] ? difficultyMatch[1].replace(/^./, (letter) => letter.toUpperCase()) : difficultyHint ?? 'Medium') as Difficulty
   const questionText = rawQuestion.replace(/^\[[^\]]+\]\s*/i, '').slice(0, 500)
   const options = {
     A: String(row['Option A'] ?? '').trim(),
@@ -1057,10 +1100,11 @@ function normalizeScoredOptionRow(row: Record<string, unknown>, rowNumber: numbe
     D: String(row['Option D'] ?? '').trim(),
     E: String(row['Option E'] ?? '').trim(),
   }
-  const scores = (['A', 'B', 'C', 'D', 'E'] as OptionKey[]).map((key) => ({ key, score: Number(row[`Score ${key}`] ?? 0) }))
+  const scores = (['A', 'B', 'C', 'D', 'E'] as OptionKey[]).map((key) => ({ key, score: Number(row[`${key} Score`] ?? row[`Score ${key}`] ?? 0) }))
   const ranked = [...scores].sort((left, right) => right.score - left.score)
   const correct = ranked[0]
   const partials = ranked.filter((item) => item.score > 0 && item.score < correct.score).slice(0, 2)
+  const topicTag = classifyTopic(questionText)
 
   if (!questionText) return { error: `Row ${rowNumber}: Question is required.` }
   if (Object.values(options).some((option) => !option)) return { error: `Row ${rowNumber}: all five options are required.` }
@@ -1068,7 +1112,7 @@ function normalizeScoredOptionRow(row: Record<string, unknown>, rowNumber: numbe
 
   return {
     question: {
-      questionId: `cybercrime-act-${rowNumber - 1}`,
+      questionId: `${batchId}-${String(rowNumber - 1).padStart(4, '0')}`,
       questionText,
       difficulty,
       optionA: options.A.slice(0, 250),
@@ -1082,9 +1126,9 @@ function normalizeScoredOptionRow(row: Record<string, unknown>, rowNumber: numbe
       correctWeight: 1,
       partialWeight1: partials[0] ? Number(new Decimal(partials[0].score).div(correct.score).toFixed(2)) : undefined,
       partialWeight2: partials[1] ? Number(new Decimal(partials[1].score).div(correct.score).toFixed(2)) : undefined,
-      topicTag: classifyTopic(questionText),
+      topicTag,
       hint: String(row.hint ?? row.Hint ?? row.question_hint ?? row['Question Hint'] ?? '').trim().slice(0, 500) || undefined,
-      explanation: `The highest weighted answer is option ${correct.key}. Review the Nigeria Cybercrimes Act context for the governing provision and penalty detail.`,
+      explanation: `The highest weighted answer is option ${correct.key}. This question maps to ${topicTag} within the iicocece consent-based sales outreach competency model.`,
       importBatchId: batchId,
     },
   }
@@ -1101,8 +1145,13 @@ async function parseQuestionFile(file: File, existingIds: Set<string>): Promise<
   const rows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
   const headers = Object.keys(rows[0] ?? {})
   const batchId = `file:${file.name}:${Date.now()}`
-  if (headers.includes('Question') && headers.includes('Score A')) {
-    return parseScoredOptionRows(rows, new Set(), batchId)
+  if (headers.includes('Question') && (headers.includes('A Score') || headers.includes('Score A'))) {
+    const allRows = workbook.SheetNames.flatMap((sheetName: string) => {
+      const sheetRows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' })
+      const sheetDifficulty = sheetName.match(/Easy/i) ? 'Easy' : sheetName.match(/Hard/i) ? 'Hard' : sheetName.match(/Medium/i) ? 'Medium' : undefined
+      return sheetRows.map((row, index) => ({ row, sheetName, sheetDifficulty: sheetDifficulty as Difficulty | undefined, rowNumber: index + 2 }))
+    })
+    return parseScoredOptionRows(allRows, new Set(), batchId)
   }
   const missing = requiredColumns.filter((column) => !headers.includes(column))
   if (missing.length) return { questions: [], errors: [`Missing required column(s): ${missing.join(', ')}`] }
@@ -1134,11 +1183,19 @@ async function parseQuestionFile(file: File, existingIds: Set<string>): Promise<
 /**
  * Parses workbook rows where each option has an explicit score column.
  */
-function parseScoredOptionRows(rows: Array<Record<string, unknown>>, existingIds: Set<string>, batchId: string): { questions: Question[]; errors: string[] } {
+function parseScoredOptionRows(
+  rows: Array<Record<string, unknown> | { row: Record<string, unknown>; sheetName?: string; sheetDifficulty?: Difficulty; rowNumber?: number }>,
+  existingIds: Set<string>,
+  batchId: string,
+): { questions: Question[]; errors: string[] } {
   const questions: Question[] = []
   const errors: string[] = []
-  rows.forEach((row, index) => {
-    const result = normalizeScoredOptionRow(row, index + 2, batchId)
+  rows.forEach((entry, index) => {
+    const wrapped =
+      'row' in entry && typeof entry.row === 'object' && entry.row !== null
+        ? (entry as { row: Record<string, unknown>; sheetDifficulty?: Difficulty; rowNumber?: number })
+        : { row: entry as Record<string, unknown>, rowNumber: index + 2 }
+    const result = normalizeScoredOptionRow(wrapped.row, index + 2, batchId, wrapped.sheetDifficulty)
     if (result.error) errors.push(result.error)
     if (result.question && !existingIds.has(result.question.questionId)) questions.push(result.question)
   })
@@ -1154,8 +1211,11 @@ async function loadBundledQuestionBank(): Promise<Question[]> {
   const spreadsheet = await loadSpreadsheetTools()
   const buffer = await response.arrayBuffer()
   const workbook = spreadsheet.read(buffer, { type: 'array' })
-  const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const rows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+  const rows = workbook.SheetNames.flatMap((sheetName: string) => {
+    const sheetRows = spreadsheet.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' })
+    const sheetDifficulty = sheetName.match(/Easy/i) ? 'Easy' : sheetName.match(/Hard/i) ? 'Hard' : sheetName.match(/Medium/i) ? 'Medium' : undefined
+    return sheetRows.map((row, index) => ({ row, sheetName, sheetDifficulty: sheetDifficulty as Difficulty | undefined, rowNumber: index + 2 }))
+  })
   const result = parseScoredOptionRows(rows, new Set(), sourceWorkbookVersion)
   if (result.errors.length) throw new Error(result.errors[0])
   return result.questions
@@ -1170,6 +1230,7 @@ function App() {
   const [questionBankMetadata, setQuestionBankMetadata] = useState<QuestionBankMetadataMap>(() =>
     mergeQuestionBankMetadata(readStored('deap-question-bank-metadata', defaultQuestionBankMetadata)),
   )
+  const [deletedQuestionBankIds, setDeletedQuestionBankIds] = useState<string[]>(() => readStored('deap-deleted-question-banks', []))
   const [tests, setTests] = useState<Assessment[]>(() => syncSeedAssessmentMetadata(transferAssignments(readStored('deap-tests', seedTests))))
   const [sessions, setSessions] = useState<TestSession[]>(() => transferSessions(readStored('deap-sessions', [])))
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => readStored<User | undefined>('deap-current-user', undefined))
@@ -1185,6 +1246,7 @@ function App() {
 
   useEffect(() => localStorage.setItem('deap-questions', JSON.stringify(questions)), [questions])
   useEffect(() => localStorage.setItem('deap-question-bank-metadata', JSON.stringify(questionBankMetadata)), [questionBankMetadata])
+  useEffect(() => localStorage.setItem('deap-deleted-question-banks', JSON.stringify(deletedQuestionBankIds)), [deletedQuestionBankIds])
   useEffect(() => localStorage.setItem('deap-users', JSON.stringify(users)), [users])
   useEffect(() => localStorage.setItem('deap-permissions', JSON.stringify(permissions)), [permissions])
   useEffect(() => localStorage.setItem('deap-tests', JSON.stringify(tests)), [tests])
@@ -1239,6 +1301,7 @@ function App() {
       localStorage.setItem('deap-lms-layout-version', 'iicocece-org-lms-v1')
     }
     if (
+      deletedQuestionBankIds.includes(sourceWorkbookVersion) ||
       localStorage.getItem('deap-source-workbook-version') === sourceWorkbookVersion &&
       questions.some((question) => question.importBatchId === sourceWorkbookVersion)
     ) {
@@ -1248,10 +1311,10 @@ function App() {
       .then((loadedQuestions) => {
         setQuestions((existing) => [
           ...loadedQuestions,
-          ...existing.filter((question) => !question.questionId.startsWith('seed-') && !question.questionId.startsWith('cybercrime-act-')),
+          ...existing.filter((question) => !question.questionId.startsWith('seed-') && !question.questionId.startsWith('cybercrime-act-') && question.importBatchId !== legacyCybercrimeBankId && question.importBatchId !== sourceWorkbookVersion),
         ])
         localStorage.setItem('deap-source-workbook-version', sourceWorkbookVersion)
-        setToast(`${loadedQuestions.length} Nigeria Cybercrime Act questions are now available in the LMS.`)
+        setToast(`${loadedQuestions.length} iicocece Consent-Based Sales Outreach questions are now available in the LMS.`)
       })
       .catch(() => setToast('The bundled question bank could not be loaded. You can still import it manually from Question Bank.'))
   }, [])
@@ -1431,6 +1494,37 @@ function App() {
     setQuestionBankMetadata((existing) => mergeQuestionBankMetadata({ ...existing, [batchId]: normalized }))
     recordAudit('Question bank updated', `${documentNameFromBatch(batchId, questionBankMetadata)} was renamed to ${normalized.name}.`)
     setToast('Question bank details saved.')
+  }
+
+  /**
+   * Deletes a question bank and any local tests or attempts that depend on it.
+   */
+  function deleteQuestionBank(batchId: string) {
+    const bankName = documentNameFromBatch(batchId, questionBankMetadata)
+    const questionCount = questions.filter((question) => question.importBatchId === batchId).length
+    const linkedTestIds = tests.filter((test) => test.questionBankId === batchId).map((test) => test.id)
+    const linkedSessionCount = sessions.filter((session) => linkedTestIds.includes(session.testId)).length
+    const confirmed = window.confirm(
+      `Delete "${bankName}"?\n\nThis removes ${questionCount.toLocaleString()} question(s), ${linkedTestIds.length} linked test(s), and ${linkedSessionCount} linked attempt(s) from this device.`,
+    )
+    if (!confirmed) return
+    setQuestions((existing) => existing.filter((question) => question.importBatchId !== batchId))
+    setTests((existing) => existing.filter((test) => test.questionBankId !== batchId))
+    setSessions((existing) => existing.filter((session) => !linkedTestIds.includes(session.testId)))
+    setQuestionBankMetadata((existing) => {
+      const next = { ...existing }
+      delete next[batchId]
+      return next
+    })
+    setDeletedQuestionBankIds((existing) => Array.from(new Set([...existing, batchId])))
+    recordAudit('Question bank deleted', `${bankName} was deleted with ${questionCount} question(s).`)
+    recordAnalytics('question_bank_deleted', {
+      questionBankId: batchId,
+      value: questionCount,
+      outcome: 'deleted',
+      metadata: { linked_tests: linkedTestIds.length, linked_sessions: linkedSessionCount },
+    })
+    setToast(`${bankName} has been deleted. Linked tests and attempts were also removed locally.`)
   }
 
   /**
@@ -1996,6 +2090,7 @@ function App() {
             setQuery={setQuery}
             onImport={handleImport}
             onUpdateMetadata={updateQuestionBankMetadata}
+            onDeleteQuestionBank={deleteQuestionBank}
           />
         )}
         {view === 'tests' && <TestsPanel tests={tests} questions={questions} questionBankMetadata={questionBankMetadata} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
@@ -2211,6 +2306,7 @@ function QuestionBank({
   setQuery,
   onImport,
   onUpdateMetadata,
+  onDeleteQuestionBank,
 }: {
   questions: Question[]
   questionBankMetadata: QuestionBankMetadataMap
@@ -2218,6 +2314,7 @@ function QuestionBank({
   setQuery: (value: string) => void
   onImport: (file?: File) => void
   onUpdateMetadata: (batchId: string, metadata: QuestionBankMetadata) => void
+  onDeleteQuestionBank: (batchId: string) => void
 }) {
   const [editingBatchId, setEditingBatchId] = useState<string>()
   const [draftName, setDraftName] = useState('')
@@ -2304,6 +2401,9 @@ function QuestionBank({
                 </div>
                 <button className="secondary-button compact" type="button" onClick={() => startEditing(summary)}>
                   <Settings2 size={16} /> Edit name
+                </button>
+                <button className="danger-button compact" type="button" onClick={() => onDeleteQuestionBank(summary.batchId)}>
+                  <Trash2 size={16} /> Delete
                 </button>
               </header>
               {summary.description && <p>{summary.description}</p>}

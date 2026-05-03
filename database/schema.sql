@@ -22,6 +22,7 @@ CREATE TYPE analytics_event_type AS ENUM (
   'question_import',
   'test_created',
   'test_deleted',
+  'question_bank_deleted',
   'password_reset',
   'permission_changed',
   'bulk_permission_changed',
