@@ -111,6 +111,7 @@ interface Assessment {
   overviewSections?: AssessmentOverviewSection[]
   questionCount: 20 | 40 | 60
   difficulty: Difficulty | 'Mixed'
+  questionBankId?: string
   departments: string[]
   startDate: string
   endDate: string
@@ -530,6 +531,7 @@ const seedTests: Assessment[] = [
     overviewSections: cybercrimesAssessmentOverview,
     questionCount: 60,
     difficulty: 'Mixed',
+    questionBankId: sourceWorkbookVersion,
     departments: ['Operations', 'Legal', 'UI/UX & Development', 'Human Resources', 'Digital Marketing', 'Business Development', 'Digital Content', 'Executive', 'Other'],
     startDate: new Date().toISOString(),
     endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
@@ -645,6 +647,7 @@ function syncSeedAssessmentMetadata(tests: Assessment[]): Assessment[] {
           name: source.name,
           description: source.description,
           overviewSections: source.overviewSections,
+          questionBankId: source.questionBankId,
         }
       : test,
   )
@@ -740,6 +743,17 @@ function documentNameFromBatch(batchId: string): string {
   if (batchId.startsWith('file:')) return batchId.split(':')[1] || 'Uploaded Question Bank'
   if (batchId.startsWith('batch-')) return `Uploaded Question Bank ${batchId.replace('batch-', '')}`
   return batchId
+}
+
+function getQuestionBankSummaries(questions: Question[]): Array<{ id: string; name: string; total: number }> {
+  return Array.from(
+    questions.reduce((map, question) => {
+      map.set(question.importBatchId, (map.get(question.importBatchId) ?? 0) + 1)
+      return map
+    }, new Map<string, number>()),
+  )
+    .map(([id, total]) => ({ id, name: documentNameFromBatch(id), total }))
+    .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name))
 }
 
 /**
@@ -1151,9 +1165,14 @@ function App() {
   function createAssessment(form: FormData) {
     const difficulty = String(form.get('difficulty')) as Assessment['difficulty']
     const questionCount = Number(form.get('questionCount')) as 20 | 40 | 60
-    const available = questions.filter((question) => difficulty === 'Mixed' || question.difficulty === difficulty)
+    const questionBankId = String(form.get('questionBankId') || '').trim()
+    const available = questions.filter((question) => {
+      const matchesDifficulty = difficulty === 'Mixed' || question.difficulty === difficulty
+      const matchesQuestionBank = questionBankId ? question.importBatchId === questionBankId : true
+      return matchesDifficulty && matchesQuestionBank
+    })
     if (available.length < questionCount) {
-      setToast(`Not enough ${difficulty} questions. ${available.length} available, ${questionCount} required.`)
+      setToast(`Not enough ${difficulty} questions in the selected question bank. ${available.length} available, ${questionCount} required.`)
       return
     }
     const departments = String(form.get('departments') || 'Sales,Operations')
@@ -1173,6 +1192,7 @@ function App() {
       description: String(form.get('description') || '').slice(0, 500),
       questionCount,
       difficulty,
+      questionBankId: questionBankId || undefined,
       departments,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -1183,8 +1203,8 @@ function App() {
       assignedUserIds,
     }
     setTests((existing) => [next, ...existing])
-    recordAudit('Test launched', `${next.name} assigned to ${assignedUserIds.length} employee(s).`)
-    setToast(`${next.name} is live for ${assignedUserIds.length} employee(s).`)
+    recordAudit('Test launched', `${next.name} assigned to ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId) : 'all question banks'}.`)
+    setToast(`${next.name} is live for ${assignedUserIds.length} employee(s) from ${questionBankId ? documentNameFromBatch(questionBankId) : 'all question banks'}.`)
   }
 
   /**
@@ -1344,7 +1364,8 @@ function App() {
     }
     const availableQuestions = questions.filter((question) => {
       const matchesDifficulty = test.difficulty === 'Mixed' || question.difficulty === test.difficulty
-      const matchesSourceBank = test.id === 'test-onboarding' ? question.importBatchId === sourceWorkbookVersion : true
+      const selectedQuestionBankId = test.questionBankId ?? (test.id === 'test-onboarding' ? sourceWorkbookVersion : undefined)
+      const matchesSourceBank = selectedQuestionBankId ? question.importBatchId === selectedQuestionBankId : true
       return matchesDifficulty && matchesSourceBank
     })
     if (availableQuestions.length < test.questionCount) {
@@ -1830,6 +1851,8 @@ function TestsPanel({
 }) {
   const defaultStart = toDateTimeLocal(new Date())
   const defaultEnd = toDateTimeLocal(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7))
+  const questionBanks = useMemo(() => getQuestionBankSummaries(questions), [questions])
+  const defaultQuestionBankId = questionBanks.find((bank) => bank.id === sourceWorkbookVersion)?.id ?? questionBanks[0]?.id ?? ''
   return (
     <section>
       <PageTitle eyebrow="LMS test builder" title="Assign topic assessments by department" />
@@ -1850,6 +1873,16 @@ function TestsPanel({
           <label>
             Description
             <textarea name="description" defaultValue="Timed DEAP assessment generated from approved training material." maxLength={500} />
+          </label>
+          <label>
+            Question bank
+            <select name="questionBankId" defaultValue={defaultQuestionBankId} required>
+              {questionBanks.map((bank) => (
+                <option key={bank.id} value={bank.id}>
+                  {bank.name} - {bank.total.toLocaleString()} questions
+                </option>
+              ))}
+            </select>
           </label>
           <div className="form-grid">
             <label>
@@ -1907,6 +1940,7 @@ function TestsPanel({
                     <span className={`badge ${String(test.difficulty).toLowerCase()}`}>{test.difficulty}</span>
                     <h3>{test.name}</h3>
                     <p>{test.questionCount} questions · {test.assignedUserIds.length} assigned employee(s)</p>
+                    <p className="hint">Question bank: {test.questionBankId ? documentNameFromBatch(test.questionBankId) : 'All question banks'}</p>
                     <small>
                       <CalendarDays size={14} /> {new Date(test.startDate).toLocaleString()} to {new Date(test.endDate).toLocaleString()}
                     </small>
