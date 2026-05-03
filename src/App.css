@@ -804,6 +804,15 @@ textarea {
   width: auto;
 }
 
+.locked-permission {
+  background: rgba(213, 181, 46, 0.08);
+}
+
+.locked-permission span {
+  color: var(--primary);
+  white-space: nowrap;
+}
+
 .wide {
   grid-column: 1 / -1;
 }

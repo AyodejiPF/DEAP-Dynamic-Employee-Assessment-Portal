@@ -474,6 +474,21 @@ const employeeNav = [
   ['my-results', Gauge, 'My Results'],
 ] as const
 
+const adminViewPermissions: Partial<Record<AppView, PermissionKey>> = {
+  dashboard: 'view_dashboard',
+  questions: 'manage_questions',
+  tests: 'manage_tests',
+  employees: 'manage_users',
+  analytics: 'view_analytics',
+  reports: 'export_reports',
+  settings: 'manage_settings',
+}
+
+const employeeViewPermissions: Partial<Record<AppView, PermissionKey>> = {
+  'my-tests': 'take_tests',
+  'my-results': 'view_own_results',
+}
+
 const departedUserIds = ['u008', 'u010']
 const transferTargetUserId = 'u009'
 
@@ -492,17 +507,31 @@ const permissionCatalog: Array<{ key: PermissionKey; label: string; description:
 
 function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
   const isAdminUser = user.role === 'super_admin' || user.role === 'admin'
+  if (isAdminUser) {
+    return {
+      take_tests: true,
+      view_own_results: true,
+      view_dashboard: true,
+      manage_questions: true,
+      manage_tests: true,
+      manage_users: true,
+      view_analytics: true,
+      export_reports: true,
+      manage_settings: true,
+      take_admin_self_test: true,
+    }
+  }
   return {
-    take_tests: !isAdminUser,
-    view_own_results: !isAdminUser,
-    view_dashboard: isAdminUser,
-    manage_questions: isAdminUser,
-    manage_tests: isAdminUser,
-    manage_users: isAdminUser,
-    view_analytics: isAdminUser,
-    export_reports: isAdminUser,
-    manage_settings: isAdminUser,
-    take_admin_self_test: isAdminUser,
+    take_tests: true,
+    view_own_results: true,
+    view_dashboard: false,
+    manage_questions: false,
+    manage_tests: false,
+    manage_users: false,
+    view_analytics: false,
+    export_reports: false,
+    manage_settings: false,
+    take_admin_self_test: false,
   }
 }
 
@@ -544,7 +573,23 @@ function transferPermissions(
       next[targetUserId][permission.key] = Boolean(next[targetUserId][permission.key] || userPermissions[permission.key])
     })
   })
+  activeUsers.forEach((user) => {
+    if (user.role === 'super_admin' || user.role === 'admin') next[user.id] = defaultPermissionsFor(user)
+  })
   return next
+}
+
+function firstViewForUser(user: User, permissionMap: Record<string, Record<PermissionKey, boolean>>): AppView {
+  if (user.role === 'super_admin' || user.role === 'admin') return 'dashboard'
+  const userPermissions = permissionMap[user.id] ?? defaultPermissionsFor(user)
+  const firstManagementView = navItems.find(([itemView]) => {
+    const required = adminViewPermissions[itemView]
+    return required ? userPermissions[required] : false
+  })?.[0]
+  if (firstManagementView) return firstManagementView
+  if (userPermissions.take_tests) return 'my-tests'
+  if (userPermissions.view_own_results) return 'my-results'
+  return 'login'
 }
 
 /**
@@ -836,7 +881,7 @@ function App() {
   const [tests, setTests] = useState<Assessment[]>(() => transferAssignments(readStored('deap-tests', seedTests)))
   const [sessions, setSessions] = useState<TestSession[]>(() => transferSessions(readStored('deap-sessions', [])))
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => readStored<User | undefined>('deap-current-user', undefined))
-  const [view, setView] = useState<AppView>(() => (currentUser?.role === 'employee' ? 'my-tests' : currentUser ? 'dashboard' : 'login'))
+  const [view, setView] = useState<AppView>(() => (currentUser ? firstViewForUser(currentUser, permissions) : 'login'))
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => readStored('deap-audit-events', []))
   const [activeTestId, setActiveTestId] = useState<string>()
   const [activeSessionId, setActiveSessionId] = useState<string>()
@@ -857,6 +902,19 @@ function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('deap-theme', JSON.stringify(theme))
   }, [theme])
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'deap-permissions' && event.newValue) {
+        try {
+          setPermissions(transferPermissions(JSON.parse(event.newValue), users))
+        } catch {
+          setPermissions(buildDefaultPermissions(users))
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [users])
   useEffect(() => {
     if (localStorage.getItem('deap-user-directory-version') !== 'iicocece-users-v4') {
       setUsers(seedUsers)
@@ -903,25 +961,23 @@ function App() {
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
   const activeSession = sessions.find((session) => session.id === activeSessionId)
-  const currentPermissions = currentUser ? (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser)) : undefined
-  const hasPermission = (permission: PermissionKey) => Boolean(currentPermissions?.[permission])
+  const currentPermissions = currentUser ? (isAdmin ? defaultPermissionsFor(currentUser) : (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser))) : undefined
+  const hasPermission = (permission: PermissionKey) => Boolean(isAdmin || currentPermissions?.[permission])
   const visibleEmployeeNav = employeeNav.filter(([itemView]) => {
-    if (itemView === 'my-tests') return hasPermission('take_tests')
-    if (itemView === 'my-results') return hasPermission('view_own_results')
-    return true
+    const required = employeeViewPermissions[itemView]
+    return required ? hasPermission(required) : true
   })
   const visibleAdminNav = navItems.filter(([itemView]) => {
-    const required: Partial<Record<AppView, PermissionKey>> = {
-      dashboard: 'view_dashboard',
-      questions: 'manage_questions',
-      tests: 'manage_tests',
-      employees: 'manage_users',
-      analytics: 'view_analytics',
-      reports: 'export_reports',
-      settings: 'manage_settings',
-    }
-    return required[itemView] ? hasPermission(required[itemView]) : true
+    const required = adminViewPermissions[itemView]
+    return required ? hasPermission(required) : true
   })
+  const visibleNavigation = isAdmin ? visibleAdminNav : [...visibleAdminNav, ...visibleEmployeeNav]
+  const usesManagementWorkspace = isAdmin || visibleAdminNav.some(([itemView]) => view === itemView)
+  const canAccessCurrentView = view === 'login' || view === 'taking-test' || view === 'result' || visibleNavigation.some(([itemView]) => itemView === view)
+
+  useEffect(() => {
+    if (currentUser && !canAccessCurrentView) setView(firstViewForUser(currentUser, permissions))
+  }, [canAccessCurrentView, currentUser, permissions])
 
   /**
    * Stores a concise local audit event for admin visibility in this hosted MVP.
@@ -962,7 +1018,7 @@ function App() {
       setView('taking-test')
       return
     }
-    setView(user.role === 'super_admin' || user.role === 'admin' ? 'dashboard' : 'my-tests')
+    setView(firstViewForUser(user, permissions))
   }
 
   /**
@@ -1051,10 +1107,16 @@ function App() {
    */
   function setUserPermission(userId: string, permission: PermissionKey, enabled: boolean) {
     const user = users.find((item) => item.id === userId)
+    if (!user) return
+    if (user.role === 'super_admin' || user.role === 'admin') {
+      setPermissions((existing) => ({ ...existing, [user.id]: defaultPermissionsFor(user) }))
+      setToast('Admin access is locked on. Admin always has every permission.')
+      return
+    }
     setPermissions((existing) => ({
       ...existing,
       [userId]: {
-        ...(existing[userId] ?? defaultPermissionsFor(users.find((user) => user.id === userId) ?? seedUsers[0])),
+        ...(existing[userId] ?? defaultPermissionsFor(user)),
         [permission]: enabled,
       },
     }))
@@ -1065,17 +1127,25 @@ function App() {
    * Applies one permission value to multiple selected users.
    */
   function bulkSetPermission(userIds: string[], permission: PermissionKey, enabled: boolean) {
+    const editableUserIds = userIds.filter((userId) => {
+      const user = users.find((candidate) => candidate.id === userId)
+      return user && user.role !== 'super_admin' && user.role !== 'admin'
+    })
     setPermissions((existing) => {
       const next = { ...existing }
       userIds.forEach((userId) => {
         const user = users.find((candidate) => candidate.id === userId)
         if (!user) return
+        if (user.role === 'super_admin' || user.role === 'admin') {
+          next[userId] = defaultPermissionsFor(user)
+          return
+        }
         next[userId] = { ...(next[userId] ?? defaultPermissionsFor(user)), [permission]: enabled }
       })
       return next
     })
-    recordAudit('Bulk permission changed', `${permission} was turned ${enabled ? 'on' : 'off'} for ${userIds.length} user(s).`)
-    setToast(`${enabled ? 'Enabled' : 'Disabled'} ${permissionCatalog.find((item) => item.key === permission)?.label ?? permission} for ${userIds.length} user(s).`)
+    recordAudit('Bulk permission changed', `${permission} was turned ${enabled ? 'on' : 'off'} for ${editableUserIds.length} non-admin user(s).`)
+    setToast(`${enabled ? 'Enabled' : 'Disabled'} ${permissionCatalog.find((item) => item.key === permission)?.label ?? permission} for ${editableUserIds.length} non-admin user(s). Admin access stayed locked on.`)
   }
 
   /**
@@ -1279,33 +1349,19 @@ function App() {
           {toast}
         </button>
       )}
-      {isAdmin ? (
-        <aside className="sidebar" aria-label="Administrator navigation">
-          <BrandHeader branding={branding} subtitle="iicocece-assessment" />
-          <nav>
-            {visibleAdminNav.map(([itemView, Icon, label]) => (
-              <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => setView(itemView)}>
-                <Icon size={18} /> {label}
-              </button>
-            ))}
-          </nav>
-          <UserFooter currentUser={currentUser} theme={theme} onToggleTheme={toggleTheme} onLogout={() => setCurrentUser(undefined)} />
-        </aside>
-      ) : (
-        <aside className="sidebar employee-sidebar" aria-label="Employee navigation">
-          <BrandHeader branding={branding} subtitle="iicocece-assessment" />
-          <nav>
-            {visibleEmployeeNav.map(([itemView, Icon, label]) => (
-              <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => setView(itemView)}>
-                <Icon size={18} /> {label}
-              </button>
-            ))}
-          </nav>
-          <UserFooter currentUser={currentUser} theme={theme} onToggleTheme={toggleTheme} onLogout={() => setCurrentUser(undefined)} />
-        </aside>
-      )}
+      <aside className={`sidebar ${isAdmin ? '' : 'employee-sidebar'}`} aria-label={isAdmin ? 'Administrator navigation' : 'User navigation'}>
+        <BrandHeader branding={branding} subtitle="iicocece-assessment" />
+        <nav>
+          {visibleNavigation.map(([itemView, Icon, label]) => (
+            <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => setView(itemView)}>
+              <Icon size={18} /> {label}
+            </button>
+          ))}
+        </nav>
+        <UserFooter currentUser={currentUser} theme={theme} onToggleTheme={toggleTheme} onLogout={() => setCurrentUser(undefined)} />
+      </aside>
 
-      <main className={isAdmin ? 'workspace' : 'employee-workspace'}>
+      <main className={usesManagementWorkspace ? 'workspace' : 'employee-workspace'}>
         {view === 'dashboard' && <Dashboard tests={tests} questions={questions} sessions={sessions} users={users} />}
         {view === 'questions' && <QuestionBank questions={questions} query={query} setQuery={setQuery} onImport={handleImport} />}
         {view === 'tests' && <TestsPanel tests={tests} questions={questions} onCreate={createAssessment} onDelete={deleteAssessment} onTake={startTest} />}
@@ -2021,9 +2077,10 @@ function SettingsPanel({
 }) {
   const [activeTab, setActiveTab] = useState<'credentials' | 'permissions' | 'branding'>('permissions')
   const [revealedUser, setRevealedUser] = useState<User>()
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(users.map((user) => user.id))
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))
   const [userFilter, setUserFilter] = useState('')
   const [bulkPermission, setBulkPermission] = useState<PermissionKey>('take_tests')
+  const editableUsers = useMemo(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin'), [users])
   const filteredUsers = useMemo(() => {
     const normalized = userFilter.toLowerCase().trim()
     if (!normalized) return users
@@ -2043,6 +2100,8 @@ function SettingsPanel({
    * Selects or deselects one user in the bulk permissions panel.
    */
   function toggleSelectedUser(userId: string) {
+    const user = users.find((candidate) => candidate.id === userId)
+    if (user?.role === 'super_admin' || user?.role === 'admin') return
     setSelectedUsers((existing) => (existing.includes(userId) ? existing.filter((id) => id !== userId) : [...existing, userId]))
   }
 
@@ -2156,10 +2215,14 @@ function SettingsPanel({
               </div>
             </div>
             <div className="bulk-toolbar">
-              <button className="secondary-button" type="button" onClick={() => setSelectedUsers(users.map((user) => user.id))}>
-                Select all
+              <button className="secondary-button" type="button" onClick={() => setSelectedUsers(editableUsers.map((user) => user.id))}>
+                Select all non-admin
               </button>
-              <button className="secondary-button" type="button" onClick={() => setSelectedUsers(filteredUsers.map((user) => user.id))}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setSelectedUsers(filteredUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))}
+              >
                 Select visible
               </button>
               <button className="secondary-button" type="button" onClick={() => setSelectedUsers([])}>
@@ -2182,9 +2245,14 @@ function SettingsPanel({
             <div className="user-chip-grid">
               {filteredUsers.map((user) => (
                 <label className="user-chip" key={user.id}>
-                  <input type="checkbox" checked={selectedUsers.includes(user.id)} onChange={() => toggleSelectedUser(user.id)} />
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.includes(user.id)}
+                    disabled={user.role === 'super_admin' || user.role === 'admin'}
+                    onChange={() => toggleSelectedUser(user.id)}
+                  />
                   <span>{user.displayName}</span>
-                  <small>{user.jobRole}</small>
+                  <small>{user.role === 'super_admin' || user.role === 'admin' ? 'Admin locked' : user.jobRole}</small>
                 </label>
               ))}
             </div>
@@ -2210,16 +2278,18 @@ function SettingsPanel({
                         <small>{user.jobRole}</small>
                       </td>
                       {permissionCatalog.map((permission) => {
-                        const checked = permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key]
+                        const isAdminRow = user.role === 'super_admin' || user.role === 'admin'
+                        const checked = isAdminRow ? true : (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])
                         return (
-                          <td key={permission.key}>
+                          <td className={isAdminRow ? 'locked-permission' : ''} key={permission.key}>
                             <label className="toggle-cell">
                               <input
                                 type="checkbox"
                                 checked={checked}
+                                disabled={isAdminRow}
                                 onChange={(event) => onSetPermission(user.id, permission.key, event.target.checked)}
                               />
-                              <span>{checked ? 'On' : 'Off'}</span>
+                              <span>{isAdminRow ? 'Always on' : checked ? 'On' : 'Off'}</span>
                             </label>
                           </td>
                         )
