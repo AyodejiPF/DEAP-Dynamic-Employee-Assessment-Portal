@@ -59,7 +59,7 @@ async function main() {
   const deliveryText = await page.locator('body').innerText()
   if (/Question\s+\d+\s+of\s+\d+/i.test(deliveryText)) failures.push('Delivery screen exposes the current question number or total question count.')
   const displayedQuestion = await page.locator('.question-stage h1').innerText()
-  if (/^\s*(?:\[[^\]]+\]|\d+[\).:-]|\b(?:easy|medium|hard|standard|weighted|scenario)\b\s*[:\-])/i.test(displayedQuestion)) {
+  if (/^\s*(?:\[[^\]]+\]|[a-z]{0,6}q?\d+[\).:-]|\b(?:easy|medium|hard|standard|weighted|scenario)\b\s*[:\-])/i.test(displayedQuestion)) {
     failures.push(`Displayed question still exposes a source prefix: ${displayedQuestion}`)
   }
 

@@ -948,6 +948,7 @@ function displayQuestionText(rawText: string | undefined): string {
       .replace(/^\s*(?:easy|medium|hard|standard|weighted|scenario|curve|mcq|single-answer|single answer|multiple-choice|multiple choice)(?:\s+(?:question|scenario|item|batch|type))?\s*[:\-–—|]\s*/i, '')
       .replace(/^\s*(?:question|item|no\.?|number|q)\s*#?\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
       .replace(/^\s*[sq]\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
+      .replace(/^\s*[a-z]{1,6}\s*q?\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
       .replace(/^\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/, '')
       .trim()
   }
