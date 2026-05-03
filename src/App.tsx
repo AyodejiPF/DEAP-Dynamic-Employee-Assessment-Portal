@@ -1621,11 +1621,13 @@ function App() {
     setCurrentUser(user)
     const resumable = sessions.find((session) => {
       const assignedTest = tests.find((test) => test.id === session.testId)
+      const questionSet = assignedTest ? sessionQuestionSetStatus(session, assignedTest, questions, user.id) : undefined
       return (
         session.userId === user.id &&
         session.status === 'in_progress' &&
         Boolean(assignedTest?.assignedUserIds.includes(user.id)) &&
-        Boolean(assignedTest && getAvailabilityState(assignedTest).canStart)
+        Boolean(assignedTest && getAvailabilityState(assignedTest).canStart) &&
+        Boolean(questionSet?.canResume)
       )
     })
     if (resumable) {
@@ -2005,31 +2007,59 @@ function App() {
     }
     const existingSession = sessions.find((session) => session.testId === testId && session.userId === currentUser.id && session.status === 'in_progress')
     if (existingSession) {
-      if (!existingSession.currentQuestionDeadlineAt) {
+      const questionSet = sessionQuestionSetStatus(existingSession, test, questions, currentUser.id)
+      if (!questionSet.canResume) {
         setSessions((existing) =>
           existing.map((session) =>
             session.id === existingSession.id
               ? {
                   ...session,
-                  currentQuestionStartedAt: new Date().toISOString(),
-                  currentQuestionDeadlineAt: new Date(Date.now() + 60_000).toISOString(),
+                  status: 'abandoned',
+                  currentQuestionStartedAt: undefined,
+                  currentQuestionDeadlineAt: undefined,
                   lastSavedAt: new Date().toISOString(),
                 }
               : session,
           ),
         )
+        recordAnalytics('test_resumed', {
+          testId,
+          userId: currentUser.id,
+          outcome: 'stale_session_abandoned',
+          metadata: {
+            session_id: existingSession.id,
+            saved_questions: questionSet.questionIds.length,
+            missing_questions: questionSet.missingCount,
+          },
+        })
+        setToast('A stale in-progress copy could not be restored, so a fresh randomized attempt is starting.')
+      } else {
+        if (!existingSession.currentQuestionDeadlineAt) {
+          setSessions((existing) =>
+            existing.map((session) =>
+              session.id === existingSession.id
+                ? {
+                    ...session,
+                    currentQuestionStartedAt: new Date().toISOString(),
+                    currentQuestionDeadlineAt: new Date(Date.now() + 60_000).toISOString(),
+                    lastSavedAt: new Date().toISOString(),
+                  }
+                : session,
+            ),
+          )
+        }
+        setActiveTestId(testId)
+        setActiveSessionId(existingSession.id)
+        recordAnalytics('test_resumed', {
+          testId,
+          userId: currentUser.id,
+          outcome: 'manual_resume',
+          metadata: { session_id: existingSession.id, answered_questions: existingSession.responses.length },
+        })
+        setToast('Resuming your in-progress test. The timer continued from the saved question deadline.')
+        setView('taking-test')
+        return
       }
-      setActiveTestId(testId)
-      setActiveSessionId(existingSession.id)
-      recordAnalytics('test_resumed', {
-        testId,
-        userId: currentUser.id,
-        outcome: 'manual_resume',
-        metadata: { session_id: existingSession.id, answered_questions: existingSession.responses.length },
-      })
-      setToast('Resuming your in-progress test. The timer continued from the saved question deadline.')
-      setView('taking-test')
-      return
     }
     const availableQuestions = questions.filter((question) => {
       const matchesDifficulty = test.difficulty === 'Mixed' || question.difficulty === test.difficulty
@@ -2804,6 +2834,21 @@ function getAvailabilityState(test: Assessment): { label: string; detail: string
   if (now < starts) return { label: 'Scheduled', detail: `Opens ${new Date(test.startDate).toLocaleString()}`, canStart: false }
   if (now > ends) return { label: 'Closed', detail: `Closed ${new Date(test.endDate).toLocaleString()}`, canStart: false }
   return { label: 'Available now', detail: `Closes ${new Date(test.endDate).toLocaleString()}`, canStart: true }
+}
+
+function sessionQuestionIds(session: TestSession, test: Assessment, userId: string): string[] {
+  return session.questionIds?.length ? session.questionIds : readStored<string[]>(`deap-session-questions-${test.id}-${userId}`, [])
+}
+
+function sessionQuestionSetStatus(session: TestSession, test: Assessment, questions: Question[], userId: string) {
+  const questionIds = sessionQuestionIds(session, test, userId)
+  const availableQuestionIds = new Set(questions.map((question) => question.questionId))
+  const missingCount = questionIds.filter((questionId) => !availableQuestionIds.has(questionId)).length
+  return {
+    questionIds,
+    missingCount,
+    canResume: Boolean(questionIds.length) && missingCount === 0,
+  }
 }
 
 function TestsPanel({
@@ -4635,7 +4680,7 @@ function TestDelivery({
 }) {
   const sessionQuestions = useMemo(() => {
     if (!test) return []
-    const questionIds = session.questionIds?.length ? session.questionIds : readStored<string[]>(`deap-session-questions-${test.id}-${currentUser.id}`, [])
+    const questionIds = sessionQuestionIds(session, test, currentUser.id)
     const questionById = new Map(questions.map((question) => [question.questionId, question]))
     return questionIds.map((id) => questionById.get(id)).filter(Boolean) as Question[]
   }, [currentUser.id, questions, session.questionIds, test])
