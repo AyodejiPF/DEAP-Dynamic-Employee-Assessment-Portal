@@ -55,7 +55,13 @@ async function main() {
   if (!(await page.getByRole('button', { name: 'Start the test' }).isDisabled())) failures.push('Start button should stay disabled until the agreement is checked.')
   await page.getByLabel(/I understand/).check()
   await page.getByRole('button', { name: 'Start the test' }).click()
-  await page.waitForSelector('text=Question 1 of 60', { timeout: 15000 })
+  await page.waitForSelector('text=Assessment item', { timeout: 15000 })
+  const deliveryText = await page.locator('body').innerText()
+  if (/Question\s+\d+\s+of\s+\d+/i.test(deliveryText)) failures.push('Delivery screen exposes the current question number or total question count.')
+  const displayedQuestion = await page.locator('.question-stage h1').innerText()
+  if (/^\s*(?:\[[^\]]+\]|\d+[\).:-]|\b(?:easy|medium|hard|standard|weighted|scenario)\b\s*[:\-])/i.test(displayedQuestion)) {
+    failures.push(`Displayed question still exposes a source prefix: ${displayedQuestion}`)
+  }
 
   const sessionHealth = await page.evaluate(() => {
     const sessions = JSON.parse(localStorage.getItem('deap-sessions') || '[]')

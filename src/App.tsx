@@ -25,6 +25,7 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  Shuffle,
   Sparkles,
   Sun,
   Trash2,
@@ -254,6 +255,8 @@ interface AiIntelligenceResponse {
   model?: string
   citations?: string[]
 }
+
+type QuestionExposureCounts = Record<string, number>
 
 interface Branding {
   logoUrl: string
@@ -932,9 +935,28 @@ function responseOutcome(question: Question | undefined, response: ResponseRecor
   return 'Wrong'
 }
 
+function displayQuestionText(rawText: string | undefined): string {
+  const original = String(rawText ?? '').trim()
+  if (!original) return ''
+  let cleaned = original
+  let previous = ''
+  while (cleaned && cleaned !== previous) {
+    previous = cleaned
+    cleaned = cleaned
+      .replace(/^\s*(?:\[[^\]]{1,48}\]|\((?:easy|medium|hard|standard|weighted|scenario|curve|mcq|single answer|multiple choice)[^)]{0,32}\))\s*/i, '')
+      .replace(/^\s*(?:easy|medium|hard|standard|weighted|scenario|curve|mcq|single-answer|single answer|multiple-choice|multiple choice)(?:\s+(?:question|scenario|item|batch|type))?\s*[:\-–—|]\s*/i, '')
+      .replace(/^\s*(?:question|item|no\.?|number|q)\s*#?\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
+      .replace(/^\s*[sq]\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/i, '')
+      .replace(/^\s*\d{1,5}[a-z]?\s*[\).:\-–—]\s*/, '')
+      .trim()
+  }
+  return cleaned || original
+}
+
 function shortQuestionText(question: Question | undefined): string {
   if (!question) return 'Unknown question'
-  return question.questionText.length > 76 ? `${question.questionText.slice(0, 73)}...` : question.questionText
+  const cleaned = displayQuestionText(question.questionText)
+  return cleaned.length > 76 ? `${cleaned.slice(0, 73)}...` : cleaned
 }
 
 function aiThreadTitle(prompt: string): string {
@@ -961,6 +983,47 @@ function relevantQuestionScore(question: Question, terms: string[]): number {
   if (!terms.length) return 0
   const haystack = `${question.questionText} ${question.topicTag} ${questionOption(question, 'A')} ${questionOption(question, 'B')} ${questionOption(question, 'C')} ${questionOption(question, 'D')} ${questionOption(question, 'E')}`.toLowerCase()
   return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0)
+}
+
+function randomUnit(): number {
+  const value = crypto.getRandomValues(new Uint32Array(1))[0]
+  return value / 0x100000000
+}
+
+function exposureAverage(questions: Question[], exposureCounts: QuestionExposureCounts): number {
+  return questions.length ? average(questions.map((question) => exposureCounts[question.questionId] ?? 0)) : 0
+}
+
+function exposurePriority(exposureCount: number, averageExposure: number): { label: string; boostPercent: 0 | 25 | 50 | 75; weight: number } {
+  if (exposureCount === 0) return { label: '75% priority boost', boostPercent: 75, weight: 1.75 }
+  if (averageExposure > 0 && exposureCount <= averageExposure * 0.5) return { label: '50% priority boost', boostPercent: 50, weight: 1.5 }
+  if (averageExposure > 0 && exposureCount <= averageExposure * 0.75) return { label: '25% priority boost', boostPercent: 25, weight: 1.25 }
+  return { label: 'Standard rotation', boostPercent: 0, weight: 1 }
+}
+
+function exposureAwareQuestionDraw(availableQuestions: Question[], questionCount: number, exposureCounts: QuestionExposureCounts): Question[] {
+  const remaining = [...availableQuestions]
+  const selected: Question[] = []
+  const averageExposure = exposureAverage(availableQuestions, exposureCounts)
+  while (selected.length < questionCount && remaining.length) {
+    const weighted = remaining.map((question) => ({
+      question,
+      weight: exposurePriority(exposureCounts[question.questionId] ?? 0, averageExposure).weight,
+    }))
+    const totalWeight = weighted.reduce((total, item) => total + item.weight, 0)
+    let cursor = randomUnit() * totalWeight
+    let selectedIndex = 0
+    for (let index = 0; index < weighted.length; index += 1) {
+      cursor -= weighted[index].weight
+      if (cursor <= 0) {
+        selectedIndex = index
+        break
+      }
+    }
+    selected.push(remaining[selectedIndex])
+    remaining.splice(selectedIndex, 1)
+  }
+  return selected
 }
 
 function credentialText(user: User): string {
@@ -1347,6 +1410,7 @@ function App() {
   const [view, setView] = useState<AppView>(() => (currentUser ? firstViewForUser(currentUser, permissions) : 'login'))
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => readStored('deap-audit-events', []))
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(() => readStored('deap-analytics-events', []))
+  const [questionExposureCounts, setQuestionExposureCounts] = useState<QuestionExposureCounts>(() => readStored('deap-question-exposure-counts', {}))
   const [activeTestId, setActiveTestId] = useState<string>()
   const [activeSessionId, setActiveSessionId] = useState<string>()
   const [branding, setBranding] = useState<Branding>(() => readStored('deap-branding', defaultBranding))
@@ -1363,8 +1427,20 @@ function App() {
   useEffect(() => localStorage.setItem('deap-sessions', JSON.stringify(sessions)), [sessions])
   useEffect(() => localStorage.setItem('deap-audit-events', JSON.stringify(auditEvents.slice(0, 200))), [auditEvents])
   useEffect(() => localStorage.setItem('deap-analytics-events', JSON.stringify(analyticsEvents.slice(0, 5000))), [analyticsEvents])
+  useEffect(() => localStorage.setItem('deap-question-exposure-counts', JSON.stringify(questionExposureCounts)), [questionExposureCounts])
   useEffect(() => localStorage.setItem('deap-current-user', JSON.stringify(currentUser)), [currentUser])
   useEffect(() => localStorage.setItem('deap-branding', JSON.stringify(branding)), [branding])
+  useEffect(() => {
+    if (Object.keys(questionExposureCounts).length || !sessions.length) return
+    const restoredCounts: QuestionExposureCounts = {}
+    sessions.forEach((session) => {
+      const exposedIds = session.questionIds?.length ? session.questionIds : session.responses.map((response) => response.questionId)
+      Array.from(new Set(exposedIds)).forEach((questionId) => {
+        restoredCounts[questionId] = (restoredCounts[questionId] ?? 0) + 1
+      })
+    })
+    if (Object.keys(restoredCounts).length) setQuestionExposureCounts(restoredCounts)
+  }, [questionExposureCounts, sessions])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('deap-theme', JSON.stringify(theme))
@@ -1886,9 +1962,19 @@ function App() {
       setToast(`Not enough matching questions are available yet. ${availableQuestions.length} available, ${test.questionCount} required.`)
       return
     }
-    const selectedQuestions = shuffle(availableQuestions).slice(0, test.questionCount)
+    const exposureAverageBeforeDraw = exposureAverage(availableQuestions, questionExposureCounts)
+    const selectedQuestions = exposureAwareQuestionDraw(availableQuestions, test.questionCount, questionExposureCounts)
     const selectedQuestionIds = selectedQuestions.map((question) => question.questionId)
     const optionOrderByQuestion = Object.fromEntries(selectedQuestions.map((question) => [question.questionId, shuffle(optionKeys)]))
+    const selectedExposureTiers = selectedQuestions.map((question) => exposurePriority(questionExposureCounts[question.questionId] ?? 0, exposureAverageBeforeDraw).boostPercent)
+    const selectedNeverFeatured = selectedQuestions.filter((question) => (questionExposureCounts[question.questionId] ?? 0) === 0).length
+    setQuestionExposureCounts((existing) => {
+      const next = { ...existing }
+      selectedQuestionIds.forEach((questionId) => {
+        next[questionId] = (next[questionId] ?? 0) + 1
+      })
+      return next
+    })
     localStorage.setItem(`deap-session-questions-${testId}-${currentUser.id}`, JSON.stringify(selectedQuestionIds))
     const questionStartedAt = new Date().toISOString()
     const questionDeadlineAt = new Date(Date.now() + 60_000).toISOString()
@@ -1922,6 +2008,11 @@ function App() {
         session_id: session.id,
         question_count: selectedQuestionIds.length,
         available_pool: availableQuestions.length,
+        exposure_average_before_draw: round(exposureAverageBeforeDraw, 2),
+        never_featured_questions_selected: selectedNeverFeatured,
+        boost_75_count: selectedExposureTiers.filter((boost) => boost === 75).length,
+        boost_50_count: selectedExposureTiers.filter((boost) => boost === 50).length,
+        boost_25_count: selectedExposureTiers.filter((boost) => boost === 25).length,
         randomization_signature: selectedQuestionIds.slice(0, 5).join('|'),
       },
     })
@@ -2136,6 +2227,20 @@ function App() {
         }
       })
       .filter((row) => row.attempts > 0)
+    const exposureRows = questions.map((question) => {
+      const bankQuestions = questions.filter((candidate) => candidate.importBatchId === question.importBatchId)
+      const averageForBank = exposureAverage(bankQuestions, questionExposureCounts)
+      const exposureCount = questionExposureCounts[question.questionId] ?? 0
+      return {
+        question_id: question.questionId,
+        question_bank: documentNameFromBatch(question.importBatchId, questionBankMetadata),
+        topic: question.topicTag,
+        difficulty: question.difficulty,
+        exposure_count: exposureCount,
+        next_draw_priority: exposurePriority(exposureCount, averageForBank).label,
+        question: shortQuestionText(question),
+      }
+    })
     const userRiskRows = users
       .filter((user) => user.role === 'employee')
       .map((user) => {
@@ -2164,6 +2269,7 @@ function App() {
     spreadsheet.utils.book_append_sheet(workbook, worksheet, 'DEAP Results')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(analyticsRows), 'Analytics Events')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(questionQualityRows), 'Question Quality')
+    spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(exposureRows), 'Question Exposure')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(userRiskRows), 'User Risk')
     spreadsheet.writeFile(workbook, `DEAP_Results_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
@@ -2214,6 +2320,7 @@ function App() {
             tests={tests}
             analyticsEvents={analyticsEvents}
             questionBankMetadata={questionBankMetadata}
+            questionExposureCounts={questionExposureCounts}
           />
         )}
         {view === 'reports' && <Reports onExport={exportCsv} sessions={sessions} tests={tests} users={users} questions={questions} auditEvents={auditEvents} />}
@@ -2855,6 +2962,7 @@ function Analytics({
   tests,
   analyticsEvents,
   questionBankMetadata,
+  questionExposureCounts,
 }: {
   sessions: TestSession[]
   users: User[]
@@ -2862,6 +2970,7 @@ function Analytics({
   tests: Assessment[]
   analyticsEvents: AnalyticsEvent[]
   questionBankMetadata: QuestionBankMetadataMap
+  questionExposureCounts: QuestionExposureCounts
 }) {
   const [range, setRange] = useState('all')
   const [department, setDepartment] = useState('all')
@@ -3108,6 +3217,55 @@ function Analytics({
       }
     })
 
+    const scopedQuestionPool = questions.filter((question) => questionMatches(question))
+    const exposureValues = scopedQuestionPool.map((question) => questionExposureCounts[question.questionId] ?? 0)
+    const averageExposureCount = exposureAverage(scopedQuestionPool, questionExposureCounts)
+    const exposurePriorityRows = scopedQuestionPool
+      .map((question) => {
+        const exposureCount = questionExposureCounts[question.questionId] ?? 0
+        const priority = exposurePriority(exposureCount, averageExposureCount)
+        return {
+          question: shortQuestionText(question),
+          bank: documentNameFromBatch(question.importBatchId, questionBankMetadata),
+          topic: question.topicTag,
+          difficulty: question.difficulty,
+          shown: exposureCount,
+          nextDrawPriority: priority.label,
+          boostPercent: priority.boostPercent,
+        }
+      })
+      .sort((left, right) => right.boostPercent - left.boostPercent || left.shown - right.shown || left.question.localeCompare(right.question))
+      .slice(0, 15)
+
+    const randomizationRows = questionBanks
+      .map((bank) => {
+        const bankQuestions = questions.filter((question) => question.importBatchId === bank.id && questionMatches(question))
+        const bankAverageExposure = exposureAverage(bankQuestions, questionExposureCounts)
+        const bankExposureValues = bankQuestions.map((question) => questionExposureCounts[question.questionId] ?? 0)
+        const priorityCounts = bankQuestions.reduce(
+          (counts, question) => {
+            const boost = exposurePriority(questionExposureCounts[question.questionId] ?? 0, bankAverageExposure).boostPercent
+            counts[boost] += 1
+            return counts
+          },
+          { 0: 0, 25: 0, 50: 0, 75: 0 } as Record<0 | 25 | 50 | 75, number>,
+        )
+        return {
+          bank: bank.name,
+          pool: bankQuestions.length,
+          neverShown: priorityCounts[75],
+          boosted25: priorityCounts[25],
+          boosted50: priorityCounts[50],
+          standard: priorityCounts[0],
+          shownAtLeastOnce: bankQuestions.length - priorityCounts[75],
+          minShown: bankExposureValues.length ? Math.min(...bankExposureValues) : 0,
+          maxShown: bankExposureValues.length ? Math.max(...bankExposureValues) : 0,
+          avgShown: round(bankAverageExposure, 2),
+          imbalance: bankExposureValues.length ? Math.max(...bankExposureValues) - Math.min(...bankExposureValues) : 0,
+        }
+      })
+      .filter((row) => row.pool > 0)
+
     const connectivityRows = scopedSessions
       .filter((session) => session.status === 'in_progress' || autosaves.some((event) => event.metadata?.session_id === session.id) || resumedAttempts.some((event) => event.metadata?.session_id === session.id))
       .map((session) => {
@@ -3165,6 +3323,11 @@ function Analytics({
         instructionOpens: instructionOpens.length,
         agreements: agreements.length,
         riskFlags: userRiskData.filter((user) => user.riskScore >= 45).length,
+        questionPool: scopedQuestionPool.length,
+        neverFeaturedQuestions: exposureValues.filter((value) => value === 0).length,
+        minQuestionExposure: exposureValues.length ? Math.min(...exposureValues) : 0,
+        maxQuestionExposure: exposureValues.length ? Math.max(...exposureValues) : 0,
+        exposureImbalance: exposureValues.length ? Math.max(...exposureValues) - Math.min(...exposureValues) : 0,
       },
       outcomeData: [
         { name: 'Correct', count: correct },
@@ -3186,11 +3349,13 @@ function Analytics({
       questionQualityRows,
       optionData,
       questionBankRows,
+      randomizationRows,
+      exposurePriorityRows,
       userRiskData,
       connectivityRows,
       operationRows,
     }
-  }, [analyticsEvents, department, departments, questionBankMetadata, questionBanks, questions, range, selectedDifficulty, selectedQuestionBankId, selectedRole, selectedTestId, selectedTopic, selectedUserId, sessions, tests, users])
+  }, [analyticsEvents, department, departments, questionBankMetadata, questionBanks, questionExposureCounts, questions, range, selectedDifficulty, selectedQuestionBankId, selectedRole, selectedTestId, selectedTopic, selectedUserId, sessions, tests, users])
 
   const activeChat = useMemo(() => chatThreads.find((thread) => thread.id === selectedChatId) ?? chatThreads[0], [chatThreads, selectedChatId])
 
@@ -3257,7 +3422,7 @@ function Analytics({
         bank: documentNameFromBatch(question.importBatchId, questionBankMetadata),
         topic: question.topicTag,
         difficulty: question.difficulty,
-        question: question.questionText.slice(0, 700),
+        question: displayQuestionText(question.questionText).slice(0, 700),
         options: {
           A: question.optionA.slice(0, 240),
           B: question.optionB.slice(0, 240),
@@ -3315,6 +3480,8 @@ function Analytics({
       analytics: {
         usageMetrics: analytics.usageMetrics,
         questionBanks: analytics.questionBankRows,
+        randomization: analytics.randomizationRows,
+        underFeaturedQuestions: analytics.exposurePriorityRows,
         departments: analytics.departmentData,
         topics: analytics.topicData,
         difficulty: analytics.difficultyTimingData,
@@ -3531,6 +3698,8 @@ function Analytics({
         <Metric label="Median score" value={`${analytics.usageMetrics.medianScore}%`} icon={<BarChart3 />} />
         <Metric label="Avg response" value={`${analytics.usageMetrics.avgResponseTime}s`} icon={<Clock3 />} />
         <Metric label="Risk flags" value={analytics.usageMetrics.riskFlags} icon={<ShieldCheck />} />
+        <Metric label="Never featured" value={analytics.usageMetrics.neverFeaturedQuestions} icon={<Shuffle />} />
+        <Metric label="Exposure spread" value={analytics.usageMetrics.exposureImbalance} icon={<BarChart3 />} />
       </div>
 
       <section className="panel analytics-summary-panel">
@@ -3708,6 +3877,38 @@ function Analytics({
               row.liveTests,
               row.responses,
               `${row.avgScore}%`,
+            ])}
+          />
+        </section>
+        <section className="panel">
+          <h2>Randomisation fairness</h2>
+          <DataTable
+            columns={['Bank', 'Pool', '+75%', '+50%', '+25%', 'Standard', 'Min', 'Max', 'Avg', 'Spread']}
+            rows={analytics.randomizationRows.map((row) => [
+              row.bank,
+              row.pool,
+              row.neverShown,
+              row.boosted50,
+              row.boosted25,
+              row.standard,
+              row.minShown,
+              row.maxShown,
+              row.avgShown,
+              row.imbalance,
+            ])}
+          />
+        </section>
+        <section className="panel">
+          <h2>Under-featured priority queue</h2>
+          <DataTable
+            columns={['Question', 'Bank', 'Topic', 'Diff', 'Shown', 'Next draw priority']}
+            rows={analytics.exposurePriorityRows.map((row) => [
+              row.question,
+              row.bank,
+              row.topic,
+              row.difficulty,
+              row.shown,
+              row.nextDrawPriority,
             ])}
           />
         </section>
@@ -4108,7 +4309,6 @@ function MyTests({
   const assigned = tests.filter((test) => test.status === 'Live' && test.assignedUserIds.includes(currentUser.id))
   const [pendingTest, setPendingTest] = useState<Assessment>()
   const [agreementAccepted, setAgreementAccepted] = useState(false)
-  const totalMinutes = pendingTest ? pendingTest.questionCount : 0
   return (
     <section>
       <PageTitle eyebrow={`Welcome, ${currentUser.fullName}`} title="My assigned tests" />
@@ -4126,10 +4326,10 @@ function MyTests({
                 </div>
                 <h2>{test.name}</h2>
                 <p>{test.description}</p>
-                <small>{test.questionCount} questions · {availability.detail}</small>
+                <small>Timed randomized assessment · {availability.detail}</small>
               </div>
               {completed ? (
-                <span className={completed.passed ? 'score-badge pass' : 'score-badge fail'}>{completed.score} / {completed.maxScore}</span>
+                <span className={completed.passed ? 'score-badge pass' : 'score-badge fail'}>{completed.percentage}%</span>
               ) : (
                 <button
                   className="primary-button"
@@ -4157,9 +4357,8 @@ function MyTests({
             <h2 id="pretest-title">{pendingTest.name}</h2>
             <AssessmentOverview test={pendingTest} />
             <div className="pretest-facts">
-              <span><strong>{pendingTest.questionCount}</strong> Questions</span>
               <span><strong>60 sec</strong> Per question</span>
-              <span><strong>{totalMinutes} min</strong> Maximum time</span>
+              <span><strong>Random</strong> Question draw</span>
               <span><strong>MCQ</strong> Five options each</span>
               <span><strong>5 sec</strong> Autosave heartbeat</span>
             </div>
@@ -4168,7 +4367,7 @@ function MyTests({
               <ul>
                 <li>Each question appears one at a time with a countdown timer.</li>
                 <li>Your question set is randomly selected only after you tick this agreement and click Start the test.</li>
-                <li>The live test draws randomly from the approved 1,500-question bank to reduce cheating risk.</li>
+                <li>The live test draws randomly from the approved question bank to reduce cheating risk.</li>
                 <li>Some questions have one definite correct answer; others may award partial marks on a curve.</li>
                 <li>Your score combines answer accuracy and response speed.</li>
                 <li>If a hint is available and you open it, the maximum marks for only that question are immediately reduced by 50%.</li>
@@ -4224,7 +4423,7 @@ function MyResults({ currentUser, sessions, tests }: { currentUser: User; sessio
           columns={['Test', 'Score', 'Percentage', 'Outcome', 'Completed']}
           rows={completed.map((session) => {
             const test = tests.find((item) => item.id === session.testId)
-            return [test?.name ?? 'Assessment', `${session.score} / ${session.maxScore}`, `${session.percentage}%`, session.passed ? 'Pass' : 'Fail', new Date(session.completedAt ?? '').toLocaleString()]
+            return [test?.name ?? 'Assessment', session.score, `${session.percentage}%`, session.passed ? 'Pass' : 'Fail', new Date(session.completedAt ?? '').toLocaleString()]
           })}
         />
       </section>
@@ -4311,14 +4510,12 @@ function TestDelivery({
   const timerClass = seconds <= 10 ? 'danger' : seconds <= 20 ? 'warning' : ''
   const optionOrder = currentQuestion ? (session.optionOrderByQuestion?.[currentQuestion.questionId] ?? optionKeys) : optionKeys
   const revealedAnswerText = `${currentQuestion.correctAnswer}. ${currentQuestion[`option${currentQuestion.correctAnswer}` as keyof Question] as string}`
+  const learnerQuestionText = displayQuestionText(currentQuestion.questionText)
 
   return (
     <section className="test-delivery">
-      <div className="test-progress">
-        <div style={{ width: `${(currentIndex / test.questionCount) * 100}%` }} />
-      </div>
       <header>
-        <span>Question {currentIndex + 1} of {test.questionCount}</span>
+        <span>Assessment item</span>
         <strong>{test.name}</strong>
         <small>Autosaved {session.lastSavedAt ? new Date(session.lastSavedAt).toLocaleTimeString() : 'now'}</small>
       </header>
@@ -4331,7 +4528,7 @@ function TestDelivery({
       </div>
       <p className="sr-only" aria-live="polite">{announcer}</p>
       <article className="question-stage">
-        <h1>{currentQuestion.questionText}</h1>
+        <h1>{learnerQuestionText}</h1>
         <div className="question-support">
           {currentQuestion.hint ? (
             <button
@@ -4396,8 +4593,8 @@ function ResultView({ session, questions, test, onReturn }: { session?: TestSess
       <PageTitle eyebrow={session.passed ? 'Passed' : 'Completed'} title="Your assessment result" />
       <section className="result-hero">
         <span className={session.passed ? 'score-badge pass' : 'score-badge fail'}>{session.passed ? 'Pass' : 'Fail'}</span>
-        <h1>{session.score} / {session.maxScore}</h1>
-        <p>{session.percentage}%</p>
+        <h1>{session.percentage}%</h1>
+        <p>Assessment completed</p>
       </section>
       <div className="metric-grid">
         <Metric label="Average response" value={`${averageResponse.toFixed(0)}s`} icon={<Clock3 />} />
@@ -4411,8 +4608,8 @@ function ResultView({ session, questions, test, onReturn }: { session?: TestSess
             const question = questions.find((item) => item.questionId === response.questionId)
               return (
                 <details key={`${response.questionId}-${index}`}>
-                  <summary>Q{index + 1}: {response.marksEarned} mark(s) earned</summary>
-                  <p>{question?.questionText}</p>
+                  <summary>Response detail: {response.marksEarned} mark(s) earned</summary>
+                  <p>{displayQuestionText(question?.questionText)}</p>
                   <p>Your answer: {response.selectedOption ?? 'No answer'} · Correct answer: {question?.correctAnswer}</p>
                   <p>
                     Hint used: {response.hintUsed ? 'Yes - 50% penalty' : 'No'} · Answer revealed: {response.answerRevealed ? 'Yes - zero marks' : 'No'} · Response time: {response.responseTime}s
