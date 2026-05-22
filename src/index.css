@@ -9,6 +9,11 @@
   --accent: #d5b52e;
   --success: #2f6b36;
   --error: #c00000;
+  --accent-text: #6f5200;
+  --success-text: #245d2c;
+  --info-text: #174f82;
+  --danger-text: #a00000;
+  --placeholder-text: #4f5d56;
   --bg: #f6f8f6;
   --bg-gradient:
     radial-gradient(circle at 8% 8%, rgba(213, 181, 46, 0.18), transparent 34%),
@@ -18,15 +23,16 @@
   --surface-strong: #ffffff;
   --surface-soft: rgba(255, 255, 255, 0.58);
   --text: #111827;
-  --muted: #65706b;
+  --muted: #4f5d56;
   --border: rgba(0, 67, 49, 0.14);
   --shadow: 0 22px 55px rgba(0, 67, 49, 0.12);
   --shadow-soft: 0 10px 30px rgba(0, 67, 49, 0.08);
   --glass-blur: blur(18px);
+  --deap-font-scale: 1;
   color: var(--text);
   background: var(--bg);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
+  font-size: calc(16px * var(--deap-font-scale));
   font-synthesis: none;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
@@ -36,21 +42,26 @@
 
 :root[data-theme="dark"] {
   --primary: #f0d465;
-  --primary-contrast: #062a21;
+  --primary-contrast: #ffffff;
   --secondary: #8bd8c2;
   --accent: #d5b52e;
-  --success: #8ecf8f;
-  --error: #ff8a8a;
+  --success: #9fe5c7;
+  --error: #ffb4b4;
+  --accent-text: #fff2a3;
+  --success-text: #9fe5c7;
+  --info-text: #b6dcff;
+  --danger-text: #ffb4b4;
+  --placeholder-text: #dce8e1;
   --bg: #051512;
   --bg-gradient:
     radial-gradient(circle at 10% 8%, rgba(213, 181, 46, 0.18), transparent 34%),
     radial-gradient(circle at 82% 10%, rgba(38, 155, 120, 0.18), transparent 32%),
     linear-gradient(135deg, #04100d 0%, #0b211b 58%, #071714 100%);
-  --surface: rgba(8, 31, 25, 0.72);
-  --surface-strong: #0e241f;
-  --surface-soft: rgba(19, 57, 47, 0.48);
-  --text: #eef8f3;
-  --muted: #b6c4bd;
+  --surface: rgba(8, 31, 25, 0.88);
+  --surface-strong: #0a211b;
+  --surface-soft: rgba(12, 45, 36, 0.82);
+  --text: #ffffff;
+  --muted: #dce8e1;
   --border: rgba(240, 212, 101, 0.18);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
   --shadow-soft: 0 12px 36px rgba(0, 0, 0, 0.24);
@@ -64,7 +75,30 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: clip;
   background: var(--bg-gradient);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@supports (min-height: 100dvh) {
+  body {
+    min-height: 100dvh;
+  }
+}
+
+img,
+picture,
+svg,
+video,
+canvas {
+  max-inline-size: 100%;
+}
+
+img,
+video {
+  block-size: auto;
 }
 
 button,
@@ -72,4 +106,31 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+select,
+textarea,
+summary {
+  min-block-size: 44px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]) {
+  min-block-size: 44px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand-gold);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

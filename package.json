@@ -8,6 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "continuity:snapshot": "node scripts/deap-continuity-guard.cjs snapshot",
+    "continuity:verify": "node scripts/deap-continuity-guard.cjs verify",
+    "problem-monitor": "node scripts/deap-problem-monitor.cjs",
+    "deploy:safe": "node scripts/deap-continuity-guard.cjs snapshot && npm run build && firebase deploy --only hosting && node scripts/deap-continuity-guard.cjs verify",
     "smoke:live": "node scripts/smoke.cjs",
     "smoke:local": "set TARGET_URL=http://127.0.0.1:5173&& node scripts/smoke.cjs"
   },
