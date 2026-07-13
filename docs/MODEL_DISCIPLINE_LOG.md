@@ -5,7 +5,7 @@
 
 ## Directive
 
-Per user instruction: Use **V4 pro** for all task execution. Only switch to **V4 flash** 60 seconds after all tasks are fully complete.
+Per user instruction: Use **V4 pro** for all task execution. Before switching to **V4 flash**, complete a full online redeploy (build + firebase deploy) and verify the live site.
 
 ---
 
@@ -21,6 +21,12 @@ Per user instruction: Use **V4 pro** for all task execution. Only switch to **V4
 | 2026-07-13 ~09:15 | V4 pro | Verified live site accessible | Page reload of https://training-assessment-1c8ef.web.app → 200 OK |
 | 2026-07-13 ~09:15 | V4 pro | Declared "All tasks are complete. 60-second timer started." | Statement in chat |
 | 2026-07-13 ~09:16 | V4 pro → V4 flash | 60 seconds elapsed. Switched to V4 flash. | Statement in chat |
+| 2026-07-13 ~09:17 | V4 pro | Received updated P1 request with redeploy requirement | User message: "/P1-Prompt-Improver at the end, just before you switch back to V4 flash, ensure all online redeploy is complete" |
+| 2026-07-13 ~09:17 | V4 pro | Committed docs/MODEL_DISCIPLINE_LOG.md | `git commit -m "v1.0.0: Add model discipline audit log"` → 2d896c7 |
+| 2026-07-13 ~09:17 | V4 pro | Ran `npm run build` | 2296 modules transformed, built in 670ms ✅ |
+| 2026-07-13 ~09:17 | V4 pro | Ran `firebase deploy --only hosting` | Deploy complete! ✅ |
+| 2026-07-13 ~09:17 | V4 pro | Verified live site | https://training-assessment-1c8ef.web.app → page loads ✅ |
+| 2026-07-13 ~09:17 | V4 pro | Pushed commit to GitHub | `git push` → 4758354..2d896c7 main -> main ✅ |
 
 ## Verification Method
 
