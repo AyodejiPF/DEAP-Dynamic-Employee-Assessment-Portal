@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const targetUrl = process.env.TARGET_URL || 'https://iicocece-assessment.web.app'
+const targetUrl = process.env.TARGET_URL || 'https://training-assessment-1c8ef.web.app'
 
 function writeFixtureFiles() {
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deap-smoke-'))
@@ -62,6 +62,9 @@ async function main() {
           sessions: [],
           auditEvents: [],
           analyticsEvents: [],
+          problemReports: [],
+          bugAuditLogs: [],
+          contributionPoints: [],
           trashRecords: [],
           questionBankTrainingSources: [],
           questionBankMetadata: {},
@@ -134,7 +137,7 @@ async function main() {
   }
 
   await page.getByRole('button', { name: /Manage Users/ }).click()
-  await page.waitForSelector('text=iicocece user access and credentials', { timeout: 15000 })
+  await page.waitForSelector('text=Training&assessment user access and credentials', { timeout: 15000 })
   await page.locator('label.upload-button:has-text("Import users") input[type=file]').setInputFiles(usersPath)
   await page.waitForSelector('text=2 user(s) imported successfully', { timeout: 15000 })
   await page.getByPlaceholder(/Search users/).fill('Ada Realdata')
@@ -242,7 +245,7 @@ async function main() {
   if (realState.importedQuestions !== 3) failures.push(`Expected 3 imported real questions, found ${realState.importedQuestions}.`)
   if (!realState.hasEditedCourseTitle) failures.push('Edited training course title was not saved to question-bank metadata.')
 
-  await page.getByRole('button', { name: /Reports/ }).click()
+  await page.getByRole('button', { name: /^Reports$/ }).click()
   await page.waitForSelector('text=Employee reports', { timeout: 15000 })
   const reportSelect = page.locator('.employee-report-panel select').first()
   const reportOptionText = (await reportSelect.locator('option').allTextContents()).join('\n')

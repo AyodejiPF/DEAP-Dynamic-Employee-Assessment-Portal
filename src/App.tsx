@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import Decimal from 'decimal.js'
 import {
   AlertCircle,
   Archive,
   ArchiveRestore,
   ArrowLeft,
+  ArrowRight,
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowUpToLine,
   BarChart3,
   Bell,
   Bot,
@@ -15,6 +20,8 @@ import {
   CheckCircle2,
   Copy,
   Clock3,
+  Eye,
+  EyeOff,
   FileDown,
   FileSpreadsheet,
   Gauge,
@@ -27,10 +34,15 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  Maximize2,
+  Minimize2,
   Play,
+  Pin,
+  PinOff,
   Plus,
   Presentation,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Send,
@@ -39,6 +51,7 @@ import {
   Shuffle,
   Sparkles,
   Sun,
+  TerminalSquare,
   Trash2,
   Upload,
   UserRound,
@@ -75,6 +88,7 @@ import { CHATS } from './chats-module'
 import './App.css'
 
 type Role = 'super_admin' | 'admin' | 'employee'
+type TesterAccountKey = 'testadmin' | 'testuser'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
 type OptionKey = 'A' | 'B' | 'C' | 'D' | 'E'
 type ThemeMode = 'light' | 'dark'
@@ -92,6 +106,8 @@ type DeapIconName =
   | 'admin'
   | 'settings'
   | 'notifications'
+  | 'feedback'
+  | 'inventory'
   | 'help'
   | 'my-tests'
   | 'my-results'
@@ -141,12 +157,93 @@ type AppView =
   | 'employees'
   | 'reports'
   | 'notifications'
+  | 'bug-reports'
+  | 'bug-feedback'
+  | 'feature-inventory'
   | 'settings'
   | 'my-tests'
   | 'my-results'
   | 'help'
   | 'taking-test'
   | 'result'
+
+type FeatureInventoryClassification = 'specific' | 'generic'
+type FeatureInventoryVisibility = 'public_user' | 'admin' | 'super_admin' | 'system_only'
+type FeatureInventoryStatus = 'confirmed' | 'strongly_implied' | 'needs_confirmation' | 'deprecated' | 'hidden'
+type FeatureInventoryScanStatus = 'complete' | 'partial' | 'failed'
+type FeatureInventoryExportFormat = 'pdf' | 'docx' | 'txt' | 'md' | 'json' | 'csv' | 'html' | 'xlsx'
+
+interface FeatureInventoryItem {
+  id: string
+  versionId: string
+  title: string
+  classification: FeatureInventoryClassification
+  category: string
+  description: string
+  routePaths: string[]
+  componentNames: string[]
+  sourceFiles: string[]
+  userRoles: string[]
+  visibility: FeatureInventoryVisibility
+  status: FeatureInventoryStatus
+  confidenceScore: number
+  lastDetectedAt: string
+  firstDetectedAt: string
+  relatedFeatures: string[]
+  exportTags: string[]
+}
+
+interface FeatureInventoryVersion {
+  id: string
+  versionNumber: number
+  createdAt: string
+  createdBy: 'scheduled_scan' | 'manual_refresh'
+  createdByUserId?: string
+  totalFeatureCount: number
+  specificFeatureCount: number
+  genericFeatureCount: number
+  addedCount: number
+  removedCount: number
+  changedCount: number
+  unchangedCount: number
+  scanStatus: FeatureInventoryScanStatus
+  formatsGenerated: FeatureInventoryExportFormat[]
+  firebaseStoragePaths: Partial<Record<FeatureInventoryExportFormat, string>>
+  notes?: string
+}
+
+interface FeatureInventoryScanLog {
+  id: string
+  versionId?: string
+  createdAt: string
+  createdBy: 'scheduled_scan' | 'manual_refresh' | 'system'
+  status: FeatureInventoryScanStatus
+  message: string
+}
+
+interface FeatureInventoryExportRecord {
+  id: string
+  versionId: string
+  createdAt: string
+  formats: FeatureInventoryExportFormat[]
+  fileNames: string[]
+  storagePaths: Partial<Record<FeatureInventoryExportFormat, string>>
+  itemCount: number
+  status: FeatureInventoryScanStatus
+}
+
+interface FeatureInventoryPayload {
+  generatedAt: string
+  version: FeatureInventoryVersion
+  items: FeatureInventoryItem[]
+  versions: FeatureInventoryVersion[]
+  scanLogs: FeatureInventoryScanLog[]
+  exports: FeatureInventoryExportRecord[]
+}
+
+interface FeatureInventoryDownloadPayload extends FeatureInventoryExportRecord {
+  signedUrls: Partial<Record<FeatureInventoryExportFormat, string>>
+}
 
 interface User {
   id: string
@@ -159,6 +256,19 @@ interface User {
   jobRole: string
   department: string
   supervisorId?: string
+  disabled?: boolean
+  disabledAt?: string
+  disabledReason?: string
+  disabledBy?: string
+  disabledById?: string
+  lastLoginAt?: string
+  passwordLastResetAt?: string
+  passwordLastResetBy?: string
+  passwordLastResetById?: string
+  testAccountKey?: TesterAccountKey
+  controlledAccount?: boolean
+  accountPurpose?: string
+  defaultPassword?: string
 }
 
 function roleDisplayName(role: Role): string {
@@ -178,6 +288,12 @@ function sortReportUsers(users: User[]): User[] {
       const roleRank = (role: Role) => (role === 'super_admin' ? 0 : role === 'admin' ? 1 : 2)
       return roleRank(left.role) - roleRank(right.role) || left.fullName.localeCompare(right.fullName)
     })
+}
+
+function isUserDisabled(user: User | undefined): boolean {
+  if (!user) return false
+  const status = String((user as User & { status?: string }).status || '').toLowerCase()
+  return Boolean(user.disabled) || ['inactive', 'disabled', 'suspended', 'terminated', 'deactivated', 'left'].includes(status)
 }
 
 interface TrainingCourse {
@@ -393,23 +509,183 @@ interface TestSession {
 }
 
 type ProblemSeverity = 'low' | 'medium' | 'high' | 'critical'
+type ProblemPriority = 'low' | 'normal' | 'high' | 'urgent'
+type FeedbackReportMode = 'bug' | 'feedback'
+type FeedbackAdminDecision = 'pending' | 'accepted' | 'duplicate' | 'rejected' | 'abuse' | 'repair-approved' | 'fixed'
+type ProblemStatus =
+  | 'Submitted'
+  | 'New'
+  | 'Under Review'
+  | 'Needs More Information'
+  | 'Accepted'
+  | 'Approved for Investigation'
+  | 'Investigation in Progress'
+  | 'Fix Proposed'
+  | 'Approved for Repair'
+  | 'Repair in Progress'
+  | 'Testing in Progress'
+  | 'Fixed'
+  | 'Fixed and Monitored'
+  | 'Rejected'
+  | 'Duplicate'
+  | 'Escalated'
+  | 'Closed'
+  | 'Archived'
+
+interface ProblemDiagnosticSnapshot {
+  browser?: string
+  deviceType?: string
+  operatingSystem?: string
+  screenSize?: string
+  appVersion?: string
+  networkStatus?: string
+  permissionToIncludeDiagnostics?: boolean
+}
+
+interface ProblemAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  dataUrl: string
+  createdAt: string
+}
 
 interface ProblemReport {
   id: string
   reporterId: string
+  reporterUserId?: string
+  reporterEmail?: string
   reporterName: string
   reporterRole: Role
   view: AppView
   title: string
   description: string
+  reportMode?: FeedbackReportMode
+  category?: string
+  expectedBehaviour?: string
+  actualBehaviour?: string
+  reproductionSteps?: string
+  moduleName?: string
+  affectedAreaId?: string
+  affectedAreaText?: string
+  currentRoute?: string
+  currentPageTitle?: string
+  browserInfo?: string
+  deviceInfo?: string
+  operatingSystemInfo?: string
+  consoleError?: string
+  additionalComments?: string
+  workspaceId?: string
+  pagePath?: string
+  userSeverity?: ProblemSeverity
+  systemSuggestedSeverity?: ProblemSeverity
+  adminSeverity?: ProblemSeverity
+  adminPriority?: ProblemPriority
+  adminDecision?: FeedbackAdminDecision
+  pointsAwarded?: number
+  pointsReason?: string
+  pointsAwardedAt?: string
   severity: ProblemSeverity
-  status: 'open' | 'reviewing' | 'resolved'
+  status: ProblemStatus
   createdAt: string
+  updatedAt?: string
   url: string
   userAgent: string
   syncState: SyncState
+  diagnosticSnapshot?: ProblemDiagnosticSnapshot
+  attachments?: ProblemAttachment[]
+  duplicateOf?: string
+  assignedTo?: string
+  adminNotes?: string[]
+  investigationSummary?: string
+  rootCause?: string
+  fixPlan?: string
+  filesAffected?: string[]
+  testsPerformed?: string[]
+  verificationResult?: string
+  riskReview?: string
+  deploymentRecommendation?: string
+  finalReport?: string
+  repairPrompt?: string
+  approvedForInvestigationAt?: string
+  approvedForRepairAt?: string
+  approvedForDeploymentAt?: string
   activeTestId?: string
   activeSessionId?: string
+}
+
+type AffectedAreaType = 'page' | 'feature' | 'module' | 'workflow' | 'integration' | 'report' | 'setting' | 'other'
+type AffectedAreaStatus = 'active' | 'pendingReview' | 'rejected' | 'merged' | 'archived'
+
+interface AffectedArea {
+  id: string
+  displayName: string
+  slug: string
+  type: AffectedAreaType
+  routePath?: string
+  moduleId?: string
+  featureId?: string
+  aliases: string[]
+  isSystemDefined: boolean
+  isUserSuggested: boolean
+  status: AffectedAreaStatus
+  createdBy?: string
+  approvedBy?: string
+  createdAt: string
+  updatedAt: string
+  usageCount: number
+  relatedBugReportId?: string
+  mergedInto?: string
+}
+
+interface AffectedAreaSelection {
+  id?: string
+  text?: string
+  isOther: boolean
+}
+
+interface FeedbackSubmissionDraft {
+  mode?: FeedbackReportMode
+  category?: string
+  title?: string
+  description?: string
+  expectedBehaviour?: string
+  reproductionSteps?: string
+  affectedAreaSelection?: AffectedAreaSelection
+  otherAffectedAreaText?: string
+  browserInfo?: string
+  deviceInfo?: string
+  operatingSystemInfo?: string
+  consoleError?: string
+  additionalComments?: string
+  severity?: ProblemSeverity
+  permissionToIncludeDiagnostics?: boolean
+  updatedAt?: string
+}
+
+interface UserContributionPoints {
+  id: string
+  userId: string
+  totalPoints: number
+  currentBadge: string
+  validBugReports: number
+  validFeedbackReports: number
+  rejectedReports: number
+  duplicateReports: number
+  lastAwardedAt?: string
+}
+
+interface BugAuditLog {
+  id: string
+  bugReportId: string
+  actorUserId: string
+  actorRole: Role
+  action: string
+  previousStatus?: ProblemStatus
+  newStatus?: ProblemStatus
+  notes?: string
+  createdAt: string
 }
 
 interface AuditEvent {
@@ -520,6 +796,21 @@ interface AiIntelligenceResponse {
 
 type HelpCenterTab = 'learning' | 'help' | 'faq' | 'ai' | 'admin'
 type HelpContentType = 'lesson' | 'article' | 'faq' | 'troubleshooting' | 'policy' | 'guide'
+type ResponsiveAccordionMode = 'single' | 'multiple'
+type ResponsiveAccordionStatus = 'complete' | 'incomplete' | 'draft' | 'pending' | 'failed' | 'synced' | 'archived'
+
+interface ResponsiveAccordionItem {
+  id: string
+  title: string
+  summary?: string
+  status?: ResponsiveAccordionStatus
+  badgeCount?: number
+  disabled?: boolean
+  defaultOpen?: boolean
+  lazyLoad?: boolean
+  meta?: string
+  content: ReactNode
+}
 
 interface HelpContentItem {
   id: string
@@ -578,8 +869,64 @@ interface LayoutSettings {
   sidebarWidthPx: number
 }
 
+type DashboardWidgetSize = 'small' | 'medium' | 'large'
+type DashboardDeviceClass = 'mobile' | 'tablet' | 'desktop'
+
+interface DashboardWidgetLayout {
+  widgetId: string
+  widgetType: string
+  order: number
+  visible: boolean
+  pinned: boolean
+  locked: boolean
+  collapsed: boolean
+  size: DashboardWidgetSize
+  settings?: Record<string, unknown>
+  addedAt?: string
+  lastModified?: string
+}
+
+interface DashboardLayoutRevision {
+  revisionId: string
+  timestamp: string
+  device: DashboardDeviceClass
+  changeDescription: string
+  widgets: DashboardWidgetLayout[]
+}
+
+interface UserDashboardLayout {
+  userId: string
+  workspaceId?: string
+  dashboardId: string
+  schemaVersion: string
+  widgets: DashboardWidgetLayout[]
+  conflictToken: string
+  isDefault: boolean
+  roleTemplate?: string
+  lastUpdated: string
+  lastUpdatedDevice: DashboardDeviceClass
+  lastUpdatedClient: string
+  lastKnownGood?: DashboardWidgetLayout[]
+  revisionHistory?: DashboardLayoutRevision[]
+}
+
+type DashboardLayoutMap = Record<string, UserDashboardLayout>
+
+interface DashboardWidgetDefinition {
+  id: string
+  widgetType: string
+  title: string
+  summary: string
+  defaultSize: DashboardWidgetSize
+  iconName: DeapIconName
+}
+
 type ApiTokenKind = 'super' | 'regular'
-type ApiTokenStatus = 'active' | 'revoked'
+type ApiTokenStatus = 'active' | 'revoked' | 'archived' | 'rotation_pending'
+type ApiTokenRiskLevel = 'critical' | 'high' | 'medium' | 'low'
+type ApiTokenDeploymentStatus = 'not_deployed' | 'deployed' | 'active' | 'unverified' | 'deprecated' | 'revoked' | 'rotation_pending' | 'archived'
+type ApiTokenRotationPolicy = '30_days' | '60_days' | '90_days' | '180_days' | '365_days'
+type ApiTokenUsageOutcome = 'allowed' | 'denied' | 'failed' | 'expired' | 'revoked' | 'rate_limited'
 type ApiCapabilityOperation =
   | 'READ'
   | 'WRITE'
@@ -627,17 +974,79 @@ interface ApiTokenRecord {
   name: string
   kind: ApiTokenKind
   tokenPrefix: string
+  tokenFingerprint: string
   tokenHash: string
-  tokenSecret?: string
   scopes: string[]
+  purpose: string
+  ownerId: string
   createdAt: string
   expiresAt: string
   createdBy: string
   status: ApiTokenStatus
+  riskLevel: ApiTokenRiskLevel
+  allowedModules: string[]
+  allowedEnvironments: string[]
+  allowedIps: string[]
+  rateLimit?: number
+  usageLimit?: number
+  usageCount: number
+  firstUsedAt?: string
+  lastUsedAt?: string
+  rotationPolicy: ApiTokenRotationPolicy
+  rotationStatus: ApiTokenDeploymentStatus
+  lastRotatedAt?: string
+  nextRotationDueAt: string
+  deploymentRecords: ApiTokenDeploymentRecord[]
+  usageLogs: ApiTokenUsageLog[]
+  auditLogs: ApiTokenAuditLog[]
+  notes?: string
   revokedAt?: string
   revokedBy?: string
+  revokedReason?: string
+  archivedAt?: string
+  archivedBy?: string
   oauthProfile: boolean
   auditLogging: boolean
+}
+
+interface ApiTokenDeploymentRecord {
+  id: string
+  tokenId: string
+  deploymentName: string
+  environment: string
+  serviceName: string
+  deployedBy: string
+  deployedAt: string
+  status: ApiTokenDeploymentStatus
+  lastVerifiedAt?: string
+  notes?: string
+}
+
+interface ApiTokenUsageLog {
+  id: string
+  tokenId: string
+  endpoint: string
+  method: string
+  module: string
+  environment: string
+  ipAddress?: string
+  userAgent?: string
+  timestamp: string
+  outcome: ApiTokenUsageOutcome
+  responseStatus: number
+  failureReason?: string
+}
+
+interface ApiTokenAuditLog {
+  id: string
+  tokenId: string
+  actor: string
+  action: string
+  tokenType: ApiTokenKind
+  timestamp: string
+  affectedFields?: string[]
+  reason?: string
+  result: 'success' | 'failed'
 }
 
 interface GeneratedApiToken {
@@ -651,6 +1060,19 @@ interface ApiTokenCreateRequest {
   scopes: string[]
   oauthProfile: boolean
   expiresInDays: number
+  purpose: string
+  ownerId: string
+  allowedModules: string[]
+  allowedEnvironments: string[]
+  allowedIps: string[]
+  rateLimit?: number
+  usageLimit?: number
+  rotationPolicy: ApiTokenRotationPolicy
+  deploymentName?: string
+  deploymentEnvironment?: string
+  deploymentService?: string
+  notes?: string
+  justification?: string
 }
 
 interface SharedAppState {
@@ -667,11 +1089,15 @@ interface SharedAppState {
   auditEvents?: AuditEvent[]
   analyticsEvents?: AnalyticsEvent[]
   problemReports?: ProblemReport[]
+  affectedAreas?: AffectedArea[]
+  bugAuditLogs?: BugAuditLog[]
+  contributionPoints?: UserContributionPoints[]
   trashRecords?: ReportTrashRecord[]
   questionExposureCounts?: QuestionExposureCounts
   questionMastery?: UserQuestionMastery
   branding?: Branding
   layoutSettings?: LayoutSettings
+  dashboardLayouts?: DashboardLayoutMap
   apiTokens?: ApiTokenRecord[]
   updatedAt?: string
 }
@@ -683,6 +1109,55 @@ const defaultBranding: Branding = {
 const defaultLayoutSettings: LayoutSettings = {
   sidebarWidthPx: 232,
 }
+
+const dashboardLayoutStorageKey = 'deap-dashboard-layouts'
+const dashboardLayoutSchemaVersion = '1.0.0'
+const adminDashboardId = 'admin-dashboard'
+
+const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
+  {
+    id: 'metrics',
+    widgetType: 'metric-grid',
+    title: 'KPI metrics',
+    summary: 'Live tests, question stock, employee count, pass rate, sync health, and monitored activity.',
+    defaultSize: 'large',
+    iconName: 'dashboard',
+  },
+  {
+    id: 'learning-catalog',
+    widgetType: 'learning-catalogue',
+    title: 'Learning catalogue',
+    summary: 'Question-bank learning topics and linked readiness indicators.',
+    defaultSize: 'large',
+    iconName: 'training',
+  },
+  {
+    id: 'upgrade-console',
+    widgetType: 'upgrade-console',
+    title: 'Product upgrade console',
+    summary: 'Enterprise feature roadmap, product planning, and implementation knowledge.',
+    defaultSize: 'large',
+    iconName: 'settings',
+  },
+  {
+    id: 'difficulty-stock',
+    widgetType: 'chart',
+    title: 'Difficulty stock',
+    summary: 'Question inventory by Easy, Medium, and Hard difficulty levels.',
+    defaultSize: 'medium',
+    iconName: 'analytics',
+  },
+  {
+    id: 'recent-attempts',
+    widgetType: 'table',
+    title: 'Recent attempts',
+    summary: 'Latest learner sessions, scores, completion status, and admin nullification controls.',
+    defaultSize: 'large',
+    iconName: 'reports',
+  },
+]
+
+const dashboardWidgetDefinitionById = new Map(dashboardWidgetDefinitions.map((definition) => [definition.id, definition]))
 
 const sidebarWidthMinPx = 176
 const sidebarWidthMaxPx = 360
@@ -771,7 +1246,7 @@ const trainingContentTypeDefinitions: TrainingContentTypeDefinition[] = [
   { id: 'social-learning-board', category: 'Collaborative & Social Learning', label: 'Social learning board', description: 'Feed-style idea sharing board.', assetKind: 'activity', ready: false },
   { id: 'embedded-video', category: 'External Resources & Integrations', label: 'Embedded YouTube / Vimeo video', description: 'Third-party video embedded in the LMS.', assetKind: 'url', ready: true },
   { id: 'external-link', category: 'External Resources & Integrations', label: 'External website link / URL', description: 'Curated web resource.', assetKind: 'url', ready: true },
-  { id: 'lti-tool', category: 'External Resources & Integrations', label: 'LTI-connected tool', description: 'Third-party app such as Turnitin, H5P, or Kaltura.', assetKind: 'url', ready: false },
+  { id: 'lti-tool', category: 'External Resources & Integrations', label: 'LTI-connected tool', description: 'Third-party app such as H5P, SCORM Cloud, or Kaltura.', assetKind: 'url', ready: false },
   { id: 'survey-poll', category: 'External Resources & Integrations', label: 'Survey / poll', description: 'Feedback collection and formative gauging tool.', assetKind: 'activity', ready: false },
   { id: 'post-course-feedback', category: 'External Resources & Integrations', label: 'Post-course feedback form', description: 'End-of-module learner satisfaction survey.', assetKind: 'activity', ready: false },
   { id: 'adaptive-pathway', category: 'AI, Adaptive & Emerging Formats', label: 'Adaptive learning pathway', description: 'AI-personalized course route based on performance.', assetKind: 'activity', ready: false },
@@ -1604,10 +2079,10 @@ const apiCapabilityCatalog: ApiCapability[] = [
     sensitivity: 'CRITICAL',
     destructive: false,
     requiresApproval: true,
-    description: 'Generates a stored Super Token package with every capability scope in the catalogue. Creation is locked to Ayodeji Falope.',
+    description: 'Generates a Super Admin Token package with every capability scope in the catalogue. Creation is locked to Ayodeji Falope and the full secret is displayed once only.',
     exampleUseCase: 'The owner links DEAP to a trusted internal orchestrator app with full administrative capability.',
     status: 'ACTIVE',
-    notes: 'The Bearer Token remains visible inside the Ayodeji-only Token Studio until revoked or expired.',
+    notes: 'Only fingerprint, hash, lifecycle metadata, usage, deployment, and audit records remain after generation.',
   },
   {
     id: 'CAP-045',
@@ -1622,7 +2097,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     sensitivity: 'CRITICAL',
     destructive: false,
     requiresApproval: true,
-    description: 'Generates a stored Regular Scoped Token package with admin-selected checkbox scopes and optional OAuth-style profile metadata. Creation is locked to Ayodeji Falope.',
+    description: 'Generates a Variable Read Write Token package with admin-selected checkbox scopes and optional OAuth-style profile metadata. Creation is locked to Ayodeji Falope and the full secret is displayed once only.',
     exampleUseCase: 'Admin gives another internal app read-only analytics and report export access without destructive permissions.',
     status: 'ACTIVE',
     notes: 'Checkbox-selected scopes determine what the token is intended to authorize.',
@@ -1769,6 +2244,106 @@ const seedUsers: User[] = [
     department: 'Operations',
   },
 ]
+
+interface TesterAccountDefinition {
+  key: TesterAccountKey
+  id: string
+  userId: string
+  email: string
+  fullName: string
+  displayName: string
+  defaultPassword: string
+  role: Role
+  jobRole: string
+  department: string
+  supervisorId: string
+  badge: string
+  purpose: string
+  description: string
+}
+
+interface TesterAccountOperationResult {
+  accountKey: TesterAccountKey
+  accountName: string
+  password?: string
+  verificationPassed?: boolean
+  message: string
+}
+
+const testerAccountDefinitions: TesterAccountDefinition[] = [
+  {
+    key: 'testadmin',
+    id: 'u-test-admin',
+    userId: 'U_TEST_ADMIN',
+    email: 'testadmin@example.local',
+    fullName: 'test admin',
+    displayName: 'test admin',
+    defaultPassword: '@dm1N#',
+    role: 'admin',
+    jobRole: 'Admin tester',
+    department: 'Executive',
+    supervisorId: 'U001',
+    badge: 'Admin tester',
+    purpose: 'Temporary admin level reviewer account',
+    description: 'Use this account to test admin workflows without sharing the real Super Admin account.',
+  },
+  {
+    key: 'testuser',
+    id: 'u-test-user',
+    userId: 'U_TEST_USER',
+    email: 'testuser@example.local',
+    fullName: 'test user',
+    displayName: 'test user',
+    defaultPassword: 't#stus#r',
+    role: 'employee',
+    jobRole: 'Standard user tester',
+    department: 'General',
+    supervisorId: 'U001',
+    badge: 'Standard user tester',
+    purpose: 'Temporary standard user tester account',
+    description: 'Use this account to test the ordinary employee experience with standard permissions.',
+  },
+]
+
+const testerAccountKeySet = new Set<TesterAccountKey>(testerAccountDefinitions.map((definition) => definition.key))
+
+function testerAccountDefinitionFor(key: TesterAccountKey | string | undefined): TesterAccountDefinition | undefined {
+  return testerAccountDefinitions.find((definition) => definition.key === key)
+}
+
+function isTesterAccount(user: User | undefined): boolean {
+  return Boolean(user?.controlledAccount && user.testAccountKey && testerAccountKeySet.has(user.testAccountKey))
+}
+
+function normalizeTesterAccount(definition: TesterAccountDefinition, existing?: User): User {
+  const disabled = existing ? isUserDisabled(existing) : true
+  return {
+    ...(existing ?? {}),
+    id: definition.id,
+    userId: definition.userId,
+    email: definition.email,
+    fullName: definition.fullName,
+    displayName: definition.displayName,
+    password: existing?.password || definition.defaultPassword,
+    role: definition.role,
+    jobRole: definition.jobRole,
+    department: definition.department,
+    supervisorId: definition.supervisorId,
+    disabled,
+    disabledAt: disabled ? existing?.disabledAt : undefined,
+    disabledReason: disabled ? existing?.disabledReason ?? 'Tester access is switched off until the Super Admin enables it.' : undefined,
+    disabledBy: disabled ? existing?.disabledBy : undefined,
+    disabledById: disabled ? existing?.disabledById : undefined,
+    lastLoginAt: existing?.lastLoginAt,
+    passwordLastResetAt: existing?.passwordLastResetAt,
+    passwordLastResetBy: existing?.passwordLastResetBy,
+    passwordLastResetById: existing?.passwordLastResetById,
+    testAccountKey: definition.key,
+    controlledAccount: true,
+    accountPurpose: definition.purpose,
+    defaultPassword: definition.defaultPassword,
+  }
+}
 
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
 const optionKeys: OptionKey[] = ['A', 'B', 'C', 'D', 'E']
@@ -1995,12 +2570,18 @@ function normalizeUserDirectory(users: User[] | undefined): User[] {
   const withoutDemo = incoming.filter((user) => !demoUserIds.has(user.id) && !isErasedUserId(user.id))
   const hasBootstrapAdmin = withoutDemo.some((user) => user.id === seedUsers[0].id)
   const withAdmin = hasBootstrapAdmin ? withoutDemo : [seedUsers[0], ...withoutDemo]
-  return Array.from(
-    withAdmin.reduce((map, user) => {
-      map.set(user.id, user)
-      return map
-    }, new Map<string, User>()).values(),
-  )
+  const byId = withAdmin.reduce((map, user) => {
+    map.set(user.id, user)
+    return map
+  }, new Map<string, User>())
+  testerAccountDefinitions.forEach((definition) => {
+    const existing = Array.from(byId.values()).find(
+      (user) => user.testAccountKey === definition.key || user.id === definition.id || user.userId === definition.userId,
+    )
+    if (existing && existing.id !== definition.id) byId.delete(existing.id)
+    byId.set(definition.id, normalizeTesterAccount(definition, existing))
+  })
+  return Array.from(byId.values())
 }
 
 const navItems = [
@@ -2011,6 +2592,8 @@ const navItems = [
   ['employees', 'employees', 'Manage Users'],
   ['analytics', 'analytics', 'AI Analytics'],
   ['reports', 'reports', 'Reports'],
+  ['bug-reports', 'notifications', 'Bug Reports'],
+  ['feature-inventory', 'inventory', 'Feature Inventory'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
 ] as const
@@ -2020,6 +2603,8 @@ const employeeNav = [
   ['my-results', 'my-results', 'My Results'],
 ] as const
 const universalNav = [['help', 'help', 'Learning / Help']] as const
+const participationNav = [['bug-feedback', 'feedback', 'Bug Report and Feedback']] as const
+const problemLauncherCooldownMs = 15 * 60 * 1000
 
 const adminViewPermissions: Partial<Record<AppView, PermissionKey>> = {
   dashboard: 'view_dashboard',
@@ -2062,6 +2647,20 @@ const permissionCatalog: Array<{ key: PermissionKey; label: string; description:
 ]
 
 function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
+  if (user.testAccountKey === 'testadmin') {
+    return {
+      take_tests: true,
+      view_own_results: true,
+      view_dashboard: true,
+      manage_questions: true,
+      manage_tests: true,
+      manage_users: true,
+      view_analytics: true,
+      export_reports: true,
+      manage_settings: false,
+      take_admin_self_test: true,
+    }
+  }
   const isAdminUser = user.role === 'super_admin' || user.role === 'admin'
   if (isAdminUser) {
     return {
@@ -2281,6 +2880,40 @@ function readStored<T>(key: string, fallback: T): T {
   }
 }
 
+const clientDiagnosticStorageKey = 'deap-recent-client-errors'
+
+function safeDiagnosticMessage(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[number]')
+    .replace(/(password|token|secret|authorization|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/[<>]/g, '')
+    .slice(0, 420)
+}
+
+function recordClientDiagnostic(kind: string, message: unknown) {
+  try {
+    const detail = safeDiagnosticMessage(message)
+    if (!detail) return
+    const existing = readStored<Array<{ kind: string; detail: string; createdAt: string }>>(clientDiagnosticStorageKey, [])
+    const next = [
+      { kind, detail, createdAt: new Date().toISOString() },
+      ...existing.filter((item) => item.detail !== detail),
+    ].slice(0, 8)
+    localStorage.setItem(clientDiagnosticStorageKey, JSON.stringify(next))
+  } catch {
+    // Diagnostics must never interrupt the user workflow.
+  }
+}
+
+function readClientDiagnosticSummary(): string {
+  return readStored<Array<{ kind: string; detail: string; createdAt: string }>>(clientDiagnosticStorageKey, [])
+    .slice(0, 4)
+    .map((item) => `${new Date(item.createdAt).toLocaleString()} - ${item.kind}: ${item.detail}`)
+    .join('\n')
+    .slice(0, 1200)
+}
+
 function readDeapLocalStorageSnapshot(): Record<string, string> {
   const snapshot: Record<string, string> = {}
   try {
@@ -2401,7 +3034,7 @@ function sameSerializedState(left: unknown, right: unknown): boolean {
 const sharedStateEndpoint = '/api/deap-state'
 const courseImageRegistryEndpoint = '/api/deap-course-images'
 const questionBankCloudEndpoint = '/api/deap-question-banks'
-const hostedAppOrigin = 'https://iicocece-assessment.web.app'
+const hostedAppOrigin = 'https://training-assessment-1c8ef.web.app'
 const firebaseProjectId = 'iicocece-assessment'
 const firebaseWebApiKey = 'AIzaSyB8CVXfgGPlOC2Q69tFeiPMaZ-SMHz1IYE'
 const firestoreSharedStateEndpoint = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/deapApp/sharedState?key=${firebaseWebApiKey}`
@@ -2494,7 +3127,604 @@ function mergeQuestionMastery(incoming: UserQuestionMastery | undefined, existin
   return next
 }
 
+function dashboardDeviceClass(): DashboardDeviceClass {
+  if (typeof window === 'undefined') return 'desktop'
+  const width = window.innerWidth
+  if (width < 640) return 'mobile'
+  if (width < 1024) return 'tablet'
+  return 'desktop'
+}
+
+function dashboardConflictToken(): string {
+  return eventId('dashboard-layout')
+}
+
+function defaultDashboardWidgets(now = new Date().toISOString()): DashboardWidgetLayout[] {
+  return dashboardWidgetDefinitions.map((definition, index) => ({
+    widgetId: definition.id,
+    widgetType: definition.widgetType,
+    order: index + 1,
+    visible: true,
+    pinned: false,
+    locked: false,
+    collapsed: false,
+    size: definition.defaultSize,
+    addedAt: now,
+    lastModified: now,
+  }))
+}
+
+function normalizeDashboardWidgetLayout(widget: Partial<DashboardWidgetLayout> | undefined, fallbackOrder: number, now = new Date().toISOString()): DashboardWidgetLayout | undefined {
+  const widgetId = String(widget?.widgetId || '').trim()
+  if (!widgetId) return undefined
+  const definition = dashboardWidgetDefinitionById.get(widgetId)
+  const size = widget?.size && ['small', 'medium', 'large'].includes(widget.size) ? widget.size : definition?.defaultSize ?? 'medium'
+  return {
+    widgetId,
+    widgetType: String(widget?.widgetType || definition?.widgetType || 'legacy-widget').trim(),
+    order: Number.isFinite(widget?.order) ? Number(widget?.order) : fallbackOrder,
+    visible: widget?.visible !== false,
+    pinned: Boolean(widget?.pinned),
+    locked: Boolean(widget?.locked),
+    collapsed: Boolean(widget?.collapsed),
+    size,
+    settings: widget?.settings && typeof widget.settings === 'object' ? widget.settings : undefined,
+    addedAt: widget?.addedAt || now,
+    lastModified: widget?.lastModified || now,
+  }
+}
+
+function normalizeDashboardWidgets(widgets: DashboardWidgetLayout[] | undefined, now = new Date().toISOString()): DashboardWidgetLayout[] {
+  const widgetMap = new Map<string, DashboardWidgetLayout>()
+  ;(widgets ?? []).forEach((widget, index) => {
+    const normalized = normalizeDashboardWidgetLayout(widget, index + 1, now)
+    if (normalized) widgetMap.set(normalized.widgetId, normalized)
+  })
+  defaultDashboardWidgets(now).forEach((widget) => {
+    if (!widgetMap.has(widget.widgetId)) widgetMap.set(widget.widgetId, widget)
+  })
+  return Array.from(widgetMap.values()).sort((left, right) => left.order - right.order || left.widgetId.localeCompare(right.widgetId))
+}
+
+function normalizeDashboardLayout(userId: string, layout?: Partial<UserDashboardLayout>): UserDashboardLayout {
+  const now = new Date().toISOString()
+  const normalizedUserId = String(layout?.userId || userId || 'unknown-user').trim()
+  const widgets = normalizeDashboardWidgets(layout?.widgets, now)
+  const rawRevisions = Array.isArray(layout?.revisionHistory) ? layout.revisionHistory : []
+  const revisionHistory = rawRevisions
+    .filter((revision) => revision?.revisionId && Array.isArray(revision.widgets))
+    .slice(0, 12)
+    .map((revision) => ({
+      revisionId: String(revision.revisionId),
+      timestamp: revision.timestamp || now,
+      device: ['mobile', 'tablet', 'desktop'].includes(revision.device) ? revision.device : 'desktop',
+      changeDescription: String(revision.changeDescription || 'Dashboard layout revision').slice(0, 180),
+      widgets: normalizeDashboardWidgets(revision.widgets, now),
+    }))
+  return {
+    userId: normalizedUserId,
+    workspaceId: layout?.workspaceId,
+    dashboardId: String(layout?.dashboardId || adminDashboardId),
+    schemaVersion: dashboardLayoutSchemaVersion,
+    widgets,
+    conflictToken: layout?.conflictToken || dashboardConflictToken(),
+    isDefault: Boolean(layout?.isDefault),
+    roleTemplate: layout?.roleTemplate,
+    lastUpdated: layout?.lastUpdated || now,
+    lastUpdatedDevice: ['mobile', 'tablet', 'desktop'].includes(layout?.lastUpdatedDevice ?? '') ? (layout?.lastUpdatedDevice as DashboardDeviceClass) : 'desktop',
+    lastUpdatedClient: String(layout?.lastUpdatedClient || '').slice(0, 300),
+    lastKnownGood: Array.isArray(layout?.lastKnownGood) ? normalizeDashboardWidgets(layout.lastKnownGood, now) : undefined,
+    revisionHistory,
+  }
+}
+
+function normalizeDashboardLayouts(layouts: DashboardLayoutMap | undefined): DashboardLayoutMap {
+  return Object.fromEntries(
+    Object.entries(layouts ?? {})
+      .map(([userId, layout]) => [userId, normalizeDashboardLayout(userId, layout)])
+      .filter(([, layout]) => Boolean((layout as UserDashboardLayout).userId)),
+  ) as DashboardLayoutMap
+}
+
+function mergeDashboardLayouts(incoming: DashboardLayoutMap | undefined, existing: DashboardLayoutMap | undefined): DashboardLayoutMap {
+  const next = normalizeDashboardLayouts(existing)
+  Object.entries(normalizeDashboardLayouts(incoming)).forEach(([userId, incomingLayout]) => {
+    const existingLayout = next[userId]
+    if (!existingLayout || sharedStateTime(incomingLayout.lastUpdated) >= sharedStateTime(existingLayout.lastUpdated)) {
+      next[userId] = incomingLayout
+    }
+  })
+  return next
+}
+
+function dashboardDisplayWidgets(layout: UserDashboardLayout): DashboardWidgetLayout[] {
+  return layout.widgets
+    .filter((widget) => widget.visible && dashboardWidgetDefinitionById.has(widget.widgetId))
+    .sort((left, right) => Number(right.pinned) - Number(left.pinned) || left.order - right.order || left.widgetId.localeCompare(right.widgetId))
+}
+
 const reportTrashRetentionMs = 30 * 24 * 60 * 60 * 1000
+const problemStatuses: ProblemStatus[] = [
+  'Submitted',
+  'New',
+  'Under Review',
+  'Needs More Information',
+  'Accepted',
+  'Approved for Investigation',
+  'Investigation in Progress',
+  'Fix Proposed',
+  'Approved for Repair',
+  'Repair in Progress',
+  'Testing in Progress',
+  'Fixed',
+  'Fixed and Monitored',
+  'Rejected',
+  'Duplicate',
+  'Escalated',
+  'Closed',
+  'Archived',
+]
+const problemTerminalStatuses = new Set<ProblemStatus>(['Fixed', 'Fixed and Monitored', 'Rejected', 'Duplicate', 'Closed', 'Archived'])
+const problemPriorities: ProblemPriority[] = ['urgent', 'high', 'normal', 'low']
+const problemSeverities: ProblemSeverity[] = ['critical', 'high', 'medium', 'low']
+const problemAttachmentMaxBytes = 180_000
+const problemAttachmentMaxCount = 2
+const bugReportCategories = [
+  'Button or link not working',
+  'Page not loading',
+  'Wrong data displayed',
+  'Form submission issue',
+  'Login or access issue',
+  'Notification issue',
+  'File upload issue',
+  'Layout issue',
+  'Speed issue',
+  'Payment or billing issue',
+  'Other bug',
+]
+const feedbackCategories = [
+  'Feature request',
+  'Improvement suggestion',
+  'Usability complaint',
+  'Design feedback',
+  'Performance feedback',
+  'Training or help request',
+  'General comment',
+]
+const affectedAreaStatuses: AffectedAreaStatus[] = ['active', 'pendingReview', 'rejected', 'merged', 'archived']
+const affectedAreaTypes: AffectedAreaType[] = ['page', 'feature', 'module', 'workflow', 'integration', 'report', 'setting', 'other']
+const affectedAreaSeedDefinitions: Array<Omit<AffectedArea, 'id' | 'slug' | 'createdAt' | 'updatedAt' | 'usageCount' | 'status' | 'createdBy' | 'approvedBy' | 'relatedBugReportId' | 'mergedInto'>> = [
+  { displayName: 'Dashboard', type: 'page', routePath: '/dashboard', aliases: ['home', 'main dashboard', 'admin dashboard'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Training', type: 'module', routePath: '/training', aliases: ['learning', 'lms', 'course library'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Tests', type: 'module', routePath: '/tests', aliases: ['assessments', 'my tests', 'exam'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Question Bank', type: 'module', routePath: '/questions', aliases: ['questions', 'question catalogue', 'bank'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Reports', type: 'report', routePath: '/reports', aliases: ['reporting', 'results reports'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Analytics', type: 'report', routePath: '/analytics', aliases: ['insights', 'stats', 'metrics'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'User Management', type: 'module', routePath: '/employees', aliases: ['employees', 'users', 'staff records'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Admin Portal', type: 'module', routePath: '/admin', aliases: ['admin', 'management workspace'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Feature Catalogue', type: 'feature', routePath: '/feature-inventory', aliases: ['feature inventory', 'feature registry', 'feature map'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Course Page', type: 'page', routePath: '/course', aliases: ['course builder', 'course detail', 'course module'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Content Upload', type: 'workflow', routePath: '/upload', aliases: ['upload', 'file upload', 'content import'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Flashcards', type: 'feature', routePath: '/flashcards', aliases: ['cards', 'study cards'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Google Drive Integration', type: 'integration', routePath: '/integrations/google-drive', aliases: ['drive', 'google drive', 'docs import'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Firebase Storage', type: 'integration', routePath: '/storage/firebase', aliases: ['firebase', 'cloud storage', 'file storage'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Bug Report', type: 'feature', routePath: '/bug-feedback', aliases: ['bug report and feedback', 'feedback', 'report a bug'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Notifications', type: 'feature', routePath: '/notifications', aliases: ['alerts', 'messages'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Settings', type: 'setting', routePath: '/settings', aliases: ['preferences', 'configuration'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Login', type: 'page', routePath: '/login', aliases: ['sign in', 'authentication'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Profile', type: 'page', routePath: '/profile', aliases: ['user profile', 'account'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Search', type: 'feature', routePath: '/search', aliases: ['find', 'lookup'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Export', type: 'workflow', routePath: '/export', aliases: ['download', 'bulk export', 'file export'], isSystemDefined: true, isUserSuggested: false },
+  { displayName: 'Audit Logs', type: 'report', routePath: '/audit', aliases: ['audit trail', 'activity log', 'logs'], isSystemDefined: true, isUserSuggested: false },
+]
+const affectedAreaViewHints: Partial<Record<AppView, string>> = {
+  dashboard: 'Dashboard',
+  training: 'Training',
+  tests: 'Tests',
+  'my-tests': 'Tests',
+  questions: 'Question Bank',
+  reports: 'Reports',
+  analytics: 'Analytics',
+  employees: 'User Management',
+  notifications: 'Notifications',
+  settings: 'Settings',
+  login: 'Login',
+  'bug-feedback': 'Bug Report',
+  'bug-reports': 'Bug Report',
+  'feature-inventory': 'Feature Catalogue',
+}
+const contributionBadgeLevels = [
+  { badge: 'First Reporter', points: 10 },
+  { badge: 'Helpful Eye', points: 50 },
+  { badge: 'Quality Contributor', points: 100 },
+  { badge: 'Bug Hunter', points: 250 },
+  { badge: 'Product Guardian', points: 500 },
+  { badge: 'App Champion', points: 1000 },
+]
+const problemAllowedTransitions: Record<ProblemStatus, ProblemStatus[]> = {
+  Submitted: ['Under Review', 'Needs More Information', 'Accepted', 'Approved for Investigation', 'Rejected', 'Duplicate', 'Escalated', 'Closed', 'Archived'],
+  New: ['Under Review', 'Needs More Information', 'Accepted', 'Approved for Investigation', 'Rejected', 'Duplicate', 'Escalated', 'Closed', 'Archived'],
+  'Under Review': ['Needs More Information', 'Accepted', 'Approved for Investigation', 'Rejected', 'Duplicate', 'Escalated', 'Closed', 'Archived'],
+  'Needs More Information': ['Under Review', 'Accepted', 'Approved for Investigation', 'Rejected', 'Duplicate', 'Escalated', 'Closed', 'Archived'],
+  Accepted: ['Approved for Investigation', 'Approved for Repair', 'Fixed', 'Closed', 'Escalated', 'Archived'],
+  'Approved for Investigation': ['Investigation in Progress', 'Fix Proposed', 'Needs More Information', 'Escalated', 'Archived'],
+  'Investigation in Progress': ['Fix Proposed', 'Needs More Information', 'Escalated', 'Archived'],
+  'Fix Proposed': ['Approved for Repair', 'Needs More Information', 'Escalated', 'Archived'],
+  'Approved for Repair': ['Repair in Progress', 'Testing in Progress', 'Escalated', 'Archived'],
+  'Repair in Progress': ['Testing in Progress', 'Fix Proposed', 'Escalated', 'Archived'],
+  'Testing in Progress': ['Fixed', 'Fix Proposed', 'Escalated', 'Archived'],
+  Fixed: ['Fixed and Monitored', 'Archived', 'Escalated'],
+  'Fixed and Monitored': ['Archived', 'Escalated'],
+  Rejected: ['Under Review', 'Archived'],
+  Duplicate: ['Under Review', 'Archived'],
+  Escalated: ['Under Review', 'Approved for Investigation', 'Approved for Repair', 'Archived'],
+  Closed: ['Under Review', 'Archived'],
+  Archived: ['Under Review'],
+}
+
+function normalizeProblemStatus(status: unknown): ProblemStatus {
+  const raw = String(status || '').trim()
+  if (problemStatuses.includes(raw as ProblemStatus)) return raw as ProblemStatus
+  if (raw === 'open') return 'New'
+  if (raw === 'reviewing') return 'Under Review'
+  if (raw === 'resolved') return 'Fixed'
+  return 'Submitted'
+}
+
+function problemReportIsOpen(report: ProblemReport): boolean {
+  return !problemTerminalStatuses.has(normalizeProblemStatus(report.status))
+}
+
+function problemCanTransition(fromStatus: ProblemStatus, toStatus: ProblemStatus): boolean {
+  if (fromStatus === toStatus) return true
+  return (problemAllowedTransitions[fromStatus] ?? []).includes(toStatus)
+}
+
+function normalizeProblemAttachments(attachments: ProblemAttachment[] | undefined): ProblemAttachment[] {
+  return (attachments ?? [])
+    .filter((attachment) => attachment?.id && attachment.name && attachment.dataUrl)
+    .map((attachment) => ({
+      id: String(attachment.id).slice(0, 120),
+      name: String(attachment.name).slice(0, 180),
+      type: String(attachment.type || 'application/octet-stream').slice(0, 120),
+      size: Math.max(0, Math.min(problemAttachmentMaxBytes, Number(attachment.size) || 0)),
+      dataUrl: String(attachment.dataUrl).startsWith('data:') ? String(attachment.dataUrl).slice(0, problemAttachmentMaxBytes * 2) : '',
+      createdAt: attachment.createdAt || new Date().toISOString(),
+    }))
+    .filter((attachment) => attachment.dataUrl)
+    .slice(0, problemAttachmentMaxCount)
+}
+
+function sanitizeAffectedAreaText(value: unknown, maxLength = 140): string {
+  return String(value ?? '')
+    .replace(/[<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+}
+
+function affectedAreaSlug(value: unknown): string {
+  return sanitizeAffectedAreaText(value, 160)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function defaultAffectedAreas(): AffectedArea[] {
+  const now = '2026-05-24T00:00:00.000Z'
+  return affectedAreaSeedDefinitions.map((definition) => {
+    const slug = affectedAreaSlug(definition.displayName)
+    return {
+      ...definition,
+      id: `area-${slug}`,
+      slug,
+      aliases: Array.from(new Set((definition.aliases ?? []).map((alias) => sanitizeAffectedAreaText(alias, 80)).filter(Boolean))),
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      usageCount: 0,
+    }
+  })
+}
+
+function normalizeAffectedAreas(areas: AffectedArea[] | undefined): AffectedArea[] {
+  const bySlug = new Map<string, AffectedArea>()
+  const addArea = (area: AffectedArea) => {
+    if (!area?.displayName) return
+    const displayName = sanitizeAffectedAreaText(area.displayName)
+    const slug = affectedAreaSlug(area.slug || displayName)
+    if (!displayName || !slug) return
+    const status = affectedAreaStatuses.includes(area.status) ? area.status : 'pendingReview'
+    const type = affectedAreaTypes.includes(area.type) ? area.type : 'feature'
+    const normalized: AffectedArea = {
+      ...area,
+      id: sanitizeAffectedAreaText(area.id, 120) || `area-${slug}`,
+      displayName,
+      slug,
+      type,
+      routePath: area.routePath ? sanitizeAffectedAreaText(area.routePath, 160) : undefined,
+      moduleId: area.moduleId ? sanitizeAffectedAreaText(area.moduleId, 120) : undefined,
+      featureId: area.featureId ? sanitizeAffectedAreaText(area.featureId, 120) : undefined,
+      aliases: Array.from(new Set((area.aliases ?? []).map((alias) => sanitizeAffectedAreaText(alias, 80)).filter(Boolean))).slice(0, 20),
+      isSystemDefined: Boolean(area.isSystemDefined),
+      isUserSuggested: Boolean(area.isUserSuggested),
+      status,
+      createdBy: area.createdBy ? sanitizeAffectedAreaText(area.createdBy, 120) : undefined,
+      approvedBy: area.approvedBy ? sanitizeAffectedAreaText(area.approvedBy, 120) : undefined,
+      createdAt: area.createdAt || new Date().toISOString(),
+      updatedAt: area.updatedAt || area.createdAt || new Date().toISOString(),
+      usageCount: Math.max(0, Number(area.usageCount) || 0),
+      relatedBugReportId: area.relatedBugReportId ? sanitizeAffectedAreaText(area.relatedBugReportId, 120) : undefined,
+      mergedInto: area.mergedInto ? sanitizeAffectedAreaText(area.mergedInto, 120) : undefined,
+    }
+    const existing = bySlug.get(slug)
+    if (!existing || normalized.isSystemDefined || sharedStateTime(normalized.updatedAt) >= sharedStateTime(existing.updatedAt)) {
+      bySlug.set(slug, {
+        ...existing,
+        ...normalized,
+        usageCount: Math.max(existing?.usageCount ?? 0, normalized.usageCount),
+        aliases: Array.from(new Set([...(existing?.aliases ?? []), ...normalized.aliases])).slice(0, 20),
+      })
+    }
+  }
+  defaultAffectedAreas().forEach(addArea)
+  ;(areas ?? []).forEach(addArea)
+  return Array.from(bySlug.values()).sort((left, right) => {
+    const statusRank = Number(left.status !== 'active') - Number(right.status !== 'active')
+    if (statusRank) return statusRank
+    return right.usageCount - left.usageCount || left.displayName.localeCompare(right.displayName)
+  })
+}
+
+function detectAffectedAreaFromView(view: AppView, areas: AffectedArea[]): AffectedArea | undefined {
+  const displayName = affectedAreaViewHints[view]
+  if (!displayName) return undefined
+  const slug = affectedAreaSlug(displayName)
+  return areas.find((area) => area.status === 'active' && area.slug === slug)
+}
+
+function findAffectedAreaMatch(term: string, areas: AffectedArea[]): AffectedArea | undefined {
+  const clean = sanitizeAffectedAreaText(term)
+  const slug = affectedAreaSlug(clean)
+  if (!slug) return undefined
+  return areas.find((area) => {
+    if (area.status !== 'active') return false
+    return area.slug === slug || area.displayName.toLowerCase() === clean.toLowerCase() || area.aliases.some((alias) => affectedAreaSlug(alias) === slug)
+  })
+}
+
+function normalizeBugAuditLogs(logs: BugAuditLog[] | undefined): BugAuditLog[] {
+  return (logs ?? [])
+    .filter((log) => log?.id && log.bugReportId)
+    .map((log) => ({
+      id: String(log.id).slice(0, 140),
+      bugReportId: String(log.bugReportId).slice(0, 140),
+      actorUserId: String(log.actorUserId || 'system').slice(0, 140),
+      actorRole: ['super_admin', 'admin', 'employee'].includes(log.actorRole) ? log.actorRole : 'employee',
+      action: String(log.action || 'Bug workflow updated').slice(0, 180),
+      previousStatus: log.previousStatus ? normalizeProblemStatus(log.previousStatus) : undefined,
+      newStatus: log.newStatus ? normalizeProblemStatus(log.newStatus) : undefined,
+      notes: log.notes ? String(log.notes).slice(0, 1200) : undefined,
+      createdAt: log.createdAt || new Date().toISOString(),
+    }))
+    .sort((left, right) => sharedStateTime(right.createdAt) - sharedStateTime(left.createdAt))
+}
+
+function contributionBadgeForPoints(points: number): string {
+  return [...contributionBadgeLevels].reverse().find((level) => points >= level.points)?.badge ?? 'Getting Started'
+}
+
+function nextContributionBadge(points: number): { badge: string; points: number } | undefined {
+  return contributionBadgeLevels.find((level) => points < level.points)
+}
+
+function normalizeContributionPoints(records: UserContributionPoints[] | undefined): UserContributionPoints[] {
+  return (records ?? [])
+    .filter((record) => record?.id && record.userId)
+    .map((record) => ({
+      id: String(record.id).slice(0, 140),
+      userId: String(record.userId).slice(0, 140),
+      totalPoints: Math.max(0, Number(record.totalPoints) || 0),
+      currentBadge: record.currentBadge || contributionBadgeForPoints(Number(record.totalPoints) || 0),
+      validBugReports: Math.max(0, Number(record.validBugReports) || 0),
+      validFeedbackReports: Math.max(0, Number(record.validFeedbackReports) || 0),
+      rejectedReports: Math.max(0, Number(record.rejectedReports) || 0),
+      duplicateReports: Math.max(0, Number(record.duplicateReports) || 0),
+      lastAwardedAt: record.lastAwardedAt,
+    }))
+    .sort((left, right) => right.totalPoints - left.totalPoints || left.userId.localeCompare(right.userId))
+}
+
+function buildContributionPointsFromReports(reports: ProblemReport[]): UserContributionPoints[] {
+  const summaries = new Map<string, UserContributionPoints>()
+  normalizeProblemReports(reports).forEach((report) => {
+    if (!report.reporterId) return
+    const existing = summaries.get(report.reporterId) ?? {
+      id: `contribution-${report.reporterId}`,
+      userId: report.reporterId,
+      totalPoints: 0,
+      currentBadge: 'Getting Started',
+      validBugReports: 0,
+      validFeedbackReports: 0,
+      rejectedReports: 0,
+      duplicateReports: 0,
+      lastAwardedAt: undefined,
+    }
+    const points = Math.max(0, Number(report.pointsAwarded) || 0)
+    existing.totalPoints += points
+    if (points > 0 && report.reportMode === 'bug' && report.status !== 'Duplicate') existing.validBugReports += 1
+    if (points > 0 && report.reportMode === 'feedback' && report.status !== 'Duplicate') existing.validFeedbackReports += 1
+    if (report.status === 'Duplicate') existing.duplicateReports += 1
+    if (report.status === 'Rejected') existing.rejectedReports += 1
+    if (points > 0 && sharedStateTime(report.pointsAwardedAt ?? report.updatedAt ?? report.createdAt) > sharedStateTime(existing.lastAwardedAt)) {
+      existing.lastAwardedAt = report.pointsAwardedAt ?? report.updatedAt ?? report.createdAt
+    }
+    existing.currentBadge = contributionBadgeForPoints(existing.totalPoints)
+    summaries.set(report.reporterId, existing)
+  })
+  return normalizeContributionPoints(Array.from(summaries.values()))
+}
+
+function defaultContributionAward(report: ProblemReport, decision: FeedbackAdminDecision): number {
+  if (decision === 'duplicate') return 1
+  if (decision === 'rejected' || decision === 'abuse') return 0
+  const base = report.reportMode === 'feedback' ? 5 : 10
+  const evidence = (report.attachments ?? []).length ? 5 : 0
+  const confirmedBug = report.reportMode === 'bug' && ['repair-approved', 'fixed'].includes(decision) ? 25 : 0
+  const criticalConfirmed = report.reportMode === 'bug' && (report.adminSeverity ?? report.userSeverity ?? report.severity) === 'critical' && ['repair-approved', 'fixed'].includes(decision) ? 50 : 0
+  return base + evidence + confirmedBug + criticalConfirmed
+}
+
+function bugReportQuality(report: ProblemReport): { score: number; label: string; missing: string[] } {
+  const missing: string[] = []
+  let score = 20
+  if (report.title.trim().length >= 8) score += 10
+  else missing.push('clear title')
+  if ((report.affectedAreaId || report.affectedAreaText || report.moduleName) && String(report.affectedAreaText ?? report.moduleName ?? '').length >= 3) score += 10
+  else missing.push('affected page or feature')
+  if ((report.actualBehaviour ?? report.description).trim().length >= 20) score += 15
+  else missing.push('what happened')
+  if ((report.expectedBehaviour ?? '').trim().length >= 12 || report.reportMode === 'feedback') score += 10
+  else missing.push('expected result')
+  if ((report.reproductionSteps ?? '').trim().length >= 12 || report.reportMode === 'feedback') score += 15
+  else missing.push('steps to reproduce')
+  if (report.attachments?.length) score += 10
+  if (report.diagnosticSnapshot?.permissionToIncludeDiagnostics) score += 5
+  if (report.browserInfo || report.deviceInfo || report.operatingSystemInfo || report.diagnosticSnapshot?.browser) score += 5
+  const finalScore = Math.min(100, score)
+  return {
+    score: finalScore,
+    label: finalScore >= 80 ? 'Strong' : finalScore >= 60 ? 'Usable' : 'Needs detail',
+    missing,
+  }
+}
+
+function duplicateTokenSet(report: ProblemReport): Set<string> {
+  return new Set(
+    [
+      report.title,
+      report.description,
+      report.actualBehaviour,
+      report.expectedBehaviour,
+      report.moduleName,
+      report.affectedAreaText,
+      report.category,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((word) => word.length >= 4 && !['this', 'that', 'with', 'from', 'when', 'then', 'page', 'feature'].includes(word))
+      .slice(0, 80),
+  )
+}
+
+function duplicateSimilarity(left: ProblemReport, right: ProblemReport): number {
+  const leftTokens = duplicateTokenSet(left)
+  const rightTokens = duplicateTokenSet(right)
+  if (!leftTokens.size || !rightTokens.size) return 0
+  let shared = 0
+  leftTokens.forEach((token) => {
+    if (rightTokens.has(token)) shared += 1
+  })
+  const tokenScore = Math.round((shared / Math.max(leftTokens.size, rightTokens.size)) * 70)
+  const sameArea = Boolean(
+    (left.affectedAreaId && left.affectedAreaId === right.affectedAreaId) ||
+    (left.moduleName && left.moduleName === right.moduleName) ||
+    (left.affectedAreaText && left.affectedAreaText.toLowerCase() === (right.affectedAreaText ?? '').toLowerCase()),
+  )
+  const sameCategory = left.category && left.category === right.category
+  return Math.min(100, tokenScore + (sameArea ? 20 : 0) + (sameCategory ? 10 : 0))
+}
+
+function bugDuplicateCandidates(report: ProblemReport, reports: ProblemReport[]) {
+  return reports
+    .filter((candidate) => candidate.id !== report.id)
+    .map((candidate) => ({ report: candidate, score: duplicateSimilarity(report, candidate) }))
+    .filter((candidate) => candidate.score >= 35)
+    .sort((left, right) => right.score - left.score || sharedStateTime(right.report.createdAt) - sharedStateTime(left.report.createdAt))
+    .slice(0, 5)
+}
+
+function buildBugResolutionReport(report: ProblemReport): string {
+  const severity = report.adminSeverity ?? report.userSeverity ?? report.severity
+  const priority = report.adminPriority ?? 'normal'
+  return [
+    'Bug Resolution Report for Super Admin',
+    '',
+    `Bug Title: ${report.title}`,
+    `Bug Reference: ${report.id}`,
+    `Reported Date: ${report.createdAt ? new Date(report.createdAt).toLocaleString() : 'Unknown'}`,
+    `Fixed Date: ${report.status === 'Fixed' || report.status === 'Fixed and Monitored' ? new Date(report.updatedAt ?? Date.now()).toLocaleString() : 'Not fixed yet'}`,
+    `Affected Module: ${report.moduleName || report.view}`,
+    `Affected Users: ${report.reporterRole}`,
+    `Report Type: ${report.reportMode === 'feedback' ? 'Feedback' : 'Bug report'}`,
+    `Category: ${report.category || 'Uncategorised'}`,
+    `Severity: ${severity}`,
+    `Priority: ${priority}`,
+    `Contribution Points Awarded: ${report.pointsAwarded ?? 0}`,
+    '',
+    `Bug Summary: ${report.description || report.actualBehaviour || 'No summary provided.'}`,
+    `Expected Behaviour: ${report.expectedBehaviour || 'Not provided.'}`,
+    `Actual Behaviour: ${report.actualBehaviour || report.description || 'Not provided.'}`,
+    `Reproduction Steps: ${report.reproductionSteps || 'Not confirmed yet.'}`,
+    `Investigation Findings: ${report.investigationSummary || 'Pending approved investigation.'}`,
+    `Root Cause: ${report.rootCause || 'Pending investigation.'}`,
+    `Fix Implemented: ${report.fixPlan || 'No fix has been approved or implemented yet.'}`,
+    `How It Was Fixed: ${report.fixPlan || 'Pending approved repair.'}`,
+    `Tests Performed: ${(report.testsPerformed ?? []).join(', ') || 'Pending.'}`,
+    `Verification Result: ${report.verificationResult || 'Pending.'}`,
+    `Side Effects Checked: ${report.riskReview || 'Pending regression review.'}`,
+    `Remaining Risks: ${report.riskReview || 'No final risk review recorded yet.'}`,
+    `Related Issues Found: ${report.duplicateOf ? `Duplicate of ${report.duplicateOf}` : 'None recorded.'}`,
+    `Recommended Follow Up: ${report.deploymentRecommendation || 'Continue through the Super Admin approval gateway.'}`,
+    `Deployment Recommendation: ${report.deploymentRecommendation || 'Do not deploy until tests and approval are complete.'}`,
+    'Rollback Position: Use the normal source-control rollback path and preserve all production data.',
+    `Final Status: ${report.status}`,
+  ].join('\n')
+}
+
+function buildCodexBugRepairPrompt(report: ProblemReport): string {
+  return [
+    'You are operating as an elite production grade software debugging and repair agent inside a live application development environment.',
+    '',
+    'This bug report has been reviewed by Ayodeji Falope Super Admin and approved for investigation. Do not repair or deploy unless the report status also explicitly approves repair/deployment.',
+    '',
+    'CRITICAL OPERATING PRINCIPLES',
+    '- Preserve all user data, tests, sessions, scores, reports, analytics, uploads, course images, dashboard layouts, bug reports, and audit logs.',
+    '- Never hard delete, reset, corrupt, unlink, or overwrite production data.',
+    '- Reproduce before editing where possible.',
+    '- Use the smallest safe fix and existing architecture.',
+    '- Run build, lint, smoke, and continuity guard before deploy.',
+    '',
+    'BUG REPORT STARTS BELOW:',
+    `Bug Title: ${report.title}`,
+    `Bug Reference: ${report.id}`,
+    `Current Status: ${report.status}`,
+    `Report Type: ${report.reportMode === 'feedback' ? 'Feedback' : 'Bug report'}`,
+    `Category: ${report.category || 'Uncategorised'}`,
+    `Affected Module: ${report.moduleName || report.view}`,
+    `Reporter: ${report.reporterName} (${report.reporterRole})`,
+    `Severity: ${report.adminSeverity ?? report.userSeverity ?? report.severity}`,
+    `Priority: ${report.adminPriority ?? 'normal'}`,
+    `Expected Behaviour: ${report.expectedBehaviour || 'Not provided.'}`,
+    `Actual Behaviour: ${report.actualBehaviour || report.description}`,
+    `Reproduction Steps: ${report.reproductionSteps || 'Not provided.'}`,
+    `Diagnostic Snapshot: ${report.diagnosticSnapshot ? JSON.stringify(report.diagnosticSnapshot) : 'Not shared.'}`,
+    `Admin Notes: ${(report.adminNotes ?? []).join(' | ') || 'None.'}`,
+    '',
+    'FINAL RESPONSE FORMAT REQUIRED:',
+    'A. Initial Bug Understanding',
+    'B. Reproduction Summary',
+    'C. Root Cause Analysis',
+    'D. Fix Plan',
+    'E. Fix Implemented',
+    'F. Tests and Verification',
+    'G. Risk Review',
+    'H. Super Admin Report',
+  ].join('\n')
+}
 
 function normalizeTrashRecords(records: ReportTrashRecord[] | undefined, now = Date.now()): ReportTrashRecord[] {
   void now
@@ -2507,13 +3737,53 @@ function normalizeProblemReports(reports: ProblemReport[] | undefined): ProblemR
     .filter((report) => report?.id && report.reporterId && report.title)
     .map((report) => ({
       ...report,
+      reporterUserId: String(report.reporterUserId || '').trim().slice(0, 80) || undefined,
+      reporterEmail: String(report.reporterEmail || '').trim().slice(0, 160) || undefined,
       title: String(report.title).trim().slice(0, 140),
       description: String(report.description || '').trim().slice(0, 2000),
-      severity: ['low', 'medium', 'high', 'critical'].includes(report.severity) ? report.severity : 'medium',
-      status: ['open', 'reviewing', 'resolved'].includes(report.status) ? report.status : 'open',
+      reportMode: (report.reportMode === 'feedback' ? 'feedback' : 'bug') as FeedbackReportMode,
+      category: String(report.category || (report.reportMode === 'feedback' ? 'General comment' : 'Other bug')).trim().slice(0, 120),
+      expectedBehaviour: String(report.expectedBehaviour || '').trim().slice(0, 1200),
+      actualBehaviour: String(report.actualBehaviour || report.description || '').trim().slice(0, 2000),
+      reproductionSteps: String(report.reproductionSteps || '').trim().slice(0, 1600),
+      moduleName: String(report.moduleName || report.view || 'Unknown module').trim().slice(0, 120),
+      affectedAreaId: report.affectedAreaId ? sanitizeAffectedAreaText(report.affectedAreaId, 120) : undefined,
+      affectedAreaText: report.affectedAreaText ? sanitizeAffectedAreaText(report.affectedAreaText, 160) : undefined,
+      currentRoute: report.currentRoute ? sanitizeAffectedAreaText(report.currentRoute, 200) : undefined,
+      currentPageTitle: report.currentPageTitle ? sanitizeAffectedAreaText(report.currentPageTitle, 160) : undefined,
+      browserInfo: report.browserInfo ? sanitizeAffectedAreaText(report.browserInfo, 300) : undefined,
+      deviceInfo: report.deviceInfo ? sanitizeAffectedAreaText(report.deviceInfo, 160) : undefined,
+      operatingSystemInfo: report.operatingSystemInfo ? sanitizeAffectedAreaText(report.operatingSystemInfo, 160) : undefined,
+      consoleError: report.consoleError ? sanitizeAffectedAreaText(report.consoleError, 1200) : undefined,
+      additionalComments: report.additionalComments ? sanitizeAffectedAreaText(report.additionalComments, 1600) : undefined,
+      pagePath: String(report.pagePath || report.url || '').trim().slice(0, 500),
+      userSeverity: problemSeverities.includes(report.userSeverity ?? report.severity) ? (report.userSeverity ?? report.severity) : 'medium',
+      systemSuggestedSeverity: problemSeverities.includes(report.systemSuggestedSeverity ?? report.severity) ? (report.systemSuggestedSeverity ?? report.severity) : 'medium',
+      adminSeverity: problemSeverities.includes(report.adminSeverity ?? report.severity) ? (report.adminSeverity ?? report.severity) : undefined,
+      adminPriority: problemPriorities.includes(report.adminPriority ?? 'normal') ? (report.adminPriority ?? 'normal') : 'normal',
+      adminDecision: ['pending', 'accepted', 'duplicate', 'rejected', 'abuse', 'repair-approved', 'fixed'].includes(report.adminDecision ?? 'pending') ? (report.adminDecision ?? 'pending') : 'pending',
+      pointsAwarded: Math.max(0, Number(report.pointsAwarded) || 0),
+      pointsReason: report.pointsReason ? String(report.pointsReason).slice(0, 1000) : undefined,
+      pointsAwardedAt: report.pointsAwardedAt,
+      severity: problemSeverities.includes(report.severity) ? report.severity : 'medium',
+      status: normalizeProblemStatus(report.status),
       createdAt: report.createdAt || new Date().toISOString(),
+      updatedAt: report.updatedAt || report.createdAt || new Date().toISOString(),
       url: String(report.url || '').slice(0, 500),
       userAgent: String(report.userAgent || '').slice(0, 500),
+      diagnosticSnapshot: report.diagnosticSnapshot,
+      attachments: normalizeProblemAttachments(report.attachments),
+      adminNotes: Array.isArray(report.adminNotes) ? report.adminNotes.slice(0, 50).map((note) => String(note).slice(0, 1000)) : [],
+      investigationSummary: String(report.investigationSummary || '').slice(0, 4000),
+      rootCause: String(report.rootCause || '').slice(0, 3000),
+      fixPlan: String(report.fixPlan || '').slice(0, 4000),
+      filesAffected: Array.isArray(report.filesAffected) ? report.filesAffected.map((file) => String(file).slice(0, 260)).slice(0, 30) : [],
+      testsPerformed: Array.isArray(report.testsPerformed) ? report.testsPerformed.map((test) => String(test).slice(0, 260)).slice(0, 30) : [],
+      verificationResult: String(report.verificationResult || '').slice(0, 3000),
+      riskReview: String(report.riskReview || '').slice(0, 3000),
+      deploymentRecommendation: String(report.deploymentRecommendation || '').slice(0, 3000),
+      finalReport: report.finalReport ? String(report.finalReport).slice(0, 10000) : undefined,
+      repairPrompt: report.repairPrompt ? String(report.repairPrompt).slice(0, 12000) : undefined,
     }))
     .sort((left, right) => sharedStateTime(right.createdAt) - sharedStateTime(left.createdAt))
 }
@@ -2587,11 +3857,15 @@ function normalizeSharedState(state: SharedAppState | null | undefined): SharedA
     auditEvents: (state?.auditEvents ?? []).filter((event) => !auditEventReferencesErasedUser(event)),
     analyticsEvents: (state?.analyticsEvents ?? []).filter((event) => !analyticsEventReferencesErasedUser(event)),
     problemReports: normalizeProblemReports(state?.problemReports),
+    affectedAreas: normalizeAffectedAreas(state?.affectedAreas),
+    bugAuditLogs: normalizeBugAuditLogs(state?.bugAuditLogs),
+    contributionPoints: normalizeContributionPoints(state?.contributionPoints),
     trashRecords: normalizeTrashRecords(state?.trashRecords),
     questionExposureCounts: state?.questionExposureCounts ?? {},
     questionMastery: scrubQuestionMastery(state?.questionMastery ?? {}),
     branding: normalizeBranding(state?.branding ?? defaultBranding),
     layoutSettings: normalizeLayoutSettings(state?.layoutSettings),
+    dashboardLayouts: normalizeDashboardLayouts(state?.dashboardLayouts),
     apiTokens: normalizeApiTokens(state?.apiTokens),
     updatedAt: state?.updatedAt,
   }
@@ -3039,6 +4313,209 @@ function escapeCsvField(value: string | number | boolean | undefined): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
+const featureInventoryCacheKey = 'deap-feature-inventory-cache-v1'
+const featureInventoryExportCacheKey = 'deap-feature-inventory-export-cache-v1'
+const featureInventoryFormats: FeatureInventoryExportFormat[] = ['pdf', 'docx', 'txt', 'md', 'json', 'csv', 'html', 'xlsx']
+const featureInventoryFormatLabels: Record<FeatureInventoryExportFormat, string> = {
+  pdf: 'PDF',
+  docx: 'DOCX',
+  txt: 'TXT',
+  md: 'Markdown',
+  json: 'JSON',
+  csv: 'CSV',
+  html: 'HTML',
+  xlsx: 'XLSX',
+}
+
+function isFeatureInventoryOwner(user?: User): boolean {
+  return isAyodejiTokenOwner(user)
+}
+
+function featureInventoryHeaders(user: User): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'X-DEAP-User-Id': user.userId,
+    'X-DEAP-User-Email': user.email,
+    'X-DEAP-User-Role': user.role,
+    'X-DEAP-Owner': 'ayodeji_falope',
+  }
+}
+
+async function fetchFeatureInventory(user: User): Promise<FeatureInventoryPayload> {
+  const response = await fetch('/api/superadmin/feature_inventory', {
+    headers: featureInventoryHeaders(user),
+  })
+  if (!response.ok) throw new Error(`Feature inventory load failed (${response.status})`)
+  return (await response.json()) as FeatureInventoryPayload
+}
+
+async function refreshFeatureInventory(user: User): Promise<FeatureInventoryPayload> {
+  const response = await fetch('/api/superadmin/feature_inventory/refresh', {
+    method: 'POST',
+    headers: featureInventoryHeaders(user),
+    body: JSON.stringify({ scanType: 'manual_refresh' }),
+  })
+  if (!response.ok) throw new Error(`Feature inventory refresh failed (${response.status})`)
+  return (await response.json()) as FeatureInventoryPayload
+}
+
+async function fetchStoredFeatureInventoryExport(user: User, exportId: string): Promise<FeatureInventoryDownloadPayload> {
+  const response = await fetch(`/api/superadmin/feature_inventory/export/${encodeURIComponent(exportId)}/download`, {
+    headers: featureInventoryHeaders(user),
+  })
+  if (!response.ok) throw new Error(`Stored export download failed (${response.status})`)
+  return (await response.json()) as FeatureInventoryDownloadPayload
+}
+
+function flattenFeatureInventoryItem(item: FeatureInventoryItem): Record<string, string | number> {
+  return {
+    Title: item.title,
+    Classification: item.classification,
+    Category: item.category,
+    Visibility: item.visibility,
+    Status: item.status,
+    Confidence: item.confidenceScore,
+    Routes: item.routePaths.join('; '),
+    Components: item.componentNames.join('; '),
+    SourceFiles: item.sourceFiles.join('; '),
+    Roles: item.userRoles.join('; '),
+    LastDetected: item.lastDetectedAt,
+    Description: item.description,
+  }
+}
+
+function buildFeatureInventoryCsv(items: FeatureInventoryItem[]): string {
+  const headers = ['Title', 'Classification', 'Category', 'Visibility', 'Status', 'Confidence', 'Routes', 'Components', 'SourceFiles', 'Roles', 'LastDetected', 'Description']
+  const rows = items.map((item) => {
+    const flat = flattenFeatureInventoryItem(item)
+    return headers.map((header) => escapeCsvField(flat[header])).join(',')
+  })
+  return [headers.join(','), ...rows].join('\n')
+}
+
+function buildFeatureInventoryMarkdown(version: FeatureInventoryVersion, items: FeatureInventoryItem[]): string {
+  const lines = [
+    `# Feature Inventory v${String(version.versionNumber).padStart(4, '0')}`,
+    '',
+    `Generated: ${new Date(version.createdAt).toLocaleString()}`,
+    `Total features: ${version.totalFeatureCount}`,
+    `Specific features: ${version.specificFeatureCount}`,
+    `Generic features: ${version.genericFeatureCount}`,
+    '',
+    '| Feature | Class | Category | Visibility | Confidence | Status | Routes |',
+    '| --- | --- | --- | --- | ---: | --- | --- |',
+    ...items.map((item) => `| ${item.title.replace(/\|/g, '/')} | ${item.classification} | ${item.category.replace(/\|/g, '/')} | ${item.visibility} | ${item.confidenceScore} | ${item.status} | ${item.routePaths.join(', ').replace(/\|/g, '/')} |`),
+    '',
+    '## Details',
+    ...items.flatMap((item) => [
+      '',
+      `### ${item.title}`,
+      `- Classification: ${item.classification}`,
+      `- Category: ${item.category}`,
+      `- Visibility: ${item.visibility}`,
+      `- Confidence: ${item.confidenceScore}`,
+      `- Routes: ${item.routePaths.join(', ') || 'N/A'}`,
+      `- Components: ${item.componentNames.join(', ') || 'N/A'}`,
+      `- Source files: ${item.sourceFiles.join(', ') || 'N/A'}`,
+      `- Description: ${item.description}`,
+    ]),
+  ]
+  return lines.join('\n')
+}
+
+function buildFeatureInventoryHtml(version: FeatureInventoryVersion, items: FeatureInventoryItem[]): string {
+  const escapeHtml = (value: string) =>
+    value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const rows = items
+    .map(
+      (item) => `<tr><td>${escapeHtml(item.title)}</td><td>${item.classification}</td><td>${escapeHtml(item.category)}</td><td>${item.visibility}</td><td>${item.confidenceScore}</td><td>${item.status}</td><td>${escapeHtml(item.routePaths.join(', '))}</td></tr>`,
+    )
+    .join('')
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Feature Inventory</title><style>body{font-family:Inter,Arial,sans-serif;color:#172033;line-height:1.5;padding:32px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #dbe6f3;padding:8px;text-align:left}th{background:#edf6ff}</style></head><body><h1>Feature Inventory v${String(version.versionNumber).padStart(4, '0')}</h1><p>Generated ${escapeHtml(new Date(version.createdAt).toLocaleString())}. Total features: ${version.totalFeatureCount}.</p><table><thead><tr><th>Feature</th><th>Class</th><th>Category</th><th>Visibility</th><th>Confidence</th><th>Status</th><th>Routes</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+}
+
+function buildFeatureInventoryPdf(version: FeatureInventoryVersion, items: FeatureInventoryItem[]): string {
+  const clean = (value: string) => value.replace(/[()\\]/g, '\\$&').replace(/[^\x20-\x7E]/g, ' ')
+  const lines = [
+    `Feature Inventory v${String(version.versionNumber).padStart(4, '0')}`,
+    `Generated ${new Date(version.createdAt).toLocaleString()} | ${items.length} exported item(s)`,
+    `Specific: ${version.specificFeatureCount} | Generic: ${version.genericFeatureCount}`,
+    '',
+    ...items.slice(0, 42).map((item, index) => `${index + 1}. ${item.title} | ${item.classification} | ${item.category} | ${item.visibility} | ${item.confidenceScore}%`),
+  ]
+  const contentLines = lines.slice(0, 58).map((line, index) => `BT /F1 9 Tf 42 ${760 - index * 12} Td (${clean(line).slice(0, 112)}) Tj ET`).join('\n')
+  const objects = [
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
+    '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+    `5 0 obj << /Length ${contentLines.length} >> stream\n${contentLines}\nendstream endobj`,
+  ]
+  let offset = '%PDF-1.4\n'.length
+  const xref = ['0000000000 65535 f ']
+  const body = objects.map((object) => {
+    xref.push(`${String(offset).padStart(10, '0')} 00000 n `)
+    offset += object.length + 1
+    return object
+  }).join('\n')
+  const startXref = offset
+  return `%PDF-1.4\n${body}\nxref\n0 ${objects.length + 1}\n${xref.join('\n')}\ntrailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF`
+}
+
+function textToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary)
+}
+
+async function downloadFeatureInventoryFile(format: FeatureInventoryExportFormat, fileName: string, version: FeatureInventoryVersion, items: FeatureInventoryItem[]) {
+  if (format === 'json') {
+    downloadJsonFile(fileName, { version, items })
+    return
+  }
+  if (format === 'xlsx') {
+    const spreadsheet = await loadSpreadsheetTools()
+    const workbook = spreadsheet.utils.book_new()
+    const worksheet = spreadsheet.utils.json_to_sheet(items.map(flattenFeatureInventoryItem))
+    spreadsheet.utils.book_append_sheet(workbook, worksheet, 'Feature Inventory')
+    spreadsheet.writeFile(workbook, fileName)
+    return
+  }
+  const markdown = buildFeatureInventoryMarkdown(version, items)
+  if (format === 'csv') downloadTextFile(fileName, buildFeatureInventoryCsv(items), 'text/csv;charset=utf-8')
+  else if (format === 'html') downloadTextFile(fileName, buildFeatureInventoryHtml(version, items), 'text/html;charset=utf-8')
+  else if (format === 'docx') downloadTextFile(fileName, buildFeatureInventoryHtml(version, items), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  else if (format === 'pdf') downloadTextFile(fileName, buildFeatureInventoryPdf(version, items), 'application/pdf')
+  else downloadTextFile(fileName, markdown, 'text/plain;charset=utf-8')
+}
+
+function buildFeatureInventoryStorageFile(format: FeatureInventoryExportFormat, fileName: string, version: FeatureInventoryVersion, items: FeatureInventoryItem[]) {
+  const content =
+    format === 'json'
+      ? JSON.stringify({ version, items }, null, 2)
+      : format === 'csv' || format === 'xlsx'
+        ? buildFeatureInventoryCsv(items)
+        : format === 'html' || format === 'docx'
+          ? buildFeatureInventoryHtml(version, items)
+          : format === 'pdf'
+            ? buildFeatureInventoryPdf(version, items)
+            : buildFeatureInventoryMarkdown(version, items)
+  const mimeType =
+    format === 'json'
+      ? 'application/json'
+      : format === 'csv' || format === 'xlsx'
+        ? 'text/csv'
+        : format === 'html' || format === 'docx'
+          ? 'text/html'
+          : format === 'pdf'
+            ? 'application/pdf'
+            : 'text/plain'
+  return { format, fileName, mimeType, contentBase64: textToBase64(content) }
+}
+
 function countByField<T>(items: T[], key: keyof T): Record<string, number> {
   return items.reduce<Record<string, number>>((totals, item) => {
     const value = String(item[key])
@@ -3127,19 +4604,149 @@ function normalizeApiTokens(tokens: ApiTokenRecord[] | undefined): ApiTokenRecor
       name: token.name || 'Unnamed integration token',
       kind: token.kind === 'super' ? 'super' as const : 'regular' as const,
       tokenPrefix: token.tokenPrefix || 'deap_',
+      tokenFingerprint: token.tokenFingerprint || token.tokenPrefix || `fp_${token.tokenHash.slice(0, 8)}`,
       tokenHash: token.tokenHash,
-      tokenSecret: typeof token.tokenSecret === 'string' ? token.tokenSecret : undefined,
       scopes: Array.from(new Set(Array.isArray(token.scopes) ? token.scopes.filter((scope) => typeof scope === 'string' && scope.trim()) : [])),
+      purpose: String(token.purpose || 'Integration access').slice(0, 240),
+      ownerId: String(token.ownerId || token.createdBy || 'unassigned').slice(0, 120),
       createdAt: token.createdAt || new Date().toISOString(),
       expiresAt: token.expiresAt || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
       createdBy: token.createdBy || 'Unknown admin',
-      status: token.status === 'revoked' ? 'revoked' as const : 'active' as const,
+      status: ['active', 'revoked', 'archived', 'rotation_pending'].includes(token.status) ? token.status : 'active' as const,
+      riskLevel: ['critical', 'high', 'medium', 'low'].includes(token.riskLevel) ? token.riskLevel : calculateApiTokenRisk({
+        ...token,
+        kind: token.kind === 'super' ? 'super' : 'regular',
+        scopes: Array.isArray(token.scopes) ? token.scopes : [],
+        expiresAt: token.expiresAt,
+        ownerId: token.ownerId,
+        deploymentRecords: token.deploymentRecords,
+        usageLogs: token.usageLogs,
+      }),
+      allowedModules: normalizeTokenStringList(token.allowedModules, ['DEAP API']),
+      allowedEnvironments: normalizeTokenStringList(token.allowedEnvironments, ['production']),
+      allowedIps: normalizeTokenStringList(token.allowedIps, []),
+      rateLimit: Number.isFinite(token.rateLimit) ? Number(token.rateLimit) : undefined,
+      usageLimit: Number.isFinite(token.usageLimit) ? Number(token.usageLimit) : undefined,
+      usageCount: Math.max(0, Number(token.usageCount ?? token.usageLogs?.length ?? 0)),
+      firstUsedAt: token.firstUsedAt,
+      lastUsedAt: token.lastUsedAt,
+      rotationPolicy: normalizeTokenRotationPolicy(token.rotationPolicy),
+      rotationStatus: normalizeTokenDeploymentStatus(token.rotationStatus ?? (token.status === 'rotation_pending' ? 'rotation_pending' : 'not_deployed')),
+      lastRotatedAt: token.lastRotatedAt,
+      nextRotationDueAt: token.nextRotationDueAt || nextTokenRotationDate(token.createdAt, normalizeTokenRotationPolicy(token.rotationPolicy)),
+      deploymentRecords: normalizeTokenDeployments(token.deploymentRecords, token.id),
+      usageLogs: normalizeTokenUsageLogs(token.usageLogs, token.id),
+      auditLogs: normalizeTokenAuditLogs(token.auditLogs, token.id, token.kind === 'super' ? 'super' : 'regular'),
+      notes: token.notes ? String(token.notes).slice(0, 800) : undefined,
       revokedAt: token.revokedAt,
       revokedBy: token.revokedBy,
+      revokedReason: token.revokedReason,
+      archivedAt: token.archivedAt,
+      archivedBy: token.archivedBy,
       oauthProfile: Boolean(token.oauthProfile),
       auditLogging: token.auditLogging !== false,
     }))
     .slice(0, 100)
+}
+
+function normalizeTokenStringList(value: unknown, fallback: string[] = []): string[] {
+  if (!Array.isArray(value)) return fallback
+  const cleaned = value.map((item) => String(item || '').trim()).filter(Boolean)
+  return Array.from(new Set(cleaned)).slice(0, 40)
+}
+
+function normalizeTokenRotationPolicy(value: unknown): ApiTokenRotationPolicy {
+  return ['30_days', '60_days', '90_days', '180_days', '365_days'].includes(String(value)) ? value as ApiTokenRotationPolicy : '90_days'
+}
+
+function tokenRotationPolicyDays(policy: ApiTokenRotationPolicy): number {
+  return Number(policy.replace('_days', '')) || 90
+}
+
+function nextTokenRotationDate(startDate: string | undefined, policy: ApiTokenRotationPolicy): string {
+  const base = sharedStateTime(startDate) || Date.now()
+  return new Date(base + tokenRotationPolicyDays(policy) * 24 * 60 * 60 * 1000).toISOString()
+}
+
+function normalizeTokenDeploymentStatus(value: unknown): ApiTokenDeploymentStatus {
+  return ['not_deployed', 'deployed', 'active', 'unverified', 'deprecated', 'revoked', 'rotation_pending', 'archived'].includes(String(value))
+    ? value as ApiTokenDeploymentStatus
+    : 'not_deployed'
+}
+
+function normalizeTokenDeployments(records: ApiTokenDeploymentRecord[] | undefined, tokenId: string): ApiTokenDeploymentRecord[] {
+  return (Array.isArray(records) ? records : [])
+    .filter((record) => record?.id)
+    .map((record) => ({
+      id: record.id,
+      tokenId,
+      deploymentName: String(record.deploymentName || 'Undocumented deployment').slice(0, 160),
+      environment: String(record.environment || 'production').slice(0, 80),
+      serviceName: String(record.serviceName || 'Unknown service').slice(0, 140),
+      deployedBy: String(record.deployedBy || 'Unknown').slice(0, 140),
+      deployedAt: record.deployedAt || new Date().toISOString(),
+      status: normalizeTokenDeploymentStatus(record.status),
+      lastVerifiedAt: record.lastVerifiedAt,
+      notes: record.notes ? String(record.notes).slice(0, 600) : undefined,
+    }))
+    .slice(0, 40)
+}
+
+function normalizeTokenUsageLogs(records: ApiTokenUsageLog[] | undefined, tokenId: string): ApiTokenUsageLog[] {
+  return (Array.isArray(records) ? records : [])
+    .filter((record) => record?.id)
+    .map((record) => ({
+      id: record.id,
+      tokenId,
+      endpoint: String(record.endpoint || 'unknown').slice(0, 240),
+      method: String(record.method || 'POST').slice(0, 12),
+      module: String(record.module || 'API').slice(0, 120),
+      environment: String(record.environment || 'production').slice(0, 80),
+      ipAddress: record.ipAddress ? String(record.ipAddress).slice(0, 80) : undefined,
+      userAgent: record.userAgent ? safeDiagnosticMessage(record.userAgent).slice(0, 200) : undefined,
+      timestamp: record.timestamp || new Date().toISOString(),
+      outcome: ['allowed', 'denied', 'failed', 'expired', 'revoked', 'rate_limited'].includes(record.outcome) ? record.outcome : 'allowed' as const,
+      responseStatus: Number.isFinite(record.responseStatus) ? Number(record.responseStatus) : 200,
+      failureReason: record.failureReason ? safeDiagnosticMessage(record.failureReason).slice(0, 240) : undefined,
+    }))
+    .sort((left, right) => sharedStateTime(right.timestamp) - sharedStateTime(left.timestamp))
+    .slice(0, 80)
+}
+
+function normalizeTokenAuditLogs(records: ApiTokenAuditLog[] | undefined, tokenId: string, tokenType: ApiTokenKind): ApiTokenAuditLog[] {
+  return (Array.isArray(records) ? records : [])
+    .filter((record) => record?.id)
+    .map((record) => ({
+      id: record.id,
+      tokenId,
+      actor: String(record.actor || 'System').slice(0, 160),
+      action: String(record.action || 'Token event').slice(0, 180),
+      tokenType,
+      timestamp: record.timestamp || new Date().toISOString(),
+      affectedFields: normalizeTokenStringList(record.affectedFields, []),
+      reason: record.reason ? safeDiagnosticMessage(record.reason).slice(0, 500) : undefined,
+      result: record.result === 'failed' ? 'failed' as const : 'success' as const,
+    }))
+    .sort((left, right) => sharedStateTime(right.timestamp) - sharedStateTime(left.timestamp))
+    .slice(0, 100)
+}
+
+function calculateApiTokenRisk(token: Partial<ApiTokenRecord>): ApiTokenRiskLevel {
+  const now = Date.now()
+  const expiresAt = sharedStateTime(token.expiresAt)
+  const nextRotationDueAt = sharedStateTime(token.nextRotationDueAt)
+  const scopeCount = Array.isArray(token.scopes) ? token.scopes.length : 0
+  const deploymentCount = Array.isArray(token.deploymentRecords) ? token.deploymentRecords.length : 0
+  const suspiciousUsage = Array.isArray(token.usageLogs) && token.usageLogs.some((log) => ['denied', 'failed', 'revoked', 'expired', 'rate_limited'].includes(log.outcome))
+  if (token.kind === 'super' || suspiciousUsage || (expiresAt && expiresAt < now)) return 'critical'
+  if (!token.ownerId || !expiresAt || !deploymentCount || (nextRotationDueAt && nextRotationDueAt < now)) return 'high'
+  if (scopeCount > 8 || !token.lastUsedAt) return 'medium'
+  return 'low'
+}
+
+function maskTokenPreview(prefix: string, fingerprint: string): string {
+  const suffix = fingerprint.slice(-4).toUpperCase() || '0000'
+  return `${prefix || 'deap'} •••• •••• ${suffix}`
 }
 
 function generateTokenSecret(kind: ApiTokenKind): string {
@@ -3274,7 +4881,7 @@ async function exportQuestionBanksWorkbook(batchIds: string[], questions: Questi
 
 async function requestAiIntelligence(payload: AiIntelligencePayload): Promise<AiIntelligenceResponse> {
   const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  const endpoint = isLocal ? 'https://iicocece-assessment.web.app/api/analytics-intelligence' : '/api/analytics-intelligence'
+  const endpoint = isLocal ? 'https://training-assessment-1c8ef.web.app/api/analytics-intelligence' : '/api/analytics-intelligence'
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3295,7 +4902,7 @@ async function requestAiIntelligence(payload: AiIntelligencePayload): Promise<Ai
 
 async function requestHelpIntelligence(payload: HelpIntelligencePayload): Promise<AiIntelligenceResponse> {
   const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  const endpoint = isLocal ? 'https://iicocece-assessment.web.app/api/help-intelligence' : '/api/help-intelligence'
+  const endpoint = isLocal ? 'https://training-assessment-1c8ef.web.app/api/help-intelligence' : '/api/help-intelligence'
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3318,6 +4925,44 @@ function generatePassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
   const values = crypto.getRandomValues(new Uint32Array(6))
   return Array.from(values, (value) => chars[value % chars.length]).join('')
+}
+
+function secureCharFrom(chars: string): string {
+  const value = crypto.getRandomValues(new Uint32Array(1))[0]
+  return chars[value % chars.length]
+}
+
+function shuffleSecureCharacters(chars: string[]): string[] {
+  const shuffled = [...chars]
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.getRandomValues(new Uint32Array(1))[0] % (index + 1)
+    const current = shuffled[index]
+    shuffled[index] = shuffled[swapIndex]
+    shuffled[swapIndex] = current
+  }
+  return shuffled
+}
+
+function generateTesterPassword(): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghijkmnopqrstuvwxyz'
+  const digits = '23456789'
+  const special = '@#%?'
+  const all = upper + lower + digits + special
+  return shuffleSecureCharacters([
+    secureCharFrom(upper),
+    secureCharFrom(lower),
+    secureCharFrom(digits),
+    secureCharFrom(special),
+    secureCharFrom(all),
+    secureCharFrom(all),
+  ]).join('')
+}
+
+function validateChosenTesterPassword(password: string): string | undefined {
+  if (!password.trim()) return 'Enter a password before saving.'
+  if (password.length > 128) return 'Password must be 128 characters or fewer.'
+  return undefined
 }
 
 function stripQuestionBankFileExtension(value: string): string {
@@ -3934,6 +5579,9 @@ async function parseUserFile(file: File, existingUsers: User[]): Promise<{ users
       jobRole: (jobRoleValue || (importedRole === 'admin' ? 'Support Lead' : 'Employee')).slice(0, 100),
       department: (importCell(row, ['department', 'team', 'division', 'unit']) || 'Unassigned').slice(0, 100),
       supervisorId: supervisor?.userId ?? (supervisorReference.includes('@') ? undefined : supervisorReference.slice(0, 32) || undefined),
+      disabled: matched?.disabled,
+      disabledAt: matched?.disabledAt,
+      disabledReason: matched?.disabledReason,
     })
   })
 
@@ -4020,6 +5668,9 @@ function App() {
     readStored<AnalyticsEvent[]>('deap-analytics-events', []).filter((event) => !analyticsEventReferencesErasedUser(event)),
   )
   const [problemReports, setProblemReports] = useState<ProblemReport[]>(() => normalizeProblemReports(readStored('deap-problem-reports', [])))
+  const [affectedAreas, setAffectedAreas] = useState<AffectedArea[]>(() => normalizeAffectedAreas(readStored('deap-affected-areas', [])))
+  const [bugAuditLogs, setBugAuditLogs] = useState<BugAuditLog[]>(() => normalizeBugAuditLogs(readStored('deap-bug-audit-logs', [])))
+  const [contributionPoints, setContributionPoints] = useState<UserContributionPoints[]>(() => normalizeContributionPoints(readStored('deap-contribution-points', [])))
   const [trashRecords, setTrashRecords] = useState<ReportTrashRecord[]>(() => normalizeTrashRecords(readStored('deap-report-trash', [])))
   const [questionExposureCounts, setQuestionExposureCounts] = useState<QuestionExposureCounts>(() => readStored('deap-question-exposure-counts', {}))
   const [questionMastery, setQuestionMastery] = useState<UserQuestionMastery>(() => scrubQuestionMastery(readStored('deap-question-mastery', {})))
@@ -4027,6 +5678,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string>()
   const [branding, setBranding] = useState<Branding>(() => normalizeBranding(readStored('deap-branding', defaultBranding)))
   const [layoutSettings, setLayoutSettings] = useState<LayoutSettings>(() => normalizeLayoutSettings(readStored('deap-layout-settings', defaultLayoutSettings)))
+  const [dashboardLayouts, setDashboardLayouts] = useState<DashboardLayoutMap>(() => normalizeDashboardLayouts(readStored(dashboardLayoutStorageKey, {})))
   const [apiTokens, setApiTokens] = useState<ApiTokenRecord[]>(() => normalizeApiTokens(readStored('deap-api-tokens', [])))
   const [generatedApiToken, setGeneratedApiToken] = useState<GeneratedApiToken>()
   const [theme, setTheme] = useState<ThemeMode>(() => readStored('deap-theme', 'light'))
@@ -4037,11 +5689,18 @@ function App() {
   const [query, setQuery] = useState('')
   const [toast, setToast] = useState('')
   const [problemReportOpen, setProblemReportOpen] = useState(false)
+  const [problemLauncherVisible, setProblemLauncherVisible] = useState(true)
+  const [problemLauncherHiddenUntil, setProblemLauncherHiddenUntil] = useState(0)
+  const [problemLauncherCloseCount, setProblemLauncherCloseCount] = useState(0)
+  const [bugFeedbackTabHighlighted, setBugFeedbackTabHighlighted] = useState(false)
   const [syncState, setSyncState] = useState<SyncState>(() => (navigator.onLine ? 'saved' : 'offline'))
   const [availabilityRefreshBusy, setAvailabilityRefreshBusy] = useState(false)
   const availabilitySyncChannelRef = useRef<BroadcastChannel | null>(null)
   const sharedStateUpdatedAtRef = useRef(sharedStateTime(localStorage.getItem('deap-shared-state-updated-at') ?? undefined))
   const cloudSyncInFlightRef = useRef(false)
+  const cloudHydratedRef = useRef(false)
+  const cloudWriteStateRef = useRef<SharedAppState | undefined>(undefined)
+  const cloudSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
   const questionBankCatalogueSyncRef = useRef('')
   const questionBankCloudFetchRef = useRef(new Set<string>())
   const questionBankCloudSyncRef = useRef(new Set<string>())
@@ -4053,6 +5712,9 @@ function App() {
     auditEvents,
     analyticsEvents,
     problemReports,
+    affectedAreas,
+    bugAuditLogs,
+    contributionPoints,
     trashRecords,
     questionExposureCounts,
     questionMastery,
@@ -4062,8 +5724,69 @@ function App() {
     deletedQuestionBankIds,
     branding,
     layoutSettings,
+    dashboardLayouts,
     apiTokens,
   })
+  const problemLauncherUserKey = currentUser?.id ?? 'guest'
+  const problemLauncherCooldownKey = `deap-problem-launcher-cooldown-until-${problemLauncherUserKey}`
+  const problemLauncherLongHideKey = `deap-problem-launcher-hidden-until-${problemLauncherUserKey}`
+  const problemLauncherCloseCountKey = `deap-problem-launcher-close-count-${problemLauncherUserKey}`
+
+  useEffect(() => {
+    if (!currentUser) return
+    const cooldownUntil = Number(sessionStorage.getItem(problemLauncherCooldownKey) || 0)
+    const longHiddenUntil = Number(localStorage.getItem(problemLauncherLongHideKey) || 0)
+    const nextHiddenUntil = Math.max(cooldownUntil, longHiddenUntil)
+    setProblemLauncherHiddenUntil(nextHiddenUntil)
+    setProblemLauncherCloseCount(Math.max(0, Number(sessionStorage.getItem(problemLauncherCloseCountKey) || 0)))
+    setProblemLauncherVisible(Date.now() >= nextHiddenUntil)
+  }, [currentUser, problemLauncherCloseCountKey, problemLauncherCooldownKey, problemLauncherLongHideKey])
+
+  useEffect(() => {
+    if (!currentUser || problemLauncherHiddenUntil <= Date.now()) return
+    setProblemLauncherVisible(false)
+    const remaining = problemLauncherHiddenUntil - Date.now()
+    if (remaining > problemLauncherCooldownMs + 1000) return
+    const timer = window.setTimeout(() => {
+      sessionStorage.removeItem(problemLauncherCooldownKey)
+      setProblemLauncherHiddenUntil(0)
+      setProblemLauncherVisible(true)
+    }, remaining)
+    return () => window.clearTimeout(timer)
+  }, [currentUser, problemLauncherCooldownKey, problemLauncherHiddenUntil])
+
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window)
+    function handleClientError(event: ErrorEvent) {
+      recordClientDiagnostic('browser error', event.message || event.error?.message)
+    }
+    function handleUnhandledRejection(event: PromiseRejectionEvent) {
+      recordClientDiagnostic('unhandled rejection', event.reason instanceof Error ? event.reason.message : event.reason)
+    }
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+      const url = input instanceof Request ? input.url : String(input)
+      try {
+        const response = await originalFetch(input, init)
+        if (!response.ok && /\/api\/|firebase|googleapis|cloudfunctions|run\.app/i.test(url)) {
+          recordClientDiagnostic('failed request', `${method} ${url} returned ${response.status}`)
+        }
+        return response
+      } catch (error) {
+        if (/\/api\/|firebase|googleapis|cloudfunctions|run\.app/i.test(url)) {
+          recordClientDiagnostic('network failure', `${method} ${url}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        throw error
+      }
+    }
+    window.addEventListener('error', handleClientError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    return () => {
+      window.fetch = originalFetch
+      window.removeEventListener('error', handleClientError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
 
   const applySharedState = useCallback((incomingState: SharedAppState | null | undefined, options: { force?: boolean } = {}) => {
     if (!incomingState) return false
@@ -4118,12 +5841,16 @@ function App() {
     )
     const nextBranding = normalizeBranding(normalized.branding ?? defaultBranding)
     const nextLayoutSettings = normalizeLayoutSettings(normalized.layoutSettings ?? readStored('deap-layout-settings', defaultLayoutSettings))
+    const nextDashboardLayouts = mergeDashboardLayouts(normalized.dashboardLayouts, runtimeSharedStateRef.current.dashboardLayouts ?? readStored(dashboardLayoutStorageKey, {}))
     const nextApiTokens = normalizeApiTokens(normalized.apiTokens)
     const nextAuditEvents = mergeRecordsById(normalized.auditEvents ?? [], runtimeSharedStateRef.current.auditEvents ?? [])
       .sort((left, right) => sharedStateTime(right.createdAt) - sharedStateTime(left.createdAt))
     const nextAnalyticsEvents = mergeRecordsById(normalized.analyticsEvents ?? [], runtimeSharedStateRef.current.analyticsEvents ?? [])
       .sort((left, right) => sharedStateTime(right.createdAt) - sharedStateTime(left.createdAt))
     const nextProblemReports = normalizeProblemReports(mergeRecordsById(normalized.problemReports ?? [], runtimeSharedStateRef.current.problemReports ?? []))
+    const nextAffectedAreas = normalizeAffectedAreas(mergeRecordsById(normalized.affectedAreas ?? [], runtimeSharedStateRef.current.affectedAreas ?? []))
+    const nextBugAuditLogs = normalizeBugAuditLogs(mergeRecordsById(normalized.bugAuditLogs ?? [], runtimeSharedStateRef.current.bugAuditLogs ?? []))
+    const nextContributionPoints = normalizeContributionPoints(mergeRecordsById(normalized.contributionPoints ?? [], runtimeSharedStateRef.current.contributionPoints ?? []))
     const nextTrashRecords = normalizeTrashRecords(mergeRecordsById(normalized.trashRecords ?? [], runtimeSharedStateRef.current.trashRecords ?? []))
     const nextQuestionExposureCounts = mergeQuestionExposureCounts(normalized.questionExposureCounts, runtimeSharedStateRef.current.questionExposureCounts)
     const nextQuestionMastery = mergeQuestionMastery(normalized.questionMastery, runtimeSharedStateRef.current.questionMastery)
@@ -4133,6 +5860,7 @@ function App() {
     setPermissions((existing) => (sameSerializedState(existing, nextPermissions) ? existing : nextPermissions))
     setBranding((existing) => (sameSerializedState(existing, nextBranding) ? existing : nextBranding))
     setLayoutSettings((existing) => (sameSerializedState(existing, nextLayoutSettings) ? existing : nextLayoutSettings))
+    setDashboardLayouts((existing) => (sameSerializedState(existing, nextDashboardLayouts) ? existing : nextDashboardLayouts))
     setQuestionExposureCounts((existing) => (sameSerializedState(existing, nextQuestionExposureCounts) ? existing : nextQuestionExposureCounts))
     setQuestionMastery((existing) => (sameSerializedState(existing, nextQuestionMastery) ? existing : nextQuestionMastery))
     setQuestionBankMetadata((existing) => (sameSerializedState(existing, nextQuestionBankMetadata) ? existing : nextQuestionBankMetadata))
@@ -4147,6 +5875,9 @@ function App() {
     setAuditEvents((existing) => (sameSerializedState(existing, nextAuditEvents) ? existing : nextAuditEvents))
     setAnalyticsEvents((existing) => (sameSerializedState(existing, nextAnalyticsEvents) ? existing : nextAnalyticsEvents))
     setProblemReports((existing) => (sameSerializedState(existing, nextProblemReports) ? existing : nextProblemReports))
+    setAffectedAreas((existing) => (sameSerializedState(existing, nextAffectedAreas) ? existing : nextAffectedAreas))
+    setBugAuditLogs((existing) => (sameSerializedState(existing, nextBugAuditLogs) ? existing : nextBugAuditLogs))
+    setContributionPoints((existing) => (sameSerializedState(existing, nextContributionPoints) ? existing : nextContributionPoints))
     setTrashRecords((existing) => (sameSerializedState(existing, nextTrashRecords) ? existing : nextTrashRecords))
     setApiTokens((existing) => (sameSerializedState(existing, nextApiTokens) ? existing : nextApiTokens))
     setCurrentUser((existing) => {
@@ -4159,6 +5890,7 @@ function App() {
     localStorage.setItem('deap-sessions', JSON.stringify(nextSessions))
     localStorage.setItem('deap-branding', JSON.stringify(nextBranding))
     localStorage.setItem('deap-layout-settings', JSON.stringify(nextLayoutSettings))
+    localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextDashboardLayouts))
     localStorage.setItem('deap-question-exposure-counts', JSON.stringify(nextQuestionExposureCounts))
     localStorage.setItem('deap-question-mastery', JSON.stringify(nextQuestionMastery))
     localStorage.setItem('deap-question-bank-metadata', JSON.stringify(nextQuestionBankMetadata))
@@ -4169,6 +5901,9 @@ function App() {
     localStorage.setItem('deap-audit-events', JSON.stringify(nextAuditEvents))
     localStorage.setItem('deap-analytics-events', JSON.stringify(nextAnalyticsEvents))
     localStorage.setItem('deap-problem-reports', JSON.stringify(nextProblemReports))
+    localStorage.setItem('deap-affected-areas', JSON.stringify(nextAffectedAreas))
+    localStorage.setItem('deap-bug-audit-logs', JSON.stringify(nextBugAuditLogs))
+    localStorage.setItem('deap-contribution-points', JSON.stringify(nextContributionPoints))
     localStorage.setItem('deap-report-trash', JSON.stringify(nextTrashRecords))
     localStorage.setItem('deap-api-tokens', JSON.stringify(nextApiTokens))
     if (autoArchivedIds.length) void saveCloudSharedState(normalized)
@@ -4188,11 +5923,15 @@ function App() {
       auditEvents: readStored('deap-audit-events', []),
       analyticsEvents: readStored('deap-analytics-events', []),
       problemReports: readStored('deap-problem-reports', []),
+      affectedAreas: readStored('deap-affected-areas', []),
+      bugAuditLogs: readStored('deap-bug-audit-logs', []),
+      contributionPoints: readStored('deap-contribution-points', []),
       trashRecords: readStored('deap-report-trash', []),
       questionExposureCounts: readStored('deap-question-exposure-counts', {}),
       questionMastery: readStored('deap-question-mastery', {}),
       branding: readStored('deap-branding', defaultBranding),
       layoutSettings: readStored('deap-layout-settings', defaultLayoutSettings),
+      dashboardLayouts: readStored(dashboardLayoutStorageKey, {}),
       apiTokens: readStored('deap-api-tokens', []),
       updatedAt: localStorage.getItem('deap-shared-state-updated-at') ?? undefined,
     })
@@ -4202,7 +5941,14 @@ function App() {
     if (cloudSyncInFlightRef.current && !force) return false
     cloudSyncInFlightRef.current = true
     try {
-      return applySharedState(await fetchCloudSharedState(), { force })
+      const cloudState = await fetchCloudSharedState()
+      if (!cloudState) return false
+      const normalizedCloudState = normalizeSharedState(cloudState)
+      cloudHydratedRef.current = true
+      cloudWriteStateRef.current = normalizedCloudState
+      const applied = applySharedState(normalizedCloudState, { force })
+      if (navigator.onLine) setSyncState('saved')
+      return applied || true
     } catch {
       // Local state remains authoritative while the cloud endpoint is unavailable.
       return false
@@ -4227,6 +5973,39 @@ function App() {
     return applyCourseImageRegistry(incomingRegistry)
   }, [applyCourseImageRegistry])
 
+  async function saveSharedStateAfterHydration(
+    nextState: SharedAppState,
+    changedFields: Partial<SharedAppState>,
+    failureMessage: string,
+  ) {
+    const saveTask = async () => {
+      let baseState = cloudWriteStateRef.current
+      if (!baseState && !cloudHydratedRef.current) {
+        const cloudState = await fetchCloudSharedState()
+        if (cloudState) {
+          baseState = normalizeSharedState(cloudState)
+          cloudHydratedRef.current = true
+          cloudWriteStateRef.current = baseState
+          applySharedState(baseState, { force: true })
+        }
+      }
+      const stateToSave = normalizeSharedState({
+        ...(baseState ?? nextState),
+        ...changedFields,
+        updatedAt: nextState.updatedAt ?? new Date().toISOString(),
+      })
+      const saved = await saveCloudSharedState(stateToSave)
+      if (saved) {
+        cloudHydratedRef.current = true
+        cloudWriteStateRef.current = stateToSave
+      }
+      setSyncState(saved ? 'saved' : navigator.onLine ? 'delayed' : 'offline')
+      if (!saved) setToast(failureMessage)
+    }
+    cloudSaveQueueRef.current = cloudSaveQueueRef.current.catch(() => undefined).then(saveTask)
+    return cloudSaveQueueRef.current
+  }
+
   async function refreshTestAvailabilityNow() {
     setAvailabilityRefreshBusy(true)
     const applied = await pullCloudSharedState(true)
@@ -4248,11 +6027,15 @@ function App() {
       auditEvents,
       analyticsEvents,
       problemReports,
+      affectedAreas,
+      bugAuditLogs,
+      contributionPoints,
       trashRecords,
       questionExposureCounts,
       questionMastery,
       branding,
       layoutSettings,
+      dashboardLayouts,
       apiTokens,
       ...overrides,
       updatedAt,
@@ -4261,10 +6044,11 @@ function App() {
     const message = { type: 'shared_state_changed', createdAt: updatedAt }
     availabilitySyncChannelRef.current?.postMessage(message)
     window.dispatchEvent(new CustomEvent('deap-availability-sync', { detail: message }))
-    void saveCloudSharedState(nextState).then((saved) => {
-      setSyncState(saved ? 'saved' : navigator.onLine ? 'delayed' : 'offline')
-      if (!saved) setToast('Admin change saved on this device, but cloud sync failed. Please check your connection and refresh.')
-    })
+    void saveSharedStateAfterHydration(
+      nextState,
+      overrides,
+      'Admin change saved on this device, but cloud sync is unavailable. Enable Firebase billing or keep this browser open until cloud sync is restored.',
+    )
   }
 
   function publishAssessmentAvailabilityState(nextTests: Assessment[], nextSessions = sessions) {
@@ -4321,11 +6105,15 @@ function App() {
       auditEvents,
       analyticsEvents,
       problemReports,
+      affectedAreas,
+      bugAuditLogs,
+      contributionPoints,
       trashRecords,
       questionExposureCounts,
       questionMastery,
       branding,
       layoutSettings,
+      dashboardLayouts,
       apiTokens,
       ...overrides,
       updatedAt,
@@ -4337,17 +6125,22 @@ function App() {
     if (nextState.questionBankMetadata) localStorage.setItem('deap-question-bank-metadata', JSON.stringify(nextState.questionBankMetadata))
     if (nextState.questionBankTrainingSources) localStorage.setItem('deap-question-bank-training-sources', JSON.stringify(nextState.questionBankTrainingSources))
     if (nextState.problemReports) localStorage.setItem('deap-problem-reports', JSON.stringify(nextState.problemReports))
+    if (nextState.affectedAreas) localStorage.setItem('deap-affected-areas', JSON.stringify(nextState.affectedAreas))
+    if (nextState.bugAuditLogs) localStorage.setItem('deap-bug-audit-logs', JSON.stringify(nextState.bugAuditLogs))
+    if (nextState.contributionPoints) localStorage.setItem('deap-contribution-points', JSON.stringify(nextState.contributionPoints))
     if (nextState.courseDeployments) localStorage.setItem(courseDeploymentsStorageKey, JSON.stringify(nextState.courseDeployments))
     if (nextState.deletedQuestionBankIds) localStorage.setItem('deap-deleted-question-banks', JSON.stringify(nextState.deletedQuestionBankIds))
     if (nextState.questionExposureCounts) localStorage.setItem('deap-question-exposure-counts', JSON.stringify(nextState.questionExposureCounts))
     if (nextState.questionMastery) localStorage.setItem('deap-question-mastery', JSON.stringify(nextState.questionMastery))
     if (nextState.branding) localStorage.setItem('deap-branding', JSON.stringify(nextState.branding))
     if (nextState.layoutSettings) localStorage.setItem('deap-layout-settings', JSON.stringify(nextState.layoutSettings))
+    if (nextState.dashboardLayouts) localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextState.dashboardLayouts))
     if (nextState.apiTokens) localStorage.setItem('deap-api-tokens', JSON.stringify(nextState.apiTokens))
-    void saveCloudSharedState(nextState).then((saved) => {
-      setSyncState(saved ? 'saved' : navigator.onLine ? 'delayed' : 'offline')
-      if (!saved) setToast('This attempt is saved locally, but Firebase sync is delayed. Keep this browser open while the connection recovers.')
-    })
+    void saveSharedStateAfterHydration(
+      nextState,
+      overrides,
+      'This attempt is saved locally, but Firebase sync is delayed. Keep this browser open while the connection recovers.',
+    )
   }
 
   useEffect(() => {
@@ -4363,15 +6156,19 @@ function App() {
       auditEvents,
       analyticsEvents,
       problemReports,
+      affectedAreas,
+      bugAuditLogs,
+      contributionPoints,
       trashRecords,
       questionExposureCounts,
       questionMastery,
       branding,
       layoutSettings,
+      dashboardLayouts,
       apiTokens,
       updatedAt: localStorage.getItem('deap-shared-state-updated-at') ?? undefined,
     }
-  }, [users, permissions, tests, sessions, questionBankMetadata, questionBankTrainingSources, courseDeployments, deletedQuestionBankIds, auditEvents, analyticsEvents, problemReports, trashRecords, questionExposureCounts, questionMastery, branding, layoutSettings, apiTokens])
+  }, [users, permissions, tests, sessions, questionBankMetadata, questionBankTrainingSources, courseDeployments, deletedQuestionBankIds, auditEvents, analyticsEvents, problemReports, affectedAreas, bugAuditLogs, contributionPoints, trashRecords, questionExposureCounts, questionMastery, branding, layoutSettings, dashboardLayouts, apiTokens])
 
   useEffect(() => localStorage.setItem('deap-questions', JSON.stringify(questions)), [questions])
   useEffect(() => localStorage.setItem('deap-question-bank-metadata', JSON.stringify(questionBankMetadata)), [questionBankMetadata])
@@ -4385,12 +6182,16 @@ function App() {
   useEffect(() => localStorage.setItem('deap-audit-events', JSON.stringify(auditEvents)), [auditEvents])
   useEffect(() => localStorage.setItem('deap-analytics-events', JSON.stringify(analyticsEvents)), [analyticsEvents])
   useEffect(() => localStorage.setItem('deap-problem-reports', JSON.stringify(normalizeProblemReports(problemReports))), [problemReports])
+  useEffect(() => localStorage.setItem('deap-affected-areas', JSON.stringify(normalizeAffectedAreas(affectedAreas))), [affectedAreas])
+  useEffect(() => localStorage.setItem('deap-bug-audit-logs', JSON.stringify(normalizeBugAuditLogs(bugAuditLogs))), [bugAuditLogs])
+  useEffect(() => localStorage.setItem('deap-contribution-points', JSON.stringify(normalizeContributionPoints(contributionPoints))), [contributionPoints])
   useEffect(() => localStorage.setItem('deap-report-trash', JSON.stringify(normalizeTrashRecords(trashRecords))), [trashRecords])
   useEffect(() => localStorage.setItem('deap-question-exposure-counts', JSON.stringify(questionExposureCounts)), [questionExposureCounts])
   useEffect(() => localStorage.setItem('deap-question-mastery', JSON.stringify(questionMastery)), [questionMastery])
   useEffect(() => localStorage.setItem('deap-current-user', JSON.stringify(currentUser)), [currentUser])
   useEffect(() => localStorage.setItem('deap-branding', JSON.stringify(branding)), [branding])
   useEffect(() => localStorage.setItem('deap-layout-settings', JSON.stringify(layoutSettings)), [layoutSettings])
+  useEffect(() => localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(dashboardLayouts)), [dashboardLayouts])
   useEffect(() => localStorage.setItem('deap-api-tokens', JSON.stringify(apiTokens)), [apiTokens])
   useEffect(() => {
     if (Object.keys(questionExposureCounts).length || !sessions.length) return
@@ -4604,21 +6405,37 @@ function App() {
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
   const isSuperAdmin = currentUser?.role === 'super_admin'
   const canManageApiTokens = isAyodejiTokenOwner(currentUser)
+  const usersVisibleToCurrentUser = users.filter((user) => !isTesterAccount(user))
   const activeSession = sessions.find((session) => session.id === activeSessionId && !isSessionNullified(session))
-  const currentPermissions = currentUser ? (isAdmin ? defaultPermissionsFor(currentUser) : (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser))) : undefined
-  const hasPermission = (permission: PermissionKey) => Boolean(isAdmin || currentPermissions?.[permission])
+  const currentPermissions = currentUser ? (isAdmin && !isTesterAccount(currentUser) ? defaultPermissionsFor(currentUser) : (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser))) : undefined
+  const hasPermission = (permission: PermissionKey) => Boolean((isAdmin && !isTesterAccount(currentUser)) || currentPermissions?.[permission])
   const visibleEmployeeNav = employeeNav.filter(([itemView]) => {
     const required = employeeViewPermissions[itemView]
     return required ? hasPermission(required) : true
   })
   const visibleAdminNav = navItems.filter(([itemView]) => {
     if (itemView === 'notifications') return isSuperAdmin
+    if (itemView === 'bug-reports') return canManageApiTokens
+    if (itemView === 'feature-inventory') return canManageApiTokens
     const required = adminViewPermissions[itemView]
     return required ? hasPermission(required) : true
   })
-  const visibleNavigation = isAdmin ? [...visibleAdminNav, ...visibleEmployeeNav, ...universalNav] : [...visibleAdminNav, ...visibleEmployeeNav, ...universalNav]
+  const primaryNavigation = isAdmin ? [...visibleAdminNav, ...visibleEmployeeNav, ...universalNav] : [...visibleAdminNav, ...visibleEmployeeNav, ...universalNav]
+  const visibleNavigation = [...primaryNavigation, ...participationNav]
   const usesManagementWorkspace = isAdmin || visibleAdminNav.some(([itemView]) => view === itemView)
   const canAccessCurrentView = view === 'login' || view === 'taking-test' || view === 'result' || visibleNavigation.some(([itemView]) => itemView === view)
+  const currentContribution = currentUser
+    ? contributionPoints.find((record) => record.userId === currentUser.id) ?? {
+        id: `contribution-${currentUser.id}`,
+        userId: currentUser.id,
+        totalPoints: 0,
+        currentBadge: 'Getting Started',
+        validBugReports: 0,
+        validFeedbackReports: 0,
+        rejectedReports: 0,
+        duplicateReports: 0,
+      }
+    : undefined
   const appShellStyle = { '--deap-sidebar-width': `${layoutSettings.sidebarWidthPx}px` } as CSSProperties
 
   useEffect(() => {
@@ -4672,6 +6489,32 @@ function App() {
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('pointercancel', handlePointerUp)
+  }
+
+  function saveDashboardLayout(layout: UserDashboardLayout, changeDescription: string) {
+    if (!currentUser) return
+    const normalizedLayout = normalizeDashboardLayout(currentUser.id, {
+      ...layout,
+      userId: currentUser.id,
+      lastUpdated: new Date().toISOString(),
+      lastUpdatedDevice: dashboardDeviceClass(),
+      lastUpdatedClient: navigator.userAgent,
+      conflictToken: dashboardConflictToken(),
+      isDefault: false,
+    })
+    const nextDashboardLayouts = mergeDashboardLayouts({ [currentUser.id]: normalizedLayout }, dashboardLayouts)
+    const auditEvent: AuditEvent = {
+      id: eventId('audit'),
+      actorName: currentUser.fullName,
+      action: 'Dashboard layout updated',
+      detail: changeDescription,
+      createdAt: normalizedLayout.lastUpdated,
+    }
+    const nextAuditEvents = [auditEvent, ...auditEvents]
+    setDashboardLayouts(nextDashboardLayouts)
+    setAuditEvents(nextAuditEvents)
+    localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextDashboardLayouts))
+    publishSharedState({ dashboardLayouts: nextDashboardLayouts, auditEvents: nextAuditEvents })
   }
 
   /**
@@ -4762,43 +6605,160 @@ function App() {
     })
   }, [deletedQuestionBankIds, questionBankMetadata, questionBankTrainingSources, questions, tests])
 
-  function submitProblemReport(input: { title: string; description: string; severity: ProblemSeverity }) {
+  function submitProblemReport(input: {
+    reportMode?: FeedbackReportMode
+    category?: string
+    title: string
+    actualBehaviour: string
+    expectedBehaviour?: string
+    reproductionSteps: string
+    moduleName: string
+    affectedAreaId?: string
+    affectedAreaText?: string
+    browserInfo?: string
+    deviceInfo?: string
+    operatingSystemInfo?: string
+    consoleError?: string
+    additionalComments?: string
+    severity: ProblemSeverity
+    permissionToIncludeDiagnostics: boolean
+    attachments?: ProblemAttachment[]
+  }) {
     if (!currentUser) return
+    const reportMode = input.reportMode ?? 'bug'
     const title = input.title.trim()
-    const description = input.description.trim()
-    if (!title || !description) {
-      setToast('Add a short title and description before sending the problem report.')
+    const actualBehaviour = input.actualBehaviour.trim()
+    const expectedBehaviour = (input.expectedBehaviour ?? '').trim()
+    const affectedAreaId = sanitizeAffectedAreaText(input.affectedAreaId, 120)
+    const affectedAreaText = sanitizeAffectedAreaText(input.affectedAreaText, 160)
+    if (!title || !actualBehaviour || (reportMode === 'bug' && !expectedBehaviour) || (!affectedAreaId && !affectedAreaText)) {
+      setToast(reportMode === 'bug' ? 'Add a title, affected page or feature, what happened, and what you expected before sending the bug report.' : 'Add a title, affected page or feature, and feedback details before sending.')
       return
     }
+    const deviceType = window.innerWidth < 640 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop'
+    const operatingSystem = /Windows/i.test(navigator.userAgent)
+      ? 'Windows'
+      : /Mac OS|Macintosh/i.test(navigator.userAgent)
+        ? 'macOS'
+        : /Android/i.test(navigator.userAgent)
+          ? 'Android'
+          : /iPhone|iPad|iOS/i.test(navigator.userAgent)
+            ? 'iOS'
+            : 'Unknown'
+    const description = actualBehaviour
+    const selectedArea = affectedAreaId ? affectedAreas.find((area) => area.id === affectedAreaId && area.status === 'active') : undefined
+    const matchedOtherArea = !selectedArea && affectedAreaText ? findAffectedAreaMatch(affectedAreaText, affectedAreas) : undefined
+    const reportId = eventId('problem')
+    const now = new Date().toISOString()
+    const reportAffectedAreaId = selectedArea?.id ?? matchedOtherArea?.id
+    const reportAffectedAreaText = reportAffectedAreaId ? undefined : affectedAreaText
+    const recentClientDiagnostics = input.permissionToIncludeDiagnostics ? readClientDiagnosticSummary() : ''
     const report: ProblemReport = {
-      id: eventId('problem'),
+      id: reportId,
       reporterId: currentUser.id,
+      reporterUserId: currentUser.userId,
+      reporterEmail: currentUser.email,
       reporterName: currentUser.fullName,
       reporterRole: currentUser.role,
       view,
       title,
       description,
+      reportMode,
+      category: input.category?.trim() || (reportMode === 'feedback' ? 'General comment' : 'Other bug'),
+      actualBehaviour,
+      expectedBehaviour: expectedBehaviour || (reportMode === 'feedback' ? 'User feedback does not require a separate expected behaviour.' : ''),
+      reproductionSteps: input.reproductionSteps.trim(),
+      moduleName: selectedArea?.displayName ?? matchedOtherArea?.displayName ?? (input.moduleName.trim() || affectedAreaText || view),
+      affectedAreaId: reportAffectedAreaId,
+      affectedAreaText: reportAffectedAreaText,
+      currentRoute: window.location.pathname,
+      currentPageTitle: affectedAreaViewHints[view] ?? view,
+      browserInfo: sanitizeAffectedAreaText(input.browserInfo, 300) || undefined,
+      deviceInfo: sanitizeAffectedAreaText(input.deviceInfo, 160) || undefined,
+      operatingSystemInfo: sanitizeAffectedAreaText(input.operatingSystemInfo, 160) || undefined,
+      consoleError: sanitizeAffectedAreaText(input.consoleError || recentClientDiagnostics, 1200) || undefined,
+      additionalComments: sanitizeAffectedAreaText(input.additionalComments, 1600) || undefined,
+      pagePath: window.location.pathname,
+      workspaceId: 'default',
+      userSeverity: input.severity,
+      systemSuggestedSeverity: input.severity,
+      adminPriority: 'normal',
+      adminDecision: 'pending',
+      pointsAwarded: 0,
       severity: input.severity,
-      status: 'open',
-      createdAt: new Date().toISOString(),
+      status: 'Submitted',
+      createdAt: now,
+      updatedAt: now,
       url: window.location.href,
       userAgent: navigator.userAgent,
       syncState,
+      attachments: normalizeProblemAttachments(input.attachments),
+      diagnosticSnapshot: input.permissionToIncludeDiagnostics
+        ? {
+            browser: navigator.userAgent,
+            deviceType,
+            operatingSystem,
+            screenSize: `${window.innerWidth}x${window.innerHeight}`,
+            appVersion: 'DEAP hosted MVP',
+            networkStatus: navigator.onLine ? 'online' : 'offline',
+            permissionToIncludeDiagnostics: true,
+          }
+        : {
+            deviceType,
+            screenSize: `${window.innerWidth}x${window.innerHeight}`,
+            networkStatus: navigator.onLine ? 'online' : 'offline',
+            permissionToIncludeDiagnostics: false,
+          },
       activeTestId,
       activeSessionId,
     }
+    const areaUsageId = reportAffectedAreaId
+    const pendingSuggestion = !areaUsageId && affectedAreaText
+      ? {
+          id: `area-suggestion-${affectedAreaSlug(affectedAreaText)}-${Date.now()}`,
+          displayName: affectedAreaText,
+          slug: affectedAreaSlug(affectedAreaText),
+          type: 'other' as AffectedAreaType,
+          aliases: [],
+          isSystemDefined: false,
+          isUserSuggested: true,
+          status: 'pendingReview' as AffectedAreaStatus,
+          createdBy: currentUser.id,
+          createdAt: now,
+          updatedAt: now,
+          usageCount: 0,
+          relatedBugReportId: report.id,
+        }
+      : undefined
+    const nextAffectedAreas = normalizeAffectedAreas([
+      ...(pendingSuggestion ? [pendingSuggestion] : []),
+      ...affectedAreas.map((area) => (area.id === areaUsageId ? { ...area, usageCount: area.usageCount + 1, updatedAt: now } : area)),
+    ])
     const nextProblemReports = normalizeProblemReports([report, ...problemReports])
     const auditEvent: AuditEvent = {
       id: eventId('audit'),
       actorName: currentUser.fullName,
-      action: 'Problem reported',
-      detail: `${currentUser.fullName} reported "${title}" from ${view}. Severity: ${input.severity}.`,
+      action: reportMode === 'feedback' ? 'Feedback submitted' : 'Bug report submitted',
+      detail: `${currentUser.fullName} submitted ${reportMode} "${title}" from ${report.moduleName}. Category: ${report.category}. Severity: ${input.severity}. Status: Submitted. Awaiting Super Admin review and point decision.`,
       createdAt: report.createdAt,
     }
     const nextAuditEvents = [auditEvent, ...auditEvents]
+    const bugAuditLog: BugAuditLog = {
+      id: eventId('bug-audit'),
+      bugReportId: report.id,
+      actorUserId: currentUser.id,
+      actorRole: currentUser.role,
+      action: reportMode === 'feedback' ? 'Feedback submitted' : 'Bug report submitted',
+      newStatus: 'Submitted',
+      notes: `Submitted from ${view}. Category: ${report.category}. Awaiting Super Admin review.`,
+      createdAt: report.createdAt,
+    }
+    const nextBugAuditLogs = normalizeBugAuditLogs([bugAuditLog, ...bugAuditLogs])
     setProblemReports(nextProblemReports)
+    setAffectedAreas(nextAffectedAreas)
     setAuditEvents(nextAuditEvents)
-    publishSharedState({ problemReports: nextProblemReports, auditEvents: nextAuditEvents })
+    setBugAuditLogs(nextBugAuditLogs)
+    publishSharedState({ problemReports: nextProblemReports, affectedAreas: nextAffectedAreas, auditEvents: nextAuditEvents, bugAuditLogs: nextBugAuditLogs })
     recordAnalytics('problem_report_submitted', {
       userId: currentUser.id,
       outcome: input.severity,
@@ -4809,7 +6769,105 @@ function App() {
         active_session_id: activeSessionId,
       },
     })
-    setToast('Problem report sent to the Super Admin activity ledger for review.')
+    setToast(reportMode === 'feedback' ? 'Feedback submitted. Thank you for helping improve DEAP.' : 'Bug report submitted. DEAP will check it and show updates on your feedback page.')
+  }
+
+  function updateBugReport(reportId: string, patch: Partial<ProblemReport>, action: string, note?: string) {
+    if (!canManageApiTokens || !currentUser) {
+      setToast('Only Ayodeji Falope Super Admin can approve or change bug repair workflow status.')
+      return
+    }
+    const existingReport = problemReports.find((report) => report.id === reportId)
+    if (!existingReport) {
+      setToast('Bug report not found.')
+      return
+    }
+    const previousStatus = normalizeProblemStatus(existingReport.status)
+    const now = new Date().toISOString()
+    const nextStatus = patch.status ? normalizeProblemStatus(patch.status) : previousStatus
+    if (patch.status && !problemCanTransition(previousStatus, nextStatus)) {
+      setToast(`Blocked unsafe bug workflow jump from ${previousStatus} to ${nextStatus}. Use the required approval sequence.`)
+      return
+    }
+    const timestampPatch: Partial<ProblemReport> = {
+      approvedForInvestigationAt: nextStatus === 'Approved for Investigation' ? now : existingReport.approvedForInvestigationAt,
+      approvedForRepairAt: nextStatus === 'Approved for Repair' ? now : existingReport.approvedForRepairAt,
+      approvedForDeploymentAt: nextStatus === 'Fixed and Monitored' ? now : existingReport.approvedForDeploymentAt,
+    }
+    const nextReport: ProblemReport = {
+      ...existingReport,
+      ...patch,
+      ...timestampPatch,
+      status: nextStatus,
+      updatedAt: now,
+      pointsAwardedAt: patch.pointsAwarded !== undefined ? now : existingReport.pointsAwardedAt,
+      adminNotes: note ? [...(existingReport.adminNotes ?? []), `${new Date(now).toLocaleString()} - ${currentUser.fullName}: ${note}`] : existingReport.adminNotes ?? [],
+    }
+    const normalizedReports = normalizeProblemReports(problemReports.map((report) => (report.id === reportId ? nextReport : report)))
+    const nextContributionPoints = buildContributionPointsFromReports(normalizedReports)
+    const auditEvent: AuditEvent = {
+      id: eventId('audit'),
+      actorName: currentUser.fullName,
+      action,
+      detail: `${existingReport.title} moved from ${previousStatus} to ${nextStatus}. ${note ?? ''}`.trim(),
+      createdAt: now,
+    }
+    const nextAuditEvents = [auditEvent, ...auditEvents]
+    const bugAuditLog: BugAuditLog = {
+      id: eventId('bug-audit'),
+      bugReportId: reportId,
+      actorUserId: currentUser.id,
+      actorRole: currentUser.role,
+      action,
+      previousStatus,
+      newStatus: nextStatus,
+      notes: note,
+      createdAt: now,
+    }
+    const nextBugAuditLogs = normalizeBugAuditLogs([bugAuditLog, ...bugAuditLogs])
+    setProblemReports(normalizedReports)
+    setAuditEvents(nextAuditEvents)
+    setBugAuditLogs(nextBugAuditLogs)
+    setContributionPoints(nextContributionPoints)
+    publishSharedState({ problemReports: normalizedReports, auditEvents: nextAuditEvents, bugAuditLogs: nextBugAuditLogs, contributionPoints: nextContributionPoints })
+    setToast(`${action}: ${existingReport.title}`)
+  }
+
+  function updateAffectedArea(areaId: string, patch: Partial<AffectedArea>, action: string, note?: string) {
+    if (!isAdmin || !currentUser) {
+      setToast('Only authorised administrators can manage affected-area suggestions.')
+      return
+    }
+    const existingArea = affectedAreas.find((area) => area.id === areaId)
+    if (!existingArea) {
+      setToast('Affected area suggestion not found.')
+      return
+    }
+    const now = new Date().toISOString()
+    const displayName = patch.displayName ? sanitizeAffectedAreaText(patch.displayName) : existingArea.displayName
+    const nextArea: AffectedArea = {
+      ...existingArea,
+      ...patch,
+      displayName,
+      slug: affectedAreaSlug(displayName),
+      status: patch.status && affectedAreaStatuses.includes(patch.status) ? patch.status : existingArea.status,
+      type: patch.type && affectedAreaTypes.includes(patch.type) ? patch.type : existingArea.type,
+      approvedBy: patch.status === 'active' ? currentUser.id : existingArea.approvedBy,
+      updatedAt: now,
+    }
+    const nextAffectedAreas = normalizeAffectedAreas(affectedAreas.map((area) => (area.id === areaId ? nextArea : area)))
+    const auditEvent: AuditEvent = {
+      id: eventId('audit'),
+      actorName: currentUser.fullName,
+      action,
+      detail: `${existingArea.displayName} changed from ${existingArea.status} to ${nextArea.status}. ${note ?? ''}`.trim(),
+      createdAt: now,
+    }
+    const nextAuditEvents = [auditEvent, ...auditEvents]
+    setAffectedAreas(nextAffectedAreas)
+    setAuditEvents(nextAuditEvents)
+    publishSharedState({ affectedAreas: nextAffectedAreas, auditEvents: nextAuditEvents })
+    setToast('Affected area registry updated.')
   }
 
   /**
@@ -4822,12 +6880,34 @@ function App() {
         metadata: { from_view: view, to_view: nextView },
       })
     }
+    if (nextView === 'bug-feedback') setBugFeedbackTabHighlighted(false)
     setMobileNavOpen(false)
     setView(nextView)
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
       document.getElementById('main-content')?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' })
     })
+  }
+
+  function dismissProblemLauncher(scope: 'session' | 'today' | 'week') {
+    const now = Date.now()
+    const hiddenUntil =
+      scope === 'today'
+        ? new Date(new Date().setHours(23, 59, 59, 999)).getTime()
+        : scope === 'week'
+          ? now + 7 * 24 * 60 * 60 * 1000
+          : now + problemLauncherCooldownMs
+    if (scope === 'session') sessionStorage.setItem(problemLauncherCooldownKey, String(hiddenUntil))
+    else localStorage.setItem(problemLauncherLongHideKey, String(hiddenUntil))
+    const nextCloseCount = problemLauncherCloseCount + 1
+    sessionStorage.setItem(problemLauncherCloseCountKey, String(nextCloseCount))
+    setProblemLauncherCloseCount(nextCloseCount)
+    setProblemLauncherHiddenUntil(hiddenUntil)
+    setProblemLauncherVisible(false)
+    setProblemReportOpen(false)
+    setBugFeedbackTabHighlighted(true)
+    setToast('Bug Report and Feedback is still available on the left sidebar.')
+    window.setTimeout(() => setBugFeedbackTabHighlighted(false), 7000)
   }
 
   /**
@@ -4860,16 +6940,30 @@ function App() {
       setToast('Invalid username or password.')
       return
     }
+    if (isUserDisabled(user)) {
+      recordAnalytics('login_failed', {
+        userName: username.trim() || 'Unknown',
+        outcome: 'disabled_account',
+        metadata: { attempted_username: username.trim().slice(0, 120), user_id: user.userId },
+      }, user)
+      setToast(isTesterAccount(user) ? 'This tester account is switched off. Ask the Super Admin to enable access again.' : 'This user account is disabled. Please contact the Super Admin.')
+      return
+    }
+    const signedInAt = new Date().toISOString()
+    const signedInUser = { ...user, lastLoginAt: signedInAt }
+    const nextUsers = users.map((candidate) => (candidate.id === user.id ? signedInUser : candidate))
+    setUsers(nextUsers)
+    publishSharedState({ users: nextUsers })
     recordAudit('Login', `${user.fullName} signed in.`, user.fullName)
-    recordAnalytics('login_success', { userId: user.id, outcome: 'signed_in' }, user)
-    setCurrentUser(user)
+    recordAnalytics('login_success', { userId: user.id, outcome: 'signed_in' }, signedInUser)
+    setCurrentUser(signedInUser)
     const resumable = sessions.find((session) => {
       const assignedTest = tests.find((test) => test.id === session.testId)
-      const questionSet = assignedTest ? sessionQuestionSetStatus(session, assignedTest, questions, user.id) : undefined
+      const questionSet = assignedTest ? sessionQuestionSetStatus(session, assignedTest, questions, signedInUser.id) : undefined
       return (
-        session.userId === user.id &&
+        session.userId === signedInUser.id &&
         session.status === 'in_progress' &&
-        Boolean(assignedTest?.assignedUserIds.includes(user.id)) &&
+        Boolean(assignedTest?.assignedUserIds.includes(signedInUser.id)) &&
         Boolean(assignedTest && getAvailabilityState(assignedTest).canStart) &&
         Boolean(questionSet?.canResume)
       )
@@ -4878,16 +6972,16 @@ function App() {
       setActiveTestId(resumable.testId)
       setActiveSessionId(resumable.id)
       recordAnalytics('test_resumed', {
-        userId: user.id,
+        userId: signedInUser.id,
         testId: resumable.testId,
         outcome: 'restored_on_login',
         metadata: { session_id: resumable.id, answered_questions: resumable.responses.length },
-      }, user)
+      }, signedInUser)
       setToast('Your in-progress test has been restored. The question timer continued while you were away.')
       setView('taking-test')
       return
     }
-    setView(firstViewForUser(user, permissions))
+    setView(firstViewForUser(signedInUser, permissions))
   }
 
   /**
@@ -5557,10 +7651,232 @@ function App() {
    */
   function resetUserPassword(userId: string) {
     const user = users.find((item) => item.id === userId)
-    setUsers((existing) => existing.map((user) => (user.id === userId ? { ...user, password: generatePassword() } : user)))
+    if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) {
+      setToast('Only Ayodeji Falope Super Admin can reset tester account passwords.')
+      return
+    }
+    const now = new Date().toISOString()
+    const nextUsers = users.map((user) =>
+      user.id === userId
+        ? {
+            ...user,
+            password: generatePassword(),
+            passwordLastResetAt: now,
+            passwordLastResetBy: currentUser?.fullName ?? 'Admin',
+            passwordLastResetById: currentUser?.id,
+          }
+        : user,
+    )
+    setUsers(nextUsers)
+    publishSharedState({ users: nextUsers })
     recordAudit('Password reset', `${user?.fullName ?? 'A user'} received a new generated password.`)
     recordAnalytics('password_reset', { userId, outcome: 'reset' })
     setToast('Password reset. Click the hidden password button to copy the updated credential.')
+  }
+
+  function updateTesterAccount(
+    accountKey: TesterAccountKey,
+    action: string,
+    detail: string,
+    updater: (account: User, definition: TesterAccountDefinition, now: string) => User,
+    issuedPassword?: string,
+  ): TesterAccountOperationResult | undefined {
+    if (!currentUser || !isAyodejiTokenOwner(currentUser)) {
+      setToast('Only Ayodeji Falope Super Admin can manage tester accounts.')
+      return undefined
+    }
+    const actor = currentUser
+    const definition = testerAccountDefinitionFor(accountKey)
+    if (!definition) {
+      setToast('Test account not found.')
+      return undefined
+    }
+    const existing = users.find((user) => user.testAccountKey === accountKey || user.id === definition.id || user.userId === definition.userId)
+    const now = new Date().toISOString()
+    const currentAccount = normalizeTesterAccount(definition, existing)
+    const nextAccount = normalizeTesterAccount(definition, updater(currentAccount, definition, now))
+    const withoutTester = users.filter((user) => user.id !== nextAccount.id && user.testAccountKey !== accountKey && user.userId !== definition.userId)
+    const nextUsers = normalizeUserDirectory([...withoutTester, nextAccount])
+    const nextPermissions = { ...permissions, [nextAccount.id]: defaultPermissionsFor(nextAccount) }
+    const auditEvent: AuditEvent = {
+      id: eventId('audit'),
+      actorName: actor.fullName,
+      action,
+      detail,
+      createdAt: now,
+    }
+    const nextAuditEvents = [auditEvent, ...auditEvents]
+    setUsers(nextUsers)
+    setPermissions(nextPermissions)
+    setAuditEvents(nextAuditEvents)
+    publishSharedState({ users: nextUsers, permissions: nextPermissions, auditEvents: nextAuditEvents })
+    recordAnalytics('password_reset', {
+      userId: nextAccount.id,
+      outcome: action,
+      metadata: { tester_account: accountKey, password_changed: Boolean(issuedPassword) },
+    })
+    const verificationPassed = issuedPassword ? nextAccount.password === issuedPassword : undefined
+    const message = issuedPassword
+      ? `${definition.fullName} password saved and verified.`
+      : `${definition.fullName} account updated.`
+    setToast(message)
+    return {
+      accountKey,
+      accountName: definition.fullName,
+      password: issuedPassword,
+      verificationPassed,
+      message,
+    }
+  }
+
+  function enableTesterAccount(accountKey: TesterAccountKey, generateFreshPassword: boolean): TesterAccountOperationResult | undefined {
+    const issuedPassword = generateFreshPassword ? generateTesterPassword() : undefined
+    return updateTesterAccount(
+      accountKey,
+      generateFreshPassword ? 'Tester account enabled and password generated' : 'Tester account enabled',
+      generateFreshPassword ? `Tester account ${accountKey} was enabled with a fresh verified password.` : `Tester account ${accountKey} was enabled without changing the password.`,
+      (account, _definition, now) => ({
+        ...account,
+        password: issuedPassword ?? account.password,
+        disabled: false,
+        disabledAt: undefined,
+        disabledReason: undefined,
+        disabledBy: undefined,
+        disabledById: undefined,
+        passwordLastResetAt: issuedPassword ? now : account.passwordLastResetAt,
+        passwordLastResetBy: issuedPassword ? currentUser?.fullName : account.passwordLastResetBy,
+        passwordLastResetById: issuedPassword ? currentUser?.id : account.passwordLastResetById,
+      }),
+      issuedPassword,
+    )
+  }
+
+  function disableTesterAccount(accountKey: TesterAccountKey): TesterAccountOperationResult | undefined {
+    return updateTesterAccount(
+      accountKey,
+      'Tester account disabled',
+      `Tester account ${accountKey} was switched off. Account history was preserved.`,
+      (account, _definition, now) => ({
+        ...account,
+        disabled: true,
+        disabledAt: now,
+        disabledReason: 'Switched off by Super Admin after testing.',
+        disabledBy: currentUser?.fullName,
+        disabledById: currentUser?.id,
+      }),
+    )
+  }
+
+  function generateTesterAccountPassword(accountKey: TesterAccountKey): TesterAccountOperationResult | undefined {
+    const issuedPassword = generateTesterPassword()
+    return updateTesterAccount(
+      accountKey,
+      'Tester password generated',
+      `Tester account ${accountKey} received a fresh verified password and was switched on.`,
+      (account, _definition, now) => ({
+        ...account,
+        password: issuedPassword,
+        disabled: false,
+        disabledAt: undefined,
+        disabledReason: undefined,
+        disabledBy: undefined,
+        disabledById: undefined,
+        passwordLastResetAt: now,
+        passwordLastResetBy: currentUser?.fullName,
+        passwordLastResetById: currentUser?.id,
+      }),
+      issuedPassword,
+    )
+  }
+
+  function resetTesterAccountDefaultPassword(accountKey: TesterAccountKey): TesterAccountOperationResult | undefined {
+    const definition = testerAccountDefinitionFor(accountKey)
+    if (!definition) {
+      setToast('Test account not found.')
+      return undefined
+    }
+    return updateTesterAccount(
+      accountKey,
+      'Tester password reset to default',
+      `Tester account ${accountKey} was reset to its default password and switched on.`,
+      (account, _definition, now) => ({
+        ...account,
+        password: definition.defaultPassword,
+        disabled: false,
+        disabledAt: undefined,
+        disabledReason: undefined,
+        disabledBy: undefined,
+        disabledById: undefined,
+        passwordLastResetAt: now,
+        passwordLastResetBy: currentUser?.fullName,
+        passwordLastResetById: currentUser?.id,
+      }),
+      definition.defaultPassword,
+    )
+  }
+
+  function setTesterAccountPassword(accountKey: TesterAccountKey, password: string): TesterAccountOperationResult | undefined {
+    const validationError = validateChosenTesterPassword(password)
+    if (validationError) {
+      setToast(validationError)
+      return undefined
+    }
+    return updateTesterAccount(
+      accountKey,
+      'Tester password changed',
+      `Tester account ${accountKey} received a Super Admin chosen password and was switched on.`,
+      (account, _definition, now) => ({
+        ...account,
+        password,
+        disabled: false,
+        disabledAt: undefined,
+        disabledReason: undefined,
+        disabledBy: undefined,
+        disabledById: undefined,
+        passwordLastResetAt: now,
+        passwordLastResetBy: currentUser?.fullName,
+        passwordLastResetById: currentUser?.id,
+      }),
+      password,
+    )
+  }
+
+  function verifyTesterAccountPassword(accountKey: TesterAccountKey, password: string): TesterAccountOperationResult | undefined {
+    if (!currentUser || !isAyodejiTokenOwner(currentUser)) {
+      setToast('Only Ayodeji Falope Super Admin can verify tester passwords.')
+      return undefined
+    }
+    const actor = currentUser
+    const definition = testerAccountDefinitionFor(accountKey)
+    const account = users.find((user) => user.testAccountKey === accountKey || user.id === definition?.id || user.userId === definition?.userId)
+    if (!definition || !account) {
+      setToast('Test account not found.')
+      return undefined
+    }
+    if (!password) {
+      setToast('Enter a password to verify.')
+      return undefined
+    }
+    const verificationPassed = account.password === password
+    const now = new Date().toISOString()
+    const auditEvent: AuditEvent = {
+      id: eventId('audit'),
+      actorName: actor.fullName,
+      action: verificationPassed ? 'Tester password verification passed' : 'Tester password verification failed',
+      detail: `Tester account ${accountKey} password verification ${verificationPassed ? 'passed' : 'failed'}.`,
+      createdAt: now,
+    }
+    const nextAuditEvents = [auditEvent, ...auditEvents]
+    setAuditEvents(nextAuditEvents)
+    publishSharedState({ auditEvents: nextAuditEvents })
+    const message = verificationPassed ? 'Password verified successfully.' : 'That password does not match the account.'
+    setToast(message)
+    return {
+      accountKey,
+      accountName: definition.fullName,
+      verificationPassed,
+      message,
+    }
   }
 
   /**
@@ -5569,6 +7885,10 @@ function App() {
   function setUserPermission(userId: string, permission: PermissionKey, enabled: boolean) {
     const user = users.find((item) => item.id === userId)
     if (!user) return
+    if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) {
+      setToast('Only Ayodeji Falope Super Admin can change tester account permissions.')
+      return
+    }
     if (user.role === 'super_admin' || user.role === 'admin') {
       publishSharedState({ permissions: { ...permissions, [user.id]: defaultPermissionsFor(user) } })
       setToast('Admin access is locked on. Admin always has every permission.')
@@ -5596,12 +7916,13 @@ function App() {
   function bulkSetPermission(userIds: string[], permission: PermissionKey, enabled: boolean) {
     const editableUserIds = userIds.filter((userId) => {
       const user = users.find((candidate) => candidate.id === userId)
-      return user && user.role !== 'super_admin' && user.role !== 'admin'
+      return user && user.role !== 'super_admin' && user.role !== 'admin' && (!isTesterAccount(user) || isAyodejiTokenOwner(currentUser))
     })
     const nextPermissions = { ...permissions }
     userIds.forEach((userId) => {
       const user = users.find((candidate) => candidate.id === userId)
       if (!user) return
+      if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) return
       if (user.role === 'super_admin' || user.role === 'admin') {
         nextPermissions[userId] = defaultPermissionsFor(user)
         return
@@ -5707,18 +8028,68 @@ function App() {
       const tokenHash = await sha256Hex(token)
       const issuedAt = new Date()
       const ttlDays = Math.min(365, Math.max(1, Number.isFinite(request.expiresInDays) ? request.expiresInDays : request.kind === 'super' ? 365 : 90))
+      const tokenId = eventId('api-token')
+      const fingerprint = `fp_${tokenHash.slice(0, 10)}`
+      const ownerId = request.ownerId || currentUser.id
+      const rotationPolicy = request.kind === 'super' ? '90_days' : request.rotationPolicy
+      const createdAuditLog: ApiTokenAuditLog = {
+        id: eventId('api-token-audit'),
+        tokenId,
+        actor: currentUser.fullName,
+        action: 'Token created',
+        tokenType: request.kind,
+        timestamp: issuedAt.toISOString(),
+        affectedFields: ['name', 'type', 'scopes', 'expiry', 'owner', 'deployment'],
+        reason: request.kind === 'super' ? request.justification || 'Super token created with explicit acknowledgement.' : request.purpose,
+        result: 'success',
+      }
+      const deploymentRecords: ApiTokenDeploymentRecord[] = request.deploymentName?.trim()
+        ? [{
+            id: eventId('api-token-deployment'),
+            tokenId,
+            deploymentName: request.deploymentName.trim().slice(0, 160),
+            environment: request.deploymentEnvironment || request.allowedEnvironments[0] || 'production',
+            serviceName: request.deploymentService || 'Documented integration',
+            deployedBy: currentUser.fullName,
+            deployedAt: issuedAt.toISOString(),
+            status: 'deployed',
+            notes: request.notes?.slice(0, 600),
+          }]
+        : []
       const record: ApiTokenRecord = {
-        id: eventId('api-token'),
+        id: tokenId,
         name: tokenName,
         kind: request.kind,
         tokenPrefix: token.slice(0, 18),
+        tokenFingerprint: fingerprint,
         tokenHash,
-        tokenSecret: token,
         scopes,
+        purpose: request.purpose.trim().slice(0, 240) || 'Integration access',
+        ownerId,
         createdAt: issuedAt.toISOString(),
         expiresAt: new Date(issuedAt.getTime() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
         createdBy: currentUser.fullName,
         status: 'active',
+        riskLevel: request.kind === 'super' ? 'critical' : calculateApiTokenRisk({
+          kind: request.kind,
+          scopes,
+          ownerId,
+          expiresAt: new Date(issuedAt.getTime() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
+          deploymentRecords,
+        }),
+        allowedModules: request.allowedModules.length ? request.allowedModules : ['DEAP API'],
+        allowedEnvironments: request.allowedEnvironments.length ? request.allowedEnvironments : ['production'],
+        allowedIps: request.allowedIps,
+        rateLimit: request.rateLimit,
+        usageLimit: request.usageLimit,
+        usageCount: 0,
+        rotationPolicy,
+        rotationStatus: deploymentRecords.length ? 'deployed' : 'not_deployed',
+        nextRotationDueAt: nextTokenRotationDate(issuedAt.toISOString(), rotationPolicy),
+        deploymentRecords,
+        usageLogs: [],
+        auditLogs: [createdAuditLog],
+        notes: request.notes?.trim().slice(0, 800) || undefined,
         oauthProfile: request.oauthProfile,
         auditLogging: true,
       }
@@ -5730,9 +8101,9 @@ function App() {
       recordAnalytics('api_token_created', {
         value: scopes.length,
         outcome: request.kind,
-        metadata: { token_id: record.id, oauth_profile: record.oauthProfile },
+        metadata: { token_id: record.id, fingerprint, oauth_profile: record.oauthProfile, raw_secret_stored: false },
       })
-      setToast('Token package generated and stored. Copy it from the Bearer Token block.')
+      setToast('Token package generated. Copy it now; only the fingerprint and hash metadata will remain stored.')
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'API token generation failed.')
     }
@@ -5752,7 +8123,26 @@ function App() {
     const revokedAt = new Date().toISOString()
     const nextApiTokens = apiTokens.map((token) =>
       token.id === tokenId
-        ? { ...token, status: 'revoked' as const, revokedAt, revokedBy: currentUser.fullName }
+        ? {
+            ...token,
+            status: 'revoked' as const,
+            rotationStatus: 'revoked' as const,
+            revokedAt,
+            revokedBy: currentUser.fullName,
+            revokedReason: token.kind === 'super' ? 'Super Admin confirmed high-impact revocation.' : 'Revoked by Super Admin.',
+            deploymentRecords: token.deploymentRecords.map((deployment) => ({ ...deployment, status: 'revoked' as const })),
+            auditLogs: [{
+              id: eventId('api-token-audit'),
+              tokenId,
+              actor: currentUser.fullName,
+              action: 'Token revoked',
+              tokenType: token.kind,
+              timestamp: revokedAt,
+              affectedFields: ['status', 'deployments'],
+              reason: token.kind === 'super' ? 'High-impact Super Admin token revocation confirmed.' : 'Token revoked from catalogue.',
+              result: 'success' as const,
+            }, ...token.auditLogs],
+          }
         : token,
     )
     setApiTokens(nextApiTokens)
@@ -5764,6 +8154,84 @@ function App() {
       metadata: { token_id: tokenRecord.id },
     })
     setToast('API token revoked and synced.')
+  }
+
+  function rotateApiToken(tokenId: string) {
+    if (!currentUser || !canManageApiTokens) {
+      setToast('Only Ayodeji Falope can rotate API tokens.')
+      return
+    }
+    const tokenRecord = apiTokens.find((token) => token.id === tokenId)
+    if (!tokenRecord || tokenRecord.status !== 'active') return
+    const confirmed = window.confirm(`Start rotation for "${tokenRecord.name}"?\n\nThis marks the current token as rotation pending. Generate a replacement token, update the integration, then revoke the old token after the new token is verified.`)
+    if (!confirmed) return
+    const now = new Date().toISOString()
+    const nextApiTokens = apiTokens.map((token) =>
+      token.id === tokenId
+        ? {
+            ...token,
+            status: 'rotation_pending' as const,
+            rotationStatus: 'rotation_pending' as const,
+            nextRotationDueAt: now,
+            deploymentRecords: token.deploymentRecords.map((deployment) => ({ ...deployment, status: 'rotation_pending' as const })),
+            auditLogs: [{
+              id: eventId('api-token-audit'),
+              tokenId,
+              actor: currentUser.fullName,
+              action: 'Rotation started',
+              tokenType: token.kind,
+              timestamp: now,
+              affectedFields: ['status', 'rotationStatus', 'deployments'],
+              reason: 'Safe replacement workflow started before revocation.',
+              result: 'success' as const,
+            }, ...token.auditLogs],
+          }
+        : token,
+    )
+    setApiTokens(nextApiTokens)
+    publishSharedState({ apiTokens: nextApiTokens })
+    recordAudit('API token rotation started', `${tokenRecord.name} marked rotation pending.`)
+    setToast('Token marked rotation pending. Generate and deploy a replacement before revoking the old token.')
+  }
+
+  function archiveApiToken(tokenId: string) {
+    if (!currentUser || !canManageApiTokens) {
+      setToast('Only Ayodeji Falope can archive API tokens.')
+      return
+    }
+    const tokenRecord = apiTokens.find((token) => token.id === tokenId)
+    if (!tokenRecord || tokenRecord.status === 'active') {
+      setToast('Revoke or rotate a token before archiving it.')
+      return
+    }
+    const now = new Date().toISOString()
+    const nextApiTokens = apiTokens.map((token) =>
+      token.id === tokenId
+        ? {
+            ...token,
+            status: 'archived' as const,
+            rotationStatus: 'archived' as const,
+            archivedAt: now,
+            archivedBy: currentUser.fullName,
+            deploymentRecords: token.deploymentRecords.map((deployment) => ({ ...deployment, status: 'archived' as const })),
+            auditLogs: [{
+              id: eventId('api-token-audit'),
+              tokenId,
+              actor: currentUser.fullName,
+              action: 'Token archived',
+              tokenType: token.kind,
+              timestamp: now,
+              affectedFields: ['status', 'archive'],
+              reason: 'Token retained for governance history and disabled for authentication.',
+              result: 'success' as const,
+            }, ...token.auditLogs],
+          }
+        : token,
+    )
+    setApiTokens(nextApiTokens)
+    publishSharedState({ apiTokens: nextApiTokens })
+    recordAudit('API token archived', `${tokenRecord.name} archived for token governance history.`)
+    setToast('Token archived. Metadata, deployments, usage, and audit history remain visible.')
   }
 
   /**
@@ -6492,11 +8960,15 @@ function App() {
         auditEvents,
         analyticsEvents,
         problemReports,
+        affectedAreas,
+        bugAuditLogs,
+        contributionPoints,
         trashRecords,
         questionExposureCounts,
         questionMastery,
         branding,
         layoutSettings,
+        dashboardLayouts,
         apiTokens,
         updatedAt: exportedAt,
       }),
@@ -6505,6 +8977,7 @@ function App() {
       deletedQuestionBankIds,
       branding,
       layoutSettings,
+      dashboardLayouts,
       apiTokens,
       localStorageSnapshot: readDeapLocalStorageSnapshot(),
     })
@@ -6529,6 +9002,9 @@ function App() {
         auditEvents?: AuditEvent[]
         analyticsEvents?: AnalyticsEvent[]
         problemReports?: ProblemReport[]
+        affectedAreas?: AffectedArea[]
+        bugAuditLogs?: BugAuditLog[]
+        contributionPoints?: UserContributionPoints[]
         trashRecords?: ReportTrashRecord[]
         questionExposureCounts?: QuestionExposureCounts
         questionMastery?: UserQuestionMastery
@@ -6539,12 +9015,14 @@ function App() {
         deletedQuestionBankIds?: string[]
         branding?: Branding
         layoutSettings?: LayoutSettings
+        dashboardLayouts?: DashboardLayoutMap
         apiTokens?: ApiTokenRecord[]
         localStorageSnapshot?: Record<string, string>
       }
       const stateSource = payload.state ?? payload
       const nextBranding = normalizeBranding(stateSource.branding ?? payload.branding ?? branding)
       const nextLayoutSettings = normalizeLayoutSettings(stateSource.layoutSettings ?? payload.layoutSettings ?? layoutSettings)
+      const nextDashboardLayouts = mergeDashboardLayouts(stateSource.dashboardLayouts ?? payload.dashboardLayouts, dashboardLayouts)
       const nextSharedState = normalizeSharedState({
         users: stateSource.users,
         permissions: stateSource.permissions,
@@ -6556,11 +9034,15 @@ function App() {
         auditEvents: stateSource.auditEvents,
         analyticsEvents: stateSource.analyticsEvents,
         problemReports: stateSource.problemReports ?? payload.problemReports,
+        affectedAreas: stateSource.affectedAreas ?? payload.affectedAreas,
+        bugAuditLogs: stateSource.bugAuditLogs ?? payload.bugAuditLogs,
+        contributionPoints: stateSource.contributionPoints ?? payload.contributionPoints,
         trashRecords: stateSource.trashRecords,
         questionExposureCounts: stateSource.questionExposureCounts,
         questionMastery: stateSource.questionMastery,
         branding: nextBranding,
         layoutSettings: nextLayoutSettings,
+        dashboardLayouts: nextDashboardLayouts,
         apiTokens: stateSource.apiTokens ?? payload.apiTokens,
         updatedAt: new Date().toISOString(),
       })
@@ -6585,6 +9067,9 @@ function App() {
       setAuditEvents(nextSharedState.auditEvents ?? [])
       setAnalyticsEvents(nextSharedState.analyticsEvents ?? [])
       setProblemReports(nextSharedState.problemReports ?? [])
+      setAffectedAreas(nextSharedState.affectedAreas ?? normalizeAffectedAreas([]))
+      setBugAuditLogs(nextSharedState.bugAuditLogs ?? [])
+      setContributionPoints(nextSharedState.contributionPoints ?? [])
       setTrashRecords(nextSharedState.trashRecords ?? [])
       setQuestionExposureCounts(nextSharedState.questionExposureCounts ?? {})
       setQuestionMastery(nextSharedState.questionMastery ?? {})
@@ -6595,6 +9080,7 @@ function App() {
       setDeletedQuestionBankIds(nextDeletedBankIds)
       setBranding(nextBranding)
       setLayoutSettings(nextLayoutSettings)
+      setDashboardLayouts(nextSharedState.dashboardLayouts ?? nextDashboardLayouts)
       setApiTokens(nextSharedState.apiTokens ?? [])
       publishSharedState(nextSharedState)
       recordAudit('System backup restored', `${file.name} restored into DEAP.`)
@@ -6741,8 +9227,10 @@ function App() {
       />
       <ProblemReportLauncher
         open={problemReportOpen}
+        visible={problemLauncherVisible}
         onOpen={() => setProblemReportOpen(true)}
         onClose={() => setProblemReportOpen(false)}
+        onDismissLauncher={dismissProblemLauncher}
         onSubmit={(input) => {
           submitProblemReport(input)
           setProblemReportOpen(false)
@@ -6750,6 +9238,8 @@ function App() {
         view={view}
         syncState={syncState}
         activeTestName={tests.find((test) => test.id === activeTestId)?.name}
+        affectedAreas={affectedAreas}
+        closeCount={problemLauncherCloseCount}
       />
       <aside
         className={`sidebar ${isAdmin ? '' : 'employee-sidebar'}`}
@@ -6791,7 +9281,7 @@ function App() {
         )}
         <div className="sidebar-mobile-header">
           <div className="sidebar-brand-stack">
-            <BrandHeader branding={branding} subtitle="iicocece-assessment" />
+            <BrandHeader branding={branding} subtitle="Training&assessment" />
             <SyncIndicator state={syncState} />
           </div>
           <button
@@ -6807,9 +9297,26 @@ function App() {
           </button>
         </div>
         <nav id="primary-navigation" aria-label={isAdmin ? 'Administrator sections' : 'Portal sections'}>
-          {visibleNavigation.map(([itemView, iconName, label]) => (
+          {primaryNavigation.map(([itemView, iconName, label]) => (
             <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => navigateTo(itemView)}>
               <DeapIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
+            </button>
+          ))}
+        </nav>
+        <nav className="sidebar-participation-nav" aria-label="User participation">
+          {participationNav.map(([itemView, iconName, label]) => (
+            <button
+              key={itemView}
+              className={`${view === itemView ? 'active' : ''} ${itemView === 'bug-feedback' && bugFeedbackTabHighlighted ? 'nav-highlight-blink' : ''}`.trim()}
+              type="button"
+              onClick={() => navigateTo(itemView)}
+            >
+              <DeapIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
+              {currentContribution && currentContribution.totalPoints > 0 && (
+                <span className="nav-points-badge" aria-label={`${currentContribution.totalPoints} contribution points`}>
+                  {currentContribution.totalPoints}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -6830,7 +9337,40 @@ function App() {
       </aside>
 
       <main id="main-content" className={usesManagementWorkspace ? 'workspace' : 'employee-workspace'} tabIndex={-1}>
-        {view === 'dashboard' && <Dashboard tests={tests} questions={questions} sessions={sessions} users={users} analyticsEvents={analyticsEvents} syncState={syncState} onNullifyAttempt={nullifyAttempt} />}
+        {view === 'dashboard' && (
+          <Dashboard
+            currentUser={currentUser}
+            savedLayout={currentUser ? dashboardLayouts[currentUser.id] : undefined}
+            tests={tests}
+            questions={questions}
+            sessions={sessions}
+            users={users}
+            analyticsEvents={analyticsEvents}
+            syncState={syncState}
+            contributionRecord={currentContribution}
+            currentUserReports={currentUser ? problemReports.filter((report) => report.reporterId === currentUser.id) : []}
+            onLayoutChange={saveDashboardLayout}
+            onNullifyAttempt={nullifyAttempt}
+          />
+        )}
+        {view === 'bug-feedback' && (
+          <BugReportFeedbackCenter
+            currentUser={currentUser}
+            contributionRecord={currentContribution}
+            userReports={problemReports.filter((report) => report.reporterId === currentUser.id)}
+            syncState={syncState}
+            affectedAreas={affectedAreas}
+            currentView={view}
+            onSubmit={submitProblemReport}
+          />
+        )}
+        {view === 'feature-inventory' && currentUser && canManageApiTokens && (
+          <FeatureInventoryPanel
+            currentUser={currentUser}
+            onAudit={recordAudit}
+            onToast={setToast}
+          />
+        )}
         {view === 'training' && (
           <TrainingPortal
             currentUser={currentUser}
@@ -6883,7 +9423,7 @@ function App() {
             onTake={startTest}
           />
         )}
-        {view === 'employees' && <EmployeesPanel users={users} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} onImportUsers={handleUserImport} />}
+        {view === 'employees' && <EmployeesPanel users={usersVisibleToCurrentUser} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} onImportUsers={handleUserImport} />}
         {view === 'analytics' && (
           <Analytics
             sessions={sessions}
@@ -6909,6 +9449,7 @@ function App() {
             auditEvents={auditEvents}
             analyticsEvents={analyticsEvents}
             trashRecords={trashRecords}
+            syncState={syncState}
             onTrashEntry={trashReportEntry}
             onRestoreTrashRecord={restoreTrashRecord}
           />
@@ -6924,10 +9465,29 @@ function App() {
             syncState={syncState}
           />
         )}
+        {view === 'bug-reports' && canManageApiTokens && (
+          <SuperAdminBugReports
+            problemReports={problemReports}
+            bugAuditLogs={bugAuditLogs}
+            contributionPoints={contributionPoints}
+            users={users}
+            syncState={syncState}
+            affectedAreas={affectedAreas}
+            onUpdateBugReport={updateBugReport}
+            onUpdateAffectedArea={updateAffectedArea}
+          />
+        )}
         {view === 'settings' && (
           <SettingsPanel
             users={users}
             permissions={permissions}
+            canManageTesterAccounts={canManageApiTokens}
+            onEnableTesterAccount={enableTesterAccount}
+            onDisableTesterAccount={disableTesterAccount}
+            onGenerateTesterAccountPassword={generateTesterAccountPassword}
+            onResetTesterAccountDefaultPassword={resetTesterAccountDefaultPassword}
+            onSetTesterAccountPassword={setTesterAccountPassword}
+            onVerifyTesterAccountPassword={verifyTesterAccountPassword}
             onResetPassword={resetUserPassword}
             onSetPermission={setUserPermission}
             onBulkSetPermission={bulkSetPermission}
@@ -6936,9 +9496,11 @@ function App() {
               onLogoReset={resetPlatformLogo}
               canManageApiTokens={canManageApiTokens}
               apiTokens={apiTokens}
-              generatedApiToken={generatedApiToken}
+            generatedApiToken={generatedApiToken}
             onCreateApiToken={createApiToken}
             onRevokeApiToken={revokeApiToken}
+            onRotateApiToken={rotateApiToken}
+            onArchiveApiToken={archiveApiToken}
             onDismissGeneratedApiToken={() => setGeneratedApiToken(undefined)}
             onDownloadCapabilityCsv={downloadCapabilityInventory}
             theme={theme}
@@ -7046,7 +9608,7 @@ function LoginScreen({
       />
       <section className="login-card" aria-labelledby="login-title">
         <BrandHeader branding={branding} subtitle="Dynamic Employee Assessment Platform" className="login-brand" />
-        <h1 id="login-title">Sign in to iicocece-assessment</h1>
+        <h1 id="login-title">Sign in to Training&assessment</h1>
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -7076,9 +9638,9 @@ function BrandHeader({ branding, subtitle, className = '' }: { branding: Brandin
   return (
     <div className={`brand ${className}`.trim()}>
       <span className="brand-logo-frame">
-        {branding.logoUrl ? <img src={branding.logoUrl} alt="iicocece logo" /> : <LogoPlaceholder />}
+        {branding.logoUrl ? <img src={branding.logoUrl} alt="Training and assessment logo" /> : <LogoPlaceholder />}
       </span>
-      <div>
+      <div className="brand-copy">
         <strong>DEAP</strong>
         <small>{subtitle}</small>
       </div>
@@ -7096,9 +9658,9 @@ function LogoPlaceholder({ large = false }: { large?: boolean }) {
 }
 
 function SyncIndicator({ state }: { state: SyncState }) {
-  const label = state === 'saved' ? 'Cloud saved' : state === 'saving' ? 'Saving changes' : state === 'offline' ? 'Offline copy' : 'Cloud delayed'
+  const label = state === 'saved' ? 'Cloud saved' : state === 'saving' ? 'Saving changes' : state === 'offline' ? 'Offline copy' : 'Cloud sync unavailable'
   return (
-    <div className={`sync-indicator ${state}`} aria-live="polite">
+    <div className={`sync-indicator ${state}`} aria-live="polite" title={state === 'delayed' ? 'Cloud sync is unavailable. Local changes are preserved on this device.' : undefined}>
       <span />
       <strong>{label}</strong>
     </div>
@@ -7160,62 +9722,404 @@ function AppearanceQuickControls({
   )
 }
 
+function AffectedAreaCombobox({
+  areas,
+  currentView,
+  value,
+  onChange,
+}: {
+  areas: AffectedArea[]
+  currentView: AppView
+  value: AffectedAreaSelection
+  onChange: (selection: AffectedAreaSelection) => void
+}) {
+  const inputId = useId()
+  const listboxId = useId()
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const activeAreas = useMemo(() => normalizeAffectedAreas(areas).filter((area) => area.status === 'active'), [areas])
+  const detectedArea = useMemo(() => detectAffectedAreaFromView(currentView, activeAreas), [activeAreas, currentView])
+  const selectedArea = value.id ? activeAreas.find((area) => area.id === value.id) : undefined
+  const recentIds = useMemo(() => readStored<string[]>('deap-recent-affected-area-ids', []), [])
+  const options = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    const seen = new Set<string>()
+    const ordered: AffectedArea[] = []
+    const add = (area?: AffectedArea) => {
+      if (!area || seen.has(area.id)) return
+      const searchable = [area.displayName, area.routePath, area.type, ...area.aliases].join(' ').toLowerCase()
+      if (needle && !searchable.includes(needle)) return
+      seen.add(area.id)
+      ordered.push(area)
+    }
+    add(detectedArea)
+    recentIds.map((id) => activeAreas.find((area) => area.id === id)).forEach(add)
+    activeAreas.filter((area) => area.usageCount > 0).sort((left, right) => right.usageCount - left.usageCount).forEach(add)
+    activeAreas.slice().sort((left, right) => left.displayName.localeCompare(right.displayName)).forEach(add)
+    return ordered
+  }, [activeAreas, detectedArea, query, recentIds])
+  const optionCount = options.length + 1
+
+  useEffect(() => {
+    if (selectedArea) setQuery(selectedArea.displayName)
+    if (value.isOther) setQuery('Other')
+    if (!value.id && !value.isOther && detectedArea && !query) {
+      onChange({ id: detectedArea.id, text: detectedArea.displayName, isOther: false })
+      setQuery(detectedArea.displayName)
+    }
+    // Only auto-detect when the combobox has no user selection yet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectedArea?.id, selectedArea?.id, value.id, value.isOther])
+
+  function selectArea(area: AffectedArea) {
+    onChange({ id: area.id, text: area.displayName, isOther: false })
+    setQuery(area.displayName)
+    setOpen(false)
+    const nextRecent = [area.id, ...recentIds.filter((id) => id !== area.id)].slice(0, 8)
+    localStorage.setItem('deap-recent-affected-area-ids', JSON.stringify(nextRecent))
+  }
+
+  function selectOther() {
+    onChange({ isOther: true, text: query.trim() && query.trim() !== 'Other' ? query.trim() : undefined })
+    setQuery('Other')
+    setOpen(false)
+  }
+
+  function clearSelection() {
+    onChange({ isOther: false })
+    setQuery('')
+    setOpen(false)
+    setHighlightedIndex(0)
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setOpen(true)
+      setHighlightedIndex((index) => Math.min(optionCount - 1, index + 1))
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setOpen(true)
+      setHighlightedIndex((index) => Math.max(0, index - 1))
+    }
+    if (event.key === 'Enter' && open) {
+      event.preventDefault()
+      if (highlightedIndex >= options.length) selectOther()
+      else selectArea(options[highlightedIndex])
+    }
+    if (event.key === 'Escape') setOpen(false)
+  }
+
+  return (
+    <div className="affected-area-field">
+      <label htmlFor={inputId}>Page or Feature Affected</label>
+      <div className="affected-area-combobox">
+        <Search size={16} aria-hidden="true" />
+        <input
+          id={inputId}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-activedescendant={open ? `${listboxId}-option-${highlightedIndex}` : undefined}
+          value={query}
+          onChange={(event) => {
+            const nextQuery = event.target.value
+            const matchedArea = findAffectedAreaMatch(nextQuery, activeAreas)
+            setQuery(nextQuery)
+            setOpen(true)
+            setHighlightedIndex(0)
+            onChange(matchedArea ? { id: matchedArea.id, text: matchedArea.displayName, isOther: false } : { text: nextQuery, isOther: false })
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search pages, modules, or features, for example Analytics"
+          required
+        />
+        {(value.id || value.isOther || query) && (
+          <button className="icon-button" type="button" aria-label="Clear affected page or feature" onClick={clearSelection}>
+            <X size={14} />
+          </button>
+        )}
+        {open && (
+          <div className="affected-area-listbox" id={listboxId} role="listbox">
+            {options.map((area, index) => (
+              <button
+                id={`${listboxId}-option-${index}`}
+                role="option"
+                aria-selected={value.id === area.id}
+                className={highlightedIndex === index ? 'highlighted' : ''}
+                type="button"
+                key={area.id}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onClick={() => selectArea(area)}
+              >
+                <span>{area.displayName}</span>
+                <small>{area.type}{area.routePath ? ` · ${area.routePath}` : ''}</small>
+              </button>
+            ))}
+            {!options.length && <p role="status">No matching page or feature found</p>}
+            <button
+              id={`${listboxId}-option-${options.length}`}
+              role="option"
+              aria-selected={value.isOther}
+              className={`other-option ${highlightedIndex === options.length ? 'highlighted' : ''}`}
+              type="button"
+              onMouseEnter={() => setHighlightedIndex(options.length)}
+              onClick={selectOther}
+            >
+              <span>Other</span>
+              <small>Use this when the page or feature is not listed.</small>
+            </button>
+          </div>
+        )}
+      </div>
+      <small className="field-helper">Select the page, module, or feature where the issue happened.</small>
+      {detectedArea && <small className="field-helper">Detected from current page: {detectedArea.displayName}</small>}
+    </div>
+  )
+}
+
 function ProblemReportLauncher({
   open,
+  visible,
   onOpen,
   onClose,
+  onDismissLauncher,
   onSubmit,
   view,
   syncState,
   activeTestName,
+  affectedAreas,
+  closeCount,
 }: {
   open: boolean
+  visible: boolean
   onOpen: () => void
   onClose: () => void
-  onSubmit: (input: { title: string; description: string; severity: ProblemSeverity }) => void
+  onDismissLauncher: (scope: 'session' | 'today' | 'week') => void
+  onSubmit: (input: {
+    reportMode?: FeedbackReportMode
+    category?: string
+    title: string
+    actualBehaviour: string
+    expectedBehaviour?: string
+    reproductionSteps: string
+    moduleName: string
+    affectedAreaId?: string
+    affectedAreaText?: string
+    severity: ProblemSeverity
+    permissionToIncludeDiagnostics: boolean
+    attachments?: ProblemAttachment[]
+  }) => void
   view: AppView
   syncState: SyncState
   activeTestName?: string
+  affectedAreas: AffectedArea[]
+  closeCount: number
 }) {
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [actualBehaviour, setActualBehaviour] = useState('')
+  const [expectedBehaviour, setExpectedBehaviour] = useState('')
+  const [reproductionSteps, setReproductionSteps] = useState('')
+  const [moduleName, setModuleName] = useState('')
+  const [affectedAreaSelection, setAffectedAreaSelection] = useState<AffectedAreaSelection>({ isOther: false })
+  const [otherAffectedAreaText, setOtherAffectedAreaText] = useState('')
   const [severity, setSeverity] = useState<ProblemSeverity>('medium')
+  const [permissionToIncludeDiagnostics, setPermissionToIncludeDiagnostics] = useState(true)
+  const [attachments, setAttachments] = useState<ProblemAttachment[]>([])
+  const [attachmentError, setAttachmentError] = useState('')
+  const [attachmentBusy, setAttachmentBusy] = useState(false)
+
+  function readAttachment(file: File): Promise<ProblemAttachment> {
+    return new Promise((resolve, reject) => {
+      if (file.size > problemAttachmentMaxBytes) {
+        reject(new Error(`${file.name} is larger than ${Math.round(problemAttachmentMaxBytes / 1024)} KB.`))
+        return
+      }
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
+      reader.onload = () => resolve({
+        id: eventId('problem-attachment'),
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        dataUrl: String(reader.result || ''),
+        createdAt: new Date().toISOString(),
+      })
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function handleAttachmentFiles(files: FileList | null) {
+    if (!files?.length) return
+    setAttachmentBusy(true)
+    setAttachmentError('')
+    try {
+      const openSlots = Math.max(0, problemAttachmentMaxCount - attachments.length)
+      const selectedFiles = Array.from(files).slice(0, openSlots)
+      if (selectedFiles.length < files.length) {
+        setAttachmentError(`Only ${problemAttachmentMaxCount} small attachments can be included per report.`)
+      }
+      const nextAttachments = await Promise.all(selectedFiles.map(readAttachment))
+      setAttachments((current) => normalizeProblemAttachments([...current, ...nextAttachments]))
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : 'Attachment could not be added.')
+    } finally {
+      setAttachmentBusy(false)
+    }
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onSubmit({ title, description, severity })
+    onSubmit({
+      reportMode: 'bug',
+      category: 'Other bug',
+      title,
+      actualBehaviour,
+      expectedBehaviour,
+      reproductionSteps,
+      moduleName,
+      affectedAreaId: affectedAreaSelection.id,
+      affectedAreaText: affectedAreaSelection.isOther ? otherAffectedAreaText : affectedAreaSelection.text,
+      severity,
+      permissionToIncludeDiagnostics,
+      attachments,
+    })
     setTitle('')
-    setDescription('')
+    setActualBehaviour('')
+    setExpectedBehaviour('')
+    setReproductionSteps('')
+    setModuleName('')
+    setAffectedAreaSelection({ isOther: false })
+    setOtherAffectedAreaText('')
     setSeverity('medium')
+    setPermissionToIncludeDiagnostics(true)
+    setAttachments([])
+    setAttachmentError('')
   }
+
+  if (!open && !visible) return null
 
   return (
     <>
-      <button
-        className="problem-report-fab"
-        type="button"
-        onClick={onOpen}
-        aria-label="Report a problem"
-        data-tooltip="Report a problem to the Super Admin activity ledger. The report includes this page, sync state, and active test context."
-      >
-        <Bug size={22} />
-        <span>Report problem</span>
-      </button>
+      {visible && (
+        <div className="problem-report-fab-shell" aria-label="Quick bug report launcher">
+          <button
+            className="problem-report-fab"
+            type="button"
+            onClick={onOpen}
+            aria-label="Report a problem"
+            data-tooltip="Report a problem. DEAP includes this page and safe diagnostic details so the issue is easier to correct."
+          >
+            <Bug size={18} />
+            <span>Report problem</span>
+          </button>
+          <button
+            className="problem-report-fab-close"
+            type="button"
+            onClick={() => onDismissLauncher('session')}
+            aria-label="Hide problem report shortcut for 15 minutes"
+          >
+            <X size={14} />
+          </button>
+          {closeCount >= 1 && (
+            <div className="problem-report-dismiss-options" aria-label="Longer hide options">
+              <button type="button" onClick={() => onDismissLauncher('today')}>Close today</button>
+              <button type="button" onClick={() => onDismissLauncher('week')}>Close week</button>
+            </div>
+          )}
+        </div>
+      )}
       {open && (
         <div className="modal-backdrop" role="presentation" onClick={onClose}>
           <form className="pretest-modal problem-report-modal" role="dialog" aria-modal="true" aria-labelledby="problem-report-title" onSubmit={submit} onClick={(event) => event.stopPropagation()}>
             <span className="status-pill open"><Bug size={16} /> Problem report</span>
             <h2 id="problem-report-title">Tell us what went wrong</h2>
             <p>
-              This sends a structured report to the Super Admin notifications ledger and the Codex repair queue for review. Current page: {view}. Sync state: {syncState}
+              This sends a clear bug report so DEAP can check what needs to be corrected. Current page: {view}. Sync state: {syncState}
               {activeTestName ? `. Active test: ${activeTestName}` : ''}.
             </p>
             <label>
-              Short title
-              <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={140} placeholder="Example: Start Test shows No Test Available" required />
+              Bug title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={140} placeholder="Start Test shows No Test Available" required />
+            </label>
+            <AffectedAreaCombobox
+              areas={affectedAreas}
+              currentView={view}
+              value={affectedAreaSelection}
+              onChange={setAffectedAreaSelection}
+            />
+            {affectedAreaSelection.isOther && (
+              <label>
+                Please describe the affected page or feature
+                <input value={otherAffectedAreaText} onChange={(event) => setOtherAffectedAreaText(event.target.value)} maxLength={160} placeholder="Course Builder page" required />
+              </label>
+            )}
+            <label>
+              What actually happened?
+              <textarea
+                value={actualBehaviour}
+                onChange={(event) => setActualBehaviour(event.target.value)}
+                maxLength={2000}
+                rows={4}
+                placeholder="I clicked Start Test, but the page showed No Test Available."
+                required
+              />
             </label>
             <label>
-              Severity
+              What did you expect to happen?
+              <textarea
+                value={expectedBehaviour}
+                onChange={(event) => setExpectedBehaviour(event.target.value)}
+                maxLength={1200}
+                rows={3}
+                placeholder="The assigned test should open so I can begin."
+                required
+              />
+            </label>
+            <label>
+              Steps to reproduce
+              <textarea
+                value={reproductionSteps}
+                onChange={(event) => setReproductionSteps(event.target.value)}
+                maxLength={1600}
+                rows={4}
+                placeholder="1. Open My Tests. 2. Click Start Test. 3. See No Test Available."
+              />
+            </label>
+            <label>
+              Add screenshot or small evidence file
+              <input
+                type="file"
+                accept="image/*,.pdf,.txt,.log"
+                multiple
+                onChange={(event) => void handleAttachmentFiles(event.currentTarget.files)}
+                disabled={attachmentBusy || attachments.length >= problemAttachmentMaxCount}
+              />
+            </label>
+            <div className="problem-attachment-list" aria-live="polite">
+              {attachments.map((attachment) => (
+                <span key={attachment.id}>
+                  <FileDown size={14} />
+                  {attachment.name}
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Remove ${attachment.name}`}
+                    onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+              {attachmentBusy && <small>Preparing attachment...</small>}
+              {attachmentError && <small className="form-error">{attachmentError}</small>}
+            </div>
+            <label>
+              Severity from your perspective
               <select value={severity} onChange={(event) => setSeverity(event.target.value as ProblemSeverity)}>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -7223,16 +10127,13 @@ function ProblemReportLauncher({
                 <option value="critical">Critical</option>
               </select>
             </label>
-            <label>
-              What happened?
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                maxLength={2000}
-                rows={6}
-                placeholder="Describe what you clicked, what you expected, and what the app showed instead."
-                required
+            <label className="checkbox-card">
+              <input
+                type="checkbox"
+                checked={permissionToIncludeDiagnostics}
+                onChange={(event) => setPermissionToIncludeDiagnostics(event.target.checked)}
               />
+              <span>Include safe diagnostic details such as page, browser, screen size, network status, and sync state. Passwords, private messages, and hidden fields are not collected.</span>
             </label>
             <div className="problem-report-context">
               <span>Page: {view}</span>
@@ -7241,7 +10142,7 @@ function ProblemReportLauncher({
             </div>
             <div className="modal-actions">
               <button className="primary-button" type="submit">
-                <Send size={18} /> Send report
+                <Send size={18} /> Submit Report
               </button>
               <button className="secondary-button" type="button" onClick={onClose}>
                 Cancel
@@ -7251,6 +10152,1013 @@ function ProblemReportLauncher({
         </div>
       )}
     </>
+  )
+}
+
+function FeatureInventoryPanel({
+  currentUser,
+  onAudit,
+  onToast,
+}: {
+  currentUser: User
+  onAudit: (action: string, detail: string, actor?: string) => void
+  onToast: (message: string) => void
+}) {
+  const [payload, setPayload] = useState<FeatureInventoryPayload>(() => readStored<FeatureInventoryPayload | undefined>(featureInventoryCacheKey, undefined) ?? {
+    generatedAt: new Date().toISOString(),
+    version: {
+      id: 'local-pending',
+      versionNumber: 0,
+      createdAt: new Date().toISOString(),
+      createdBy: 'manual_refresh',
+      totalFeatureCount: 0,
+      specificFeatureCount: 0,
+      genericFeatureCount: 0,
+      addedCount: 0,
+      removedCount: 0,
+      changedCount: 0,
+      unchangedCount: 0,
+      scanStatus: 'partial',
+      formatsGenerated: [],
+      firebaseStoragePaths: {},
+      notes: 'Awaiting secure backend inventory load.',
+    },
+    items: [],
+    versions: [],
+    scanLogs: [],
+    exports: [],
+  })
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [downloadingExportId, setDownloadingExportId] = useState('')
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [classification, setClassification] = useState<'all' | FeatureInventoryClassification>('all')
+  const [category, setCategory] = useState('all')
+  const [visibility, setVisibility] = useState<'all' | FeatureInventoryVisibility>('all')
+  const [status, setStatus] = useState<'all' | FeatureInventoryStatus>('all')
+  const [selectedId, setSelectedId] = useState('')
+  const [inventoryViewMode, setInventoryViewMode] = useState<'table' | 'card'>('table')
+  const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([])
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [selectedFormats, setSelectedFormats] = useState<FeatureInventoryExportFormat[]>(['pdf', 'docx', 'json'])
+  const [exportScope, setExportScope] = useState<'selected' | 'filtered' | 'all'>('selected')
+  const items = payload.items
+  const categories = useMemo(() => Array.from(new Set(items.map((item) => item.category))).sort(), [items])
+  const filteredItems = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return items.filter((item) => {
+      const matchesQuery =
+        !needle ||
+        [item.title, item.category, item.description, item.routePaths.join(' '), item.componentNames.join(' '), item.sourceFiles.join(' ')]
+          .join(' ')
+          .toLowerCase()
+          .includes(needle)
+      return (
+        matchesQuery &&
+        (classification === 'all' || item.classification === classification) &&
+        (category === 'all' || item.category === category) &&
+        (visibility === 'all' || item.visibility === visibility) &&
+        (status === 'all' || item.status === status)
+      )
+    })
+  }, [category, classification, items, query, status, visibility])
+  const selectedItem = items.find((item) => item.id === selectedId) ?? filteredItems[0]
+  const selectedFeatureIdSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds])
+  const selectedFeatures = useMemo(() => items.filter((item) => selectedFeatureIdSet.has(item.id)), [items, selectedFeatureIdSet])
+  const visibleSelectedCount = filteredItems.filter((item) => selectedFeatureIdSet.has(item.id)).length
+  const allVisibleSelected = filteredItems.length > 0 && visibleSelectedCount === filteredItems.length
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected
+  const exportScopeCount = exportScope === 'selected' ? selectedFeatures.length : exportScope === 'filtered' ? filteredItems.length : items.length
+
+  useEffect(() => {
+    let mounted = true
+    fetchFeatureInventory(currentUser)
+      .then((next) => {
+        if (!mounted) return
+        setPayload(next)
+        localStorage.setItem(featureInventoryCacheKey, JSON.stringify(next))
+        setError('')
+      })
+      .catch((inventoryError) => {
+        if (!mounted) return
+        setError(inventoryError instanceof Error ? inventoryError.message : 'Feature inventory could not be loaded.')
+      })
+      .finally(() => {
+        if (mounted) setLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    setSelectedFeatureIds((existing) => existing.filter((id) => items.some((item) => item.id === id)))
+  }, [items])
+
+  async function runManualRefresh() {
+    if (!isFeatureInventoryOwner(currentUser)) return
+    const confirmed = window.confirm('Start a secure feature inventory scan now? This creates a new version and preserves previous versions.')
+    if (!confirmed) return
+    setRefreshing(true)
+    setError('')
+    try {
+      const next = await refreshFeatureInventory(currentUser)
+      setPayload(next)
+      localStorage.setItem(featureInventoryCacheKey, JSON.stringify(next))
+      onAudit('Feature inventory refreshed', `Created inventory version ${next.version.id}`, currentUser.fullName)
+      onToast('Feature inventory updated and versioned.')
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'Feature inventory refresh failed.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  function toggleFormat(format: FeatureInventoryExportFormat) {
+    setSelectedFormats((existing) => (existing.includes(format) ? existing.filter((item) => item !== format) : [...existing, format]))
+  }
+
+  function toggleFeatureSelection(featureId: string) {
+    setSelectedFeatureIds((existing) => (existing.includes(featureId) ? existing.filter((id) => id !== featureId) : [...existing, featureId]))
+  }
+
+  function selectVisibleFeatures() {
+    const visibleIds = filteredItems.map((item) => item.id)
+    setSelectedFeatureIds((existing) => Array.from(new Set([...existing, ...visibleIds])))
+  }
+
+  function deselectVisibleFeatures() {
+    const visibleIds = new Set(filteredItems.map((item) => item.id))
+    setSelectedFeatureIds((existing) => existing.filter((id) => !visibleIds.has(id)))
+  }
+
+  function selectAllMatchingFeatures() {
+    setSelectedFeatureIds(filteredItems.map((item) => item.id))
+  }
+
+  function clearSelectedFeatures() {
+    setSelectedFeatureIds([])
+    setReviewOpen(false)
+    setExportScope('selected')
+  }
+
+  function openExportModal(scope: 'selected' | 'filtered' | 'all' = selectedFeatureIds.length ? 'selected' : 'filtered') {
+    setExportScope(scope)
+    setExportModalOpen(true)
+  }
+
+  async function generateExports() {
+    if (!selectedFormats.length) {
+      setError('Select at least one export format.')
+      return
+    }
+    const exportItems = exportScope === 'selected' ? selectedFeatures : exportScope === 'filtered' ? filteredItems : items
+    if (!exportItems.length) {
+      setError(exportScope === 'selected' ? 'Select at least one feature before exporting selected records.' : 'There are no inventory items to export.')
+      return
+    }
+    setExporting(true)
+    setError('')
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '_').replace(/\..+/, '')
+    const versionLabel = `v${String(payload.version.versionNumber).padStart(4, '0')}`
+    const exportFiles = selectedFormats.map((format) => {
+      const fileName = `feature_inventory_${timestamp}_${versionLabel}.${format}`
+      return buildFeatureInventoryStorageFile(format, fileName, payload.version, exportItems)
+    })
+    try {
+      for (const file of exportFiles) {
+        await downloadFeatureInventoryFile(file.format, file.fileName, payload.version, exportItems)
+      }
+      const response = await fetch('/api/superadmin/feature_inventory/export', {
+        method: 'POST',
+        headers: featureInventoryHeaders(currentUser),
+        body: JSON.stringify({
+          versionId: payload.version.id,
+          formats: selectedFormats,
+          itemCount: exportItems.length,
+          exportFiles,
+        }),
+      })
+      if (!response.ok) throw new Error(`Export storage failed (${response.status})`)
+      const next = (await response.json()) as FeatureInventoryPayload
+      setPayload(next)
+      localStorage.setItem(featureInventoryCacheKey, JSON.stringify(next))
+      localStorage.setItem(featureInventoryExportCacheKey, JSON.stringify(next.exports.slice(0, 20)))
+      setExportModalOpen(false)
+      if (exportScope === 'selected') setReviewOpen(false)
+      onAudit('Feature inventory exported', `Generated ${selectedFormats.join(', ')} for ${exportItems.length} item(s).`, currentUser.fullName)
+      onToast('Feature inventory exports generated, downloaded, and stored.')
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'Feature inventory export failed.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function downloadStoredExport(record: FeatureInventoryExportRecord) {
+    setDownloadingExportId(record.id)
+    setError('')
+    try {
+      const exportPayload = await fetchStoredFeatureInventoryExport(currentUser, record.id)
+      let openedCount = 0
+      Object.entries(exportPayload.signedUrls || {}).forEach(([format, url]) => {
+        if (!url) return
+        const fileName = exportPayload.fileNames.find((name) => name.toLowerCase().endsWith(`.${format}`)) || `feature_inventory_${format}`
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        link.rel = 'noopener noreferrer'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        openedCount += 1
+      })
+      if (!openedCount) throw new Error('No downloadable files were returned for this export.')
+      onAudit('Feature inventory stored export downloaded', `Opened ${openedCount} stored export file(s) from ${record.id}.`, currentUser.fullName)
+      onToast(`Stored export ready: ${openedCount} file(s).`)
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Stored export download failed.')
+    } finally {
+      setDownloadingExportId('')
+    }
+  }
+
+  const versionRows = payload.versions.slice(0, 8).map((version) => [
+    `v${String(version.versionNumber).padStart(4, '0')}`,
+    new Date(version.createdAt).toLocaleString(),
+    version.createdBy.replace('_', ' '),
+    `${version.totalFeatureCount}`,
+    `+${version.addedCount} / -${version.removedCount} / ${version.changedCount} changed`,
+    version.scanStatus,
+  ])
+  const exportRows = payload.exports.slice(0, 8).map((record) => [
+    new Date(record.createdAt).toLocaleString(),
+    record.formats.map((format) => featureInventoryFormatLabels[format] || format.toUpperCase()).join(', '),
+    `${record.itemCount}`,
+    record.status,
+    <button
+      className="assist-link"
+      type="button"
+      disabled={downloadingExportId === record.id}
+      onClick={() => downloadStoredExport(record)}
+      key={`${record.id}-download`}
+    >
+      {downloadingExportId === record.id ? 'Preparing...' : 'Download'}
+    </button>,
+  ])
+  const featureRows = filteredItems.map((item) => [
+    <label className="feature-select-cell" key={`${item.id}-select`}>
+      <input
+        type="checkbox"
+        checked={selectedFeatureIdSet.has(item.id)}
+        onChange={() => toggleFeatureSelection(item.id)}
+        aria-label={`Select ${item.title}`}
+      />
+    </label>,
+    item.title,
+    item.classification,
+    item.category,
+    item.visibility.replace('_', ' '),
+    `${item.confidenceScore}%`,
+    item.status.replace('_', ' '),
+    item.routePaths.join(', ') || 'System',
+    item.componentNames.slice(0, 2).join(', ') || 'N/A',
+    new Date(item.lastDetectedAt).toLocaleDateString(),
+    <button className="assist-link" type="button" onClick={() => setSelectedId(item.id)} key={`${item.id}-view`}>View</button>,
+  ])
+
+  return (
+    <section className="feature-inventory-page">
+      <PageTitle eyebrow="Super Admin private registry" title="Feature Inventory" />
+      <section className="panel feature-inventory-hero">
+        <div>
+          <span className="status-pill locked">Ayodeji Falope only</span>
+          <h2>Living catalogue of every detected app feature</h2>
+          <p>
+            This private registry tracks specific LMS capabilities and reusable platform features with version history,
+            daily scheduled scanning, manual refresh, Firebase export storage, and local download support.
+          </p>
+        </div>
+        <div className="feature-inventory-actions">
+          <span className={`dashboard-save-status ${loading || refreshing ? 'saving' : payload.version.scanStatus === 'complete' ? 'saved' : 'failed'}`} role="status" aria-live="polite">
+            {loading ? 'Loading inventory...' : refreshing ? 'Scanning app features...' : `Last scan: ${new Date(payload.version.createdAt).toLocaleString()}`}
+          </span>
+          <button className="secondary-button" type="button" disabled={refreshing || loading} onClick={runManualRefresh}>
+            <RefreshCw size={16} /> {refreshing ? 'Scanning app features' : 'Refresh Inventory Now'}
+          </button>
+          <button className="primary-button" type="button" disabled={!items.length || exporting} onClick={() => openExportModal(selectedFeatureIds.length ? 'selected' : 'filtered')}>
+            <FileDown size={16} /> Bulk Export
+          </button>
+        </div>
+      </section>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <section className="panel superadmin-storage-readiness" aria-label="Feature inventory storage readiness">
+        <div>
+          <span className="status-pill supervised"><ShieldCheck size={16} /> Storage readiness</span>
+          <h2>Private export storage is prepared</h2>
+          <p>
+            Browser downloads work immediately. Cloud-preserved exports are now saved in private Firebase Storage with
+            direct public access denied by deployed Storage rules.
+          </p>
+        </div>
+      </section>
+      <div className="metric-grid">
+        <Metric label="Total features" value={payload.version.totalFeatureCount} icon={<ListChecks />} />
+        <Metric label="Specific features" value={payload.version.specificFeatureCount} icon={<Sparkles />} />
+        <Metric label="Generic reusable features" value={payload.version.genericFeatureCount} icon={<Archive />} />
+        <Metric label="Changed since previous" value={payload.version.changedCount} icon={<Shuffle />} />
+      </div>
+      <section className="panel feature-inventory-toolbar" aria-label="Feature inventory filters">
+        <label className="search-box">
+          <Search size={16} />
+          <span className="sr-only">Search feature inventory</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search features, routes, components, or source files" />
+        </label>
+        <select value={classification} onChange={(event) => setClassification(event.target.value as 'all' | FeatureInventoryClassification)} aria-label="Classification filter">
+          <option value="all">All classes</option>
+          <option value="specific">Specific</option>
+          <option value="generic">Generic</option>
+        </select>
+        <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Category filter">
+          <option value="all">All categories</option>
+          {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <select value={visibility} onChange={(event) => setVisibility(event.target.value as 'all' | FeatureInventoryVisibility)} aria-label="Visibility filter">
+          <option value="all">All visibility</option>
+          <option value="public_user">Public user</option>
+          <option value="admin">Admin</option>
+          <option value="super_admin">Super Admin</option>
+          <option value="system_only">System only</option>
+        </select>
+        <select value={status} onChange={(event) => setStatus(event.target.value as 'all' | FeatureInventoryStatus)} aria-label="Status filter">
+          <option value="all">All status</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="strongly_implied">Strongly implied</option>
+          <option value="needs_confirmation">Needs confirmation</option>
+          <option value="deprecated">Deprecated</option>
+          <option value="hidden">Hidden</option>
+        </select>
+        <div className="feature-view-toggle" role="group" aria-label="Feature inventory display mode">
+          <button className={inventoryViewMode === 'table' ? 'active' : ''} type="button" onClick={() => setInventoryViewMode('table')}>Table</button>
+          <button className={inventoryViewMode === 'card' ? 'active' : ''} type="button" onClick={() => setInventoryViewMode('card')}>Cards</button>
+        </div>
+      </section>
+      <section className={`feature-bulk-bar ${selectedFeatureIds.length ? 'active' : ''}`} aria-live="polite">
+        <div>
+          <strong>{selectedFeatureIds.length} selected</strong>
+          <span>{visibleSelectedCount} selected in current filtered view</span>
+        </div>
+        <div className="feature-bulk-actions">
+          <button className="secondary-button compact" type="button" disabled={!filteredItems.length} onClick={allVisibleSelected ? deselectVisibleFeatures : selectVisibleFeatures}>
+            {allVisibleSelected ? 'Deselect visible' : someVisibleSelected ? 'Select remaining visible' : 'Select visible'}
+          </button>
+          <button className="secondary-button compact" type="button" disabled={!filteredItems.length} onClick={selectAllMatchingFeatures}>
+            Select all matching filter
+          </button>
+          <button className="secondary-button compact" type="button" disabled={!selectedFeatureIds.length} onClick={() => setReviewOpen(true)}>
+            Review selected
+          </button>
+          <button className="primary-button compact" type="button" disabled={!selectedFeatureIds.length || exporting} onClick={() => openExportModal('selected')}>
+            <FileDown size={16} /> Export selected
+          </button>
+          <button className="danger-button compact" type="button" disabled={!selectedFeatureIds.length} onClick={clearSelectedFeatures}>
+            Clear
+          </button>
+        </div>
+      </section>
+      <div className="feature-inventory-layout">
+        <section className="panel">
+          <div className="panel-heading-row">
+            <div>
+              <h2>Detected features</h2>
+              <p>{filteredItems.length} of {items.length} feature(s) shown. Selection is preserved while filtering, sorting, or switching views.</p>
+            </div>
+            <span className="status-pill open">v{String(payload.version.versionNumber).padStart(4, '0')}</span>
+          </div>
+          {inventoryViewMode === 'table' ? (
+            <>
+              <div className="feature-master-select-row">
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(element) => {
+                      if (element) element.indeterminate = someVisibleSelected
+                    }}
+                    onChange={() => (allVisibleSelected ? deselectVisibleFeatures() : selectVisibleFeatures())}
+                  />
+                  Select visible features
+                </label>
+                {filteredItems.length > selectedFeatureIds.length && selectedFeatureIds.length > 0 && (
+                  <button className="assist-link" type="button" onClick={selectAllMatchingFeatures}>
+                    Select all {filteredItems.length} matching this filter
+                  </button>
+                )}
+              </div>
+              <DataTable columns={['Select', 'Feature', 'Class', 'Category', 'Visibility', 'Confidence', 'Status', 'Route', 'Component', 'Last detected', 'Actions']} rows={featureRows} />
+            </>
+          ) : (
+            <div className="feature-card-grid" aria-label="Feature inventory cards">
+              {filteredItems.map((item) => {
+                const checked = selectedFeatureIdSet.has(item.id)
+                return (
+                  <article className={`feature-card ${checked ? 'selected' : ''}`} key={item.id}>
+                    <label className="feature-card-select">
+                      <input type="checkbox" checked={checked} onChange={() => toggleFeatureSelection(item.id)} />
+                      Select
+                    </label>
+                    <span className={`status-pill ${item.status === 'confirmed' ? 'open' : ''}`}>{item.status.replace('_', ' ')}</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                    <div className="feature-card-meta">
+                      <span>{item.classification}</span>
+                      <span>{item.category}</span>
+                      <span>{item.visibility.replace('_', ' ')}</span>
+                      <span>{item.confidenceScore}% confidence</span>
+                    </div>
+                    <button className="assist-link" type="button" onClick={() => setSelectedId(item.id)}>View details</button>
+                  </article>
+                )
+              })}
+              {!filteredItems.length && <EmptyState title="No matching features" body="Adjust your search or filters to select features for bulk export." />}
+            </div>
+          )}
+        </section>
+        <aside className="feature-inventory-side">
+          <section className="panel">
+            <h2>Feature details</h2>
+            {selectedItem ? (
+              <div className="feature-detail-card">
+                <span className={`status-pill ${selectedItem.status === 'confirmed' ? 'open' : ''}`}>{selectedItem.status.replace('_', ' ')}</span>
+                <h3>{selectedItem.title}</h3>
+                <p>{selectedItem.description}</p>
+                <dl>
+                  <dt>Routes</dt>
+                  <dd>{selectedItem.routePaths.join(', ') || 'System only'}</dd>
+                  <dt>Components</dt>
+                  <dd>{selectedItem.componentNames.join(', ') || 'N/A'}</dd>
+                  <dt>Source files</dt>
+                  <dd>{selectedItem.sourceFiles.join(', ') || 'N/A'}</dd>
+                  <dt>Roles</dt>
+                  <dd>{selectedItem.userRoles.join(', ') || 'N/A'}</dd>
+                </dl>
+              </div>
+            ) : (
+              <EmptyState title="No feature selected" body="Choose a feature to review its evidence." />
+            )}
+          </section>
+          <section className="panel">
+            <h2>Version history</h2>
+            <DataTable columns={['Version', 'Created', 'Source', 'Features', 'Diff', 'Status']} rows={versionRows} />
+          </section>
+          <section className="panel">
+            <h2>Stored exports</h2>
+            {exportRows.length ? (
+              <DataTable columns={['Created', 'Formats', 'Items', 'Status', 'Actions']} rows={exportRows} tableId="feature-inventory-stored-exports" />
+            ) : (
+              <EmptyState title="No stored exports yet" body="Generate a bulk export to preserve a private copy in Firebase Storage." />
+            )}
+          </section>
+        </aside>
+      </div>
+      {exportModalOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-card feature-export-modal" role="dialog" aria-modal="true" aria-labelledby="feature-export-title">
+            <div className="panel-heading-row">
+              <div>
+                <h2 id="feature-export-title">Generate inventory export</h2>
+                <p>{exportScopeCount} feature(s) will be exported. Files are downloaded to this browser and stored under private Firebase Storage metadata for the current version.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close export dialog" onClick={() => setExportModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <label>
+              Export scope
+              <select value={exportScope} onChange={(event) => setExportScope(event.target.value as 'selected' | 'filtered' | 'all')}>
+                <option value="selected" disabled={!selectedFeatures.length}>Selected features only ({selectedFeatures.length})</option>
+                <option value="filtered">All visible filtered features ({filteredItems.length})</option>
+                <option value="all">Entire current inventory version ({items.length})</option>
+              </select>
+            </label>
+            <div className="feature-export-options">
+              {featureInventoryFormats.map((format) => (
+                <label key={format} className="checkbox-row">
+                  <input type="checkbox" checked={selectedFormats.includes(format)} onChange={() => toggleFormat(format)} />
+                  {featureInventoryFormatLabels[format]}
+                </label>
+              ))}
+            </div>
+            <label className="checkbox-row">
+              <input type="checkbox" checked readOnly />
+              Include metadata, source references, role visibility, confidence, and scan timestamps
+            </label>
+            <div className="feature-export-summary" role="status">
+              <strong>Estimated export:</strong> {exportScopeCount} feature record(s), {selectedFormats.length} format(s), generated as combined files.
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setExportModalOpen(false)}>Cancel</button>
+              <button className="primary-button" type="button" disabled={exporting} onClick={generateExports}>
+                {exporting ? 'Generating exports...' : 'Generate and Download'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {reviewOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <aside className="modal-card feature-review-drawer" role="dialog" aria-modal="true" aria-labelledby="feature-review-title">
+            <div className="panel-heading-row">
+              <div>
+                <h2 id="feature-review-title">Review selected features</h2>
+                <p>{selectedFeatures.length} selected feature(s). Remove anything you do not want included before exporting.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close selected features review" onClick={() => setReviewOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="feature-selected-list">
+              {selectedFeatures.map((item) => (
+                <article key={item.id}>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.category} · {item.classification} · {item.visibility.replace('_', ' ')}</span>
+                  </div>
+                  <button className="icon-button" type="button" aria-label={`Remove ${item.title} from selection`} onClick={() => toggleFeatureSelection(item.id)}>
+                    <X size={16} />
+                  </button>
+                </article>
+              ))}
+              {!selectedFeatures.length && <EmptyState title="No selected features" body="Select features from the table or card view to review them here." />}
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={clearSelectedFeatures}>Clear selection</button>
+              <button className="primary-button" type="button" disabled={!selectedFeatures.length} onClick={() => openExportModal('selected')}>
+                <FileDown size={16} /> Export selected
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function BugReportFeedbackCenter({
+  currentUser,
+  contributionRecord,
+  userReports,
+  syncState,
+  affectedAreas,
+  currentView,
+  onSubmit,
+}: {
+  currentUser: User
+  contributionRecord?: UserContributionPoints
+  userReports: ProblemReport[]
+  syncState: SyncState
+  affectedAreas: AffectedArea[]
+  currentView: AppView
+  onSubmit: (input: {
+    reportMode?: FeedbackReportMode
+    category?: string
+    title: string
+    actualBehaviour: string
+    expectedBehaviour?: string
+    reproductionSteps: string
+    moduleName: string
+    affectedAreaId?: string
+    affectedAreaText?: string
+    browserInfo?: string
+    deviceInfo?: string
+    operatingSystemInfo?: string
+    consoleError?: string
+    additionalComments?: string
+    severity: ProblemSeverity
+    permissionToIncludeDiagnostics: boolean
+    attachments?: ProblemAttachment[]
+  }) => void
+}) {
+  const feedbackDraftStorageKey = `deap-feedback-draft-${currentUser.id}`
+  const savedFeedbackDraft = readStored<FeedbackSubmissionDraft>(feedbackDraftStorageKey, {})
+  const initialMode = savedFeedbackDraft.mode === 'feedback' ? 'feedback' : 'bug'
+  const [mode, setMode] = useState<FeedbackReportMode>(initialMode)
+  const [category, setCategory] = useState(savedFeedbackDraft.category || (initialMode === 'bug' ? bugReportCategories[0] : feedbackCategories[0]))
+  const [title, setTitle] = useState(savedFeedbackDraft.title ?? '')
+  const [description, setDescription] = useState(savedFeedbackDraft.description ?? '')
+  const [expectedBehaviour, setExpectedBehaviour] = useState(savedFeedbackDraft.expectedBehaviour ?? '')
+  const [reproductionSteps, setReproductionSteps] = useState(savedFeedbackDraft.reproductionSteps ?? '')
+  const [affectedAreaSelection, setAffectedAreaSelection] = useState<AffectedAreaSelection>(savedFeedbackDraft.affectedAreaSelection ?? { isOther: false })
+  const [otherAffectedAreaText, setOtherAffectedAreaText] = useState(savedFeedbackDraft.otherAffectedAreaText ?? '')
+  const [browserInfo, setBrowserInfo] = useState(savedFeedbackDraft.browserInfo ?? '')
+  const [deviceInfo, setDeviceInfo] = useState(savedFeedbackDraft.deviceInfo ?? '')
+  const [operatingSystemInfo, setOperatingSystemInfo] = useState(savedFeedbackDraft.operatingSystemInfo ?? '')
+  const [consoleError, setConsoleError] = useState(savedFeedbackDraft.consoleError ?? '')
+  const [additionalComments, setAdditionalComments] = useState(savedFeedbackDraft.additionalComments ?? '')
+  const [severity, setSeverity] = useState<ProblemSeverity>(savedFeedbackDraft.severity ?? 'medium')
+  const [permissionToIncludeDiagnostics, setPermissionToIncludeDiagnostics] = useState(savedFeedbackDraft.permissionToIncludeDiagnostics ?? true)
+  const [attachments, setAttachments] = useState<ProblemAttachment[]>([])
+  const [attachmentError, setAttachmentError] = useState('')
+  const [attachmentBusy, setAttachmentBusy] = useState(false)
+  const [showSelfRepairNotice, setShowSelfRepairNotice] = useState(() => !readStored<boolean>('deap-self-repair-notice-seen', false))
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false)
+  const categories = mode === 'bug' ? bugReportCategories : feedbackCategories
+  const totalPoints = contributionRecord?.totalPoints ?? 0
+  const nextBadge = nextContributionBadge(totalPoints)
+  const progressPercent = nextBadge ? Math.min(100, Math.round((totalPoints / nextBadge.points) * 100)) : 100
+  const hasFeedbackDraft = Boolean(title.trim() || description.trim() || expectedBehaviour.trim() || reproductionSteps.trim() || affectedAreaSelection.id || affectedAreaSelection.text || affectedAreaSelection.isOther || otherAffectedAreaText.trim())
+  const fixedUserReports = userReports
+    .filter((report) => report.status === 'Fixed' || report.status === 'Fixed and Monitored')
+    .sort((left, right) => new Date(right.updatedAt ?? right.createdAt).getTime() - new Date(left.updatedAt ?? left.createdAt).getTime())
+
+  useEffect(() => {
+    const nextCategories = mode === 'bug' ? bugReportCategories : feedbackCategories
+    if (!nextCategories.includes(category)) setCategory(nextCategories[0])
+  }, [category, mode])
+
+  useEffect(() => {
+    const hasDraft = Boolean(
+      title.trim() ||
+      description.trim() ||
+      expectedBehaviour.trim() ||
+      reproductionSteps.trim() ||
+      affectedAreaSelection.id ||
+      affectedAreaSelection.text ||
+      affectedAreaSelection.isOther ||
+      otherAffectedAreaText.trim() ||
+      browserInfo.trim() ||
+      deviceInfo.trim() ||
+      operatingSystemInfo.trim() ||
+      consoleError.trim() ||
+      additionalComments.trim(),
+    )
+    if (!hasDraft) {
+      localStorage.removeItem(feedbackDraftStorageKey)
+      return
+    }
+    const draft: FeedbackSubmissionDraft = {
+      mode,
+      category,
+      title,
+      description,
+      expectedBehaviour,
+      reproductionSteps,
+      affectedAreaSelection,
+      otherAffectedAreaText,
+      browserInfo,
+      deviceInfo,
+      operatingSystemInfo,
+      consoleError,
+      additionalComments,
+      severity,
+      permissionToIncludeDiagnostics,
+      updatedAt: new Date().toISOString(),
+    }
+    localStorage.setItem(feedbackDraftStorageKey, JSON.stringify(draft))
+  }, [
+    additionalComments,
+    affectedAreaSelection,
+    browserInfo,
+    category,
+    consoleError,
+    description,
+    deviceInfo,
+    expectedBehaviour,
+    feedbackDraftStorageKey,
+    mode,
+    operatingSystemInfo,
+    otherAffectedAreaText,
+    permissionToIncludeDiagnostics,
+    reproductionSteps,
+    severity,
+    title,
+  ])
+
+  function clearFeedbackDraft() {
+    setTitle('')
+    setDescription('')
+    setExpectedBehaviour('')
+    setReproductionSteps('')
+    setAffectedAreaSelection({ isOther: false })
+    setOtherAffectedAreaText('')
+    setBrowserInfo('')
+    setDeviceInfo('')
+    setOperatingSystemInfo('')
+    setConsoleError('')
+    setAdditionalComments('')
+    setSeverity('medium')
+    setAttachments([])
+    setAttachmentError('')
+    localStorage.removeItem(feedbackDraftStorageKey)
+  }
+
+  function readAttachment(file: File): Promise<ProblemAttachment> {
+    return new Promise((resolve, reject) => {
+      if (file.size > problemAttachmentMaxBytes) {
+        reject(new Error(`${file.name} is larger than ${Math.round(problemAttachmentMaxBytes / 1024)} KB.`))
+        return
+      }
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
+      reader.onload = () => resolve({
+        id: eventId('feedback-attachment'),
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        dataUrl: String(reader.result || ''),
+        createdAt: new Date().toISOString(),
+      })
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function handleAttachmentFiles(files: FileList | null) {
+    if (!files?.length) return
+    setAttachmentBusy(true)
+    setAttachmentError('')
+    try {
+      const openSlots = Math.max(0, problemAttachmentMaxCount - attachments.length)
+      const selectedFiles = Array.from(files).slice(0, openSlots)
+      if (selectedFiles.length < files.length) setAttachmentError(`Only ${problemAttachmentMaxCount} small evidence files can be included per submission.`)
+      const nextAttachments = await Promise.all(selectedFiles.map(readAttachment))
+      setAttachments((current) => normalizeProblemAttachments([...current, ...nextAttachments]))
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : 'Evidence file could not be added.')
+    } finally {
+      setAttachmentBusy(false)
+    }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    onSubmit({
+      reportMode: mode,
+      category,
+      title,
+      actualBehaviour: description,
+      expectedBehaviour,
+      reproductionSteps,
+      moduleName: affectedAreaSelection.text ?? '',
+      affectedAreaId: affectedAreaSelection.id,
+      affectedAreaText: affectedAreaSelection.isOther ? otherAffectedAreaText : affectedAreaSelection.text,
+      browserInfo,
+      deviceInfo,
+      operatingSystemInfo,
+      consoleError,
+      additionalComments,
+      severity: mode === 'feedback' ? 'low' : severity,
+      permissionToIncludeDiagnostics,
+      attachments,
+    })
+    clearFeedbackDraft()
+  }
+
+  return (
+    <section className="feedback-center-page">
+      {showSelfRepairNotice && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-card self-repair-notice" role="dialog" aria-modal="true" aria-labelledby="self-repair-notice-title">
+            <div className="panel-heading-row">
+              <div>
+                <span className="status-pill supervised"><Sparkles size={16} /> New feature</span>
+                <h2 id="self-repair-notice-title">Self-repairing bug reports are now active</h2>
+                <p>
+                  When you submit a bug report or feedback, the web app captures the details needed to help the system
+                  self-correct. Most clear reports can be checked and corrected by the software in less than one hour, making
+                  DEAP more reliable and easier for everyone to use.
+                </p>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close self-repairing feature notice"
+                onClick={() => {
+                  localStorage.setItem('deap-self-repair-notice-seen', 'true')
+                  setShowSelfRepairNotice(false)
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="self-repair-notice-actions">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('deap-self-repair-notice-seen', 'true')
+                  setShowSelfRepairNotice(false)
+                }}
+              >
+                Got it
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      <PageTitle eyebrow="Bug Report and Feedback" title="Help us improve the app" />
+      <section className="panel feedback-hero-panel">
+        <div>
+          <span className="status-pill supervised"><Sparkles size={16} /> Contribution centre</span>
+          <h2>Report issues, suggest improvements, and earn contribution points.</h2>
+          <p>{currentUser.fullName}, useful submissions help DEAP catch problems early, improve workflows, and reward people who make the platform stronger.</p>
+        </div>
+        <div className="feedback-points-card">
+          <span>Your Contribution Points</span>
+          <strong>{totalPoints}</strong>
+          <em>{contributionRecord?.currentBadge ?? 'Getting Started'}</em>
+          <div className="feedback-badge-progress" aria-label={nextBadge ? `Progress to ${nextBadge.badge}` : 'Top badge reached'}>
+            <i style={{ width: `${progressPercent}%` }} />
+          </div>
+          <small>{nextBadge ? `${nextBadge.points - totalPoints} point(s) to ${nextBadge.badge}` : 'Top badge reached'}</small>
+        </div>
+      </section>
+
+      <div className="feedback-mode-grid" role="tablist" aria-label="Submission type">
+        <button className={mode === 'bug' ? 'active' : ''} type="button" onClick={() => setMode('bug')} aria-pressed={mode === 'bug'}>
+          <DeapIcon name="feedback" size={42} />
+          <strong>Report a Bug</strong>
+          <span>Broken flows, wrong data, crashes, upload issues, slow pages, and failed actions.</span>
+        </button>
+        <button className={mode === 'feedback' ? 'active' : ''} type="button" onClick={() => setMode('feedback')} aria-pressed={mode === 'feedback'}>
+          <DeapIcon name="help" size={42} />
+          <strong>Give Feedback</strong>
+          <span>Feature ideas, usability complaints, design feedback, help requests, and general comments.</span>
+        </button>
+      </div>
+
+      <section className="feedback-layout-grid">
+        <form className="panel feedback-form-panel" onSubmit={submit}>
+          <div className="panel-heading-row">
+            <div>
+              <h2>{mode === 'bug' ? 'Report a bug' : 'Give feedback'}</h2>
+              <p>{mode === 'bug' ? 'Tell us what broke and how to reproduce it.' : 'Tell us what would make the product clearer, faster, or more useful.'}</p>
+            </div>
+            <span className={`sync-badge ${syncState}`}><RefreshCw size={16} /> Sync {syncState}</span>
+          </div>
+          {hasFeedbackDraft && (
+            <div className="draft-save-strip" role="status" aria-live="polite">
+              <span><Save size={16} /> Draft saved on this device</span>
+              <button className="secondary-button compact" type="button" onClick={clearFeedbackDraft}>Clear draft</button>
+            </div>
+          )}
+          <label>
+            {mode === 'bug' ? 'Bug Summary' : 'Feedback Summary'}
+            <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={140} placeholder={mode === 'bug' ? 'Start Test redirects me home' : 'Make report filters easier to scan'} required />
+          </label>
+          <AffectedAreaCombobox
+            areas={affectedAreas}
+            currentView={currentView}
+            value={affectedAreaSelection}
+            onChange={setAffectedAreaSelection}
+          />
+          {affectedAreaSelection.isOther && (
+            <label>
+              Please describe the affected page or feature
+              <input value={otherAffectedAreaText} onChange={(event) => setOtherAffectedAreaText(event.target.value)} maxLength={160} placeholder="Course Builder page" required />
+            </label>
+          )}
+          <label>
+            {mode === 'bug' ? 'Bug category' : 'Feedback category'}
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            {mode === 'bug' ? 'What actually happened?' : 'Your feedback'}
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={5} placeholder={mode === 'bug' ? 'The Save button spins and nothing changes.' : 'The reports page would be easier if filters stayed visible.'} required />
+          </label>
+          {mode === 'bug' && (
+            <>
+              <label>
+                What did you expect to happen?
+                <textarea value={expectedBehaviour} onChange={(event) => setExpectedBehaviour(event.target.value)} maxLength={1200} rows={3} placeholder="The record should save and show a confirmation message." required />
+              </label>
+              <label>
+                Steps to reproduce
+                <textarea value={reproductionSteps} onChange={(event) => setReproductionSteps(event.target.value)} maxLength={1600} rows={4} placeholder="1. Open Reports. 2. Choose a filter. 3. Click Export. 4. See the error." />
+              </label>
+              <label>
+                Severity from your perspective
+                <select value={severity} onChange={(event) => setSeverity(event.target.value as ProblemSeverity)}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+            </>
+          )}
+          <section className="simple-optional-panel">
+            <button className="secondary-button" type="button" onClick={() => setShowOptionalDetails((open) => !open)} aria-expanded={showOptionalDetails}>
+              {showOptionalDetails ? 'Hide extra details' : 'Add more details'}
+            </button>
+            <p>Only use this if you know the browser, device, or error message. You can submit without it.</p>
+            {showOptionalDetails && (
+              <div className="optional-detail-fields">
+                <div className="form-grid">
+                  <label>
+                    Browser
+                    <input value={browserInfo} onChange={(event) => setBrowserInfo(event.target.value)} maxLength={300} placeholder="Chrome 126" />
+                  </label>
+                  <label>
+                    Device
+                    <input value={deviceInfo} onChange={(event) => setDeviceInfo(event.target.value)} maxLength={160} placeholder="Windows laptop or iPhone 15" />
+                  </label>
+                  <label>
+                    Operating system
+                    <input value={operatingSystemInfo} onChange={(event) => setOperatingSystemInfo(event.target.value)} maxLength={160} placeholder="Windows 11, macOS, Android, or iOS" />
+                  </label>
+                </div>
+                <label>
+                  Error message if you saw one
+                  <textarea value={consoleError} onChange={(event) => setConsoleError(event.target.value)} maxLength={1200} rows={3} placeholder="TypeError: Cannot read properties of undefined" />
+                </label>
+                <label>
+                  Anything else you want to add
+                  <textarea value={additionalComments} onChange={(event) => setAdditionalComments(event.target.value)} maxLength={1600} rows={3} placeholder="This happened twice today after refreshing the page." />
+                </label>
+              </div>
+            )}
+          </section>
+          <label>
+            Add screenshot or small evidence file
+            <input type="file" accept="image/*,.pdf,.txt,.log" multiple disabled={attachmentBusy || attachments.length >= problemAttachmentMaxCount} onChange={(event) => void handleAttachmentFiles(event.currentTarget.files)} />
+          </label>
+          <div className="problem-attachment-list" aria-live="polite">
+            {attachments.map((attachment) => (
+              <span key={attachment.id}>
+                <FileDown size={14} />
+                {attachment.name}
+                <button className="icon-button" type="button" aria-label={`Remove ${attachment.name}`} onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}>
+                  <X size={14} />
+                </button>
+              </span>
+            ))}
+            {attachmentBusy && <small>Preparing evidence...</small>}
+            {attachmentError && <small className="form-error">{attachmentError}</small>}
+          </div>
+          <label className="checkbox-card">
+            <input type="checkbox" checked={permissionToIncludeDiagnostics} onChange={(event) => setPermissionToIncludeDiagnostics(event.target.checked)} />
+            <span>Include safe diagnostic details such as browser, screen size, network status, app page, and sync state. Passwords, hidden fields, and private messages are not collected.</span>
+          </label>
+          <button className="primary-button" type="submit">
+            <Send size={18} /> Submit {mode === 'bug' ? 'Bug Report' : 'Feedback'}
+          </button>
+        </form>
+
+        <aside className="panel feedback-guidelines-panel">
+          <h2>Contribution rewards</h2>
+          <div className="feedback-reward-list">
+            <span><strong>10</strong> valid bug report</span>
+            <span><strong>5</strong> valid feedback</span>
+            <span><strong>+5</strong> useful screenshot or recording</span>
+            <span><strong>+25</strong> confirmed bug</span>
+            <span><strong>+50</strong> critical confirmed bug</span>
+            <span><strong>1</strong> duplicate report</span>
+          </div>
+          <h3>Badge levels</h3>
+          <div className="feedback-badge-list">
+            {contributionBadgeLevels.map((level) => (
+              <span className={totalPoints >= level.points ? 'earned' : ''} key={level.badge}>
+                <strong>{level.badge}</strong>
+                <small>{level.points} points</small>
+              </span>
+            ))}
+          </div>
+          <h3>Recent submissions</h3>
+          <div className="feedback-recent-list">
+            {userReports.slice(0, 6).map((report) => (
+              <article key={report.id}>
+                <strong>{report.title}</strong>
+                <span>{report.reportMode ?? 'bug'} · {report.category ?? 'Uncategorised'} · {report.status}</span>
+                <small>{report.pointsAwarded ? `${report.pointsAwarded} point(s) awarded` : 'Awaiting review'}</small>
+              </article>
+            ))}
+            {!userReports.length && <p className="hint">Your submissions will appear here after you send your first report or feedback.</p>}
+          </div>
+          <h3>Recently corrected</h3>
+          <div className="feedback-recent-list">
+            {fixedUserReports.slice(0, 4).map((report) => (
+              <article key={`${report.id}-fixed`}>
+                <strong>{report.title}</strong>
+                <span>{report.status === 'Fixed and Monitored' ? 'Corrected and being watched' : 'Corrected'}</span>
+                <small>{new Date(report.updatedAt ?? report.createdAt).toLocaleString()}</small>
+              </article>
+            ))}
+            {!fixedUserReports.length && <p className="hint">Corrected reports will appear here after updates are completed.</p>}
+          </div>
+          <h3>What happens next?</h3>
+          <div className="simple-next-steps">
+            <span><CheckCircle2 size={16} /> Your report is saved.</span>
+            <span><ShieldCheck size={16} /> DEAP checks what needs to be corrected.</span>
+            <span><Bell size={16} /> You can check this page for updates.</span>
+          </div>
+        </aside>
+      </section>
+    </section>
   )
 }
 
@@ -7450,6 +11358,23 @@ function EnterpriseUpgradeConsole() {
                 )
               })}
             </div>
+          </article>
+        ))}
+      </div>
+      <div className="feature-catalogue-summary full-expansion-summary">
+        <h3>Complete DEAP expansion backlog</h3>
+        <p>{fullFeatureExpansionTotal} recommended improvements are now captured as the implementation backlog for the app direction: learning impact, assessment quality, Super Admin governance, reporting, reliability, security, and help documentation.</p>
+      </div>
+      <div className="feature-expansion-grid">
+        {fullFeatureExpansionRecommendations.map((group) => (
+          <article className="feature-expansion-card" key={group.category}>
+            <header>
+              <span>{group.items.length} recommendations</span>
+              <h4>{group.category}</h4>
+            </header>
+            <ul>
+              {group.items.map((item) => <li key={item}>{item}</li>)}
+            </ul>
           </article>
         ))}
       </div>
@@ -8239,22 +12164,50 @@ function TrainingPortal({
 }
 
 function Dashboard({
+  currentUser,
+  savedLayout,
   tests,
   questions,
   sessions,
   users,
   analyticsEvents,
   syncState,
+  contributionRecord,
+  currentUserReports,
+  onLayoutChange,
   onNullifyAttempt,
 }: {
+  currentUser?: User
+  savedLayout?: UserDashboardLayout
   tests: Assessment[]
   questions: Question[]
   sessions: TestSession[]
   users: User[]
   analyticsEvents: AnalyticsEvent[]
   syncState: SyncState
+  contributionRecord?: UserContributionPoints
+  currentUserReports: ProblemReport[]
+  onLayoutChange: (layout: UserDashboardLayout, changeDescription: string) => void
   onNullifyAttempt: (sessionId: string) => void
 }) {
+  const userId = currentUser?.id ?? 'guest-dashboard-user'
+  const [editMode, setEditMode] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const [draftLayout, setDraftLayout] = useState<UserDashboardLayout>(() => normalizeDashboardLayout(userId, savedLayout))
+  const [redoWidgetsStack, setRedoWidgetsStack] = useState<DashboardWidgetLayout[][]>([])
+  const [draggedWidgetId, setDraggedWidgetId] = useState('')
+  const saveTimerRef = useRef<number | undefined>(undefined)
+  const saveStatusTimerRef = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    if (!editMode) setDraftLayout(normalizeDashboardLayout(userId, savedLayout))
+  }, [editMode, savedLayout, userId])
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    if (saveStatusTimerRef.current) window.clearTimeout(saveStatusTimerRef.current)
+  }, [])
+
   const dashboardStats = useMemo(() => {
     const scoredSessions = sessions.filter((session) => !isSessionNullified(session))
     const completed = scoredSessions.filter((session) => session.status === 'completed')
@@ -8283,39 +12236,406 @@ function Dashboard({
       ]),
     }
   }, [analyticsEvents.length, onNullifyAttempt, questions, sessions, syncState, tests, users])
-  return (
-    <section>
-      <PageTitle eyebrow="Administrator dashboard" title="Workforce capability overview" />
-      <div className="metric-grid">
-        <Metric label="Live tests" value={dashboardStats.liveTests} icon={<ListChecks />} />
-        <Metric label="Question bank" value={questions.length} icon={<FileSpreadsheet />} />
-        <Metric label="Employees" value={dashboardStats.employeeCount} icon={<UsersRound />} />
-        <Metric label="Pass rate" value={`${dashboardStats.passRate}%`} icon={<CheckCircle2 />} />
-        <Metric label="System health" value={dashboardStats.syncLabel} icon={<ShieldCheck />} />
-        <Metric label="Monitored events" value={dashboardStats.monitoredEvents} icon={<BarChart3 />} />
-      </div>
-      <LearningCatalog questions={questions} />
-      <EnterpriseUpgradeConsole />
-      <div className="split-layout">
-        <section className="panel">
-          <h2>Difficulty stock</h2>
-          <ResponsiveContainer height={260}>
-            <BarChart data={dashboardStats.difficultyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="difficulty" />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#2E75B6" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </section>
-        <section className="panel">
-          <h2>Recent attempts</h2>
+
+  const visibleWidgets = useMemo(() => dashboardDisplayWidgets(draftLayout), [draftLayout])
+  const hiddenWidgets = useMemo(
+    () => draftLayout.widgets
+      .filter((widget) => !widget.visible && dashboardWidgetDefinitionById.has(widget.widgetId))
+      .sort((left, right) => left.order - right.order || left.widgetId.localeCompare(right.widgetId)),
+    [draftLayout.widgets],
+  )
+  const userSessions = useMemo(() => sessions.filter((session) => session.userId === currentUser?.id && !isSessionNullified(session)), [currentUser?.id, sessions])
+  const userCompletedSessions = userSessions.filter((session) => session.status === 'completed')
+  const userOpenSessions = userSessions.filter((session) => session.status === 'in_progress')
+  const userNextLiveTest = currentUser
+    ? tests.find((test) => test.assignedUserIds.includes(currentUser.id) && getAvailabilityState(test).canStart)
+    : undefined
+  const simpleDashboardChecklist = currentUser?.role === 'employee'
+    ? [
+        userOpenSessions.length ? 'Continue your unfinished test' : 'Open My Tests',
+        userNextLiveTest ? 'Start your available test' : 'Check for assigned tests',
+        userCompletedSessions.length ? 'Review your latest result' : 'Read the test instructions',
+        'Use Help if you are unsure',
+      ]
+    : [
+        'Check live tests',
+        'Review recent reports',
+        'Open Help for guidance',
+        currentUser?.role === 'super_admin' ? 'Check Super Admin notifications' : 'Keep user guidance simple',
+      ]
+
+  function scheduleDashboardLayoutSave(nextLayout: UserDashboardLayout, changeDescription: string) {
+    setDraftLayout(nextLayout)
+    setSaveStatus('saving')
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    if (saveStatusTimerRef.current) window.clearTimeout(saveStatusTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      if (!currentUser) {
+        setSaveStatus('failed')
+        return
+      }
+      try {
+        onLayoutChange(nextLayout, changeDescription)
+        setSaveStatus('saved')
+        saveStatusTimerRef.current = window.setTimeout(() => setSaveStatus('idle'), 2200)
+      } catch {
+        setSaveStatus('failed')
+      }
+    }, 500)
+  }
+
+  function commitDashboardWidgets(nextWidgets: DashboardWidgetLayout[], changeDescription: string, options: { preserveRedo?: boolean } = {}) {
+    const now = new Date().toISOString()
+    const revision: DashboardLayoutRevision = {
+      revisionId: eventId('dashboard-layout-revision'),
+      timestamp: now,
+      device: dashboardDeviceClass(),
+      changeDescription,
+      widgets: draftLayout.widgets,
+    }
+    const nextLayout = normalizeDashboardLayout(userId, {
+      ...draftLayout,
+      userId,
+      widgets: nextWidgets.map((widget) => ({ ...widget, lastModified: now })),
+      lastUpdated: now,
+      lastUpdatedDevice: dashboardDeviceClass(),
+      lastUpdatedClient: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+      conflictToken: dashboardConflictToken(),
+      isDefault: false,
+      lastKnownGood: draftLayout.widgets,
+      revisionHistory: [revision, ...(draftLayout.revisionHistory ?? [])].slice(0, 12),
+    })
+    if (!options.preserveRedo) setRedoWidgetsStack([])
+    scheduleDashboardLayoutSave(nextLayout, changeDescription)
+  }
+
+  function updateWidget(widgetId: string, changeDescription: string, updater: (widget: DashboardWidgetLayout) => DashboardWidgetLayout) {
+    commitDashboardWidgets(
+      draftLayout.widgets.map((widget) => (widget.widgetId === widgetId ? updater(widget) : widget)),
+      changeDescription,
+    )
+  }
+
+  function setDisplayedWidgetOrder(nextDisplayedWidgets: DashboardWidgetLayout[], changeDescription: string) {
+    const orderMap = new Map(nextDisplayedWidgets.map((widget, index) => [widget.widgetId, index + 1]))
+    commitDashboardWidgets(
+      draftLayout.widgets.map((widget) => (orderMap.has(widget.widgetId) ? { ...widget, order: orderMap.get(widget.widgetId) ?? widget.order } : widget)),
+      changeDescription,
+    )
+  }
+
+  function moveWidget(widgetId: string, direction: 'top' | 'up' | 'down' | 'bottom') {
+    const pinnedWidgets = visibleWidgets.filter((widget) => widget.pinned)
+    const movableWidgets = visibleWidgets.filter((widget) => !widget.pinned)
+    const index = movableWidgets.findIndex((widget) => widget.widgetId === widgetId)
+    if (index < 0) return
+    const nextWidgets = [...movableWidgets]
+    const targetIndex = direction === 'top'
+      ? 0
+      : direction === 'bottom'
+        ? nextWidgets.length - 1
+        : Math.min(nextWidgets.length - 1, Math.max(0, index + (direction === 'up' ? -1 : 1)))
+    if (targetIndex === index) return
+    const [movedWidget] = nextWidgets.splice(index, 1)
+    nextWidgets.splice(targetIndex, 0, movedWidget)
+    const title = dashboardWidgetDefinitionById.get(widgetId)?.title ?? widgetId
+    setDisplayedWidgetOrder([...pinnedWidgets, ...nextWidgets], `${title} moved ${direction.replace('top', 'to top').replace('bottom', 'to bottom')} on the dashboard.`)
+  }
+
+  function reorderWidgetByDrop(targetWidgetId: string) {
+    if (!draggedWidgetId || draggedWidgetId === targetWidgetId) return
+    const pinnedWidgets = visibleWidgets.filter((widget) => widget.pinned)
+    const movableWidgets = visibleWidgets.filter((widget) => !widget.pinned)
+    const sourceIndex = movableWidgets.findIndex((widget) => widget.widgetId === draggedWidgetId)
+    const targetIndex = movableWidgets.findIndex((widget) => widget.widgetId === targetWidgetId)
+    if (sourceIndex < 0 || targetIndex < 0) return
+    const nextWidgets = [...movableWidgets]
+    const [movedWidget] = nextWidgets.splice(sourceIndex, 1)
+    nextWidgets.splice(targetIndex, 0, movedWidget)
+    const title = dashboardWidgetDefinitionById.get(draggedWidgetId)?.title ?? draggedWidgetId
+    setDisplayedWidgetOrder([...pinnedWidgets, ...nextWidgets], `${title} dragged into a new dashboard position.`)
+    setDraggedWidgetId('')
+  }
+
+  function undoDashboardLayout() {
+    const previousRevision = draftLayout.revisionHistory?.[0]
+    if (!previousRevision) return
+    const now = new Date().toISOString()
+    setRedoWidgetsStack((stack) => [draftLayout.widgets, ...stack].slice(0, 12))
+    const nextLayout = normalizeDashboardLayout(userId, {
+      ...draftLayout,
+      widgets: previousRevision.widgets,
+      lastUpdated: now,
+      lastUpdatedDevice: dashboardDeviceClass(),
+      lastUpdatedClient: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+      conflictToken: dashboardConflictToken(),
+      isDefault: false,
+      lastKnownGood: draftLayout.widgets,
+      revisionHistory: (draftLayout.revisionHistory ?? []).slice(1),
+    })
+    scheduleDashboardLayoutSave(nextLayout, `Undid dashboard layout change: ${previousRevision.changeDescription}`)
+  }
+
+  function redoDashboardLayout() {
+    const redoWidgets = redoWidgetsStack[0]
+    if (!redoWidgets) return
+    setRedoWidgetsStack((stack) => stack.slice(1))
+    commitDashboardWidgets(redoWidgets, 'Redid the last dashboard layout change.', { preserveRedo: true })
+  }
+
+  function restoreWidget(widgetId: string) {
+    const title = dashboardWidgetDefinitionById.get(widgetId)?.title ?? widgetId
+    const nextOrder = Math.max(0, ...draftLayout.widgets.map((widget) => widget.order)) + 1
+    updateWidget(widgetId, `${title} restored to the dashboard.`, (widget) => ({
+      ...widget,
+      visible: true,
+      collapsed: false,
+      order: nextOrder,
+    }))
+  }
+
+  function resetDashboardLayout() {
+    const confirmed = window.confirm('Reset dashboard layout?\n\nThis restores the default module order, visibility, size, and pin settings. Your previous layout is preserved in the layout revision history.')
+    if (!confirmed) return
+    commitDashboardWidgets(defaultDashboardWidgets(), `${currentUser?.fullName ?? 'User'} reset the personalised dashboard layout to default.`)
+  }
+
+  function renderWidgetContent(widgetId: string) {
+    switch (widgetId) {
+      case 'metrics':
+        return (
+          <div className="metric-grid dashboard-personal-metrics">
+            <Metric label="Live tests" value={dashboardStats.liveTests} icon={<ListChecks />} />
+            <Metric label="Question bank" value={questions.length} icon={<FileSpreadsheet />} />
+            <Metric label="Employees" value={dashboardStats.employeeCount} icon={<UsersRound />} />
+            <Metric label="Pass rate" value={`${dashboardStats.passRate}%`} icon={<CheckCircle2 />} />
+            <Metric label="System health" value={dashboardStats.syncLabel} icon={<ShieldCheck />} />
+            <Metric label="Monitored events" value={dashboardStats.monitoredEvents} icon={<BarChart3 />} />
+          </div>
+        )
+      case 'learning-catalog':
+        return <LearningCatalog questions={questions} />
+      case 'upgrade-console':
+        return <EnterpriseUpgradeConsole />
+      case 'difficulty-stock':
+        return (
+          <div className="dashboard-chart-surface">
+            <ResponsiveContainer height={260}>
+              <BarChart data={dashboardStats.difficultyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="difficulty" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#2E75B6" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      case 'recent-attempts':
+        return (
           <DataTable
             columns={['Employee', 'Test', 'Status', 'Score', 'Completed', 'Admin action']}
             rows={dashboardStats.recentRows}
           />
+        )
+      default:
+        return (
+          <div className="empty-state compact-empty-state">
+            <p>This dashboard module is preserved in your layout data but is not available in the current widget catalogue.</p>
+          </div>
+        )
+    }
+  }
+
+  const saveStatusLabel = saveStatus === 'saving'
+    ? 'Saving...'
+    : saveStatus === 'saved'
+      ? 'Saved'
+      : saveStatus === 'failed'
+        ? 'Could not save'
+        : 'Cloud layout ready'
+
+  return (
+    <section className="personal-dashboard" aria-label="Persistent personalised dashboard">
+      <PageTitle eyebrow="Administrator dashboard" title="Workforce capability overview" />
+      <section className="panel simple-dashboard-guidance" aria-label="Simple next steps">
+        <div>
+          <span className="status-pill"><CheckCircle2 size={16} /> What to do next</span>
+          <h2>{currentUser?.role === 'employee' ? 'Your next step is simple' : 'Today’s quick admin check'}</h2>
+          <p>
+            {currentUser?.role === 'employee'
+              ? userOpenSessions.length
+                ? 'Continue your unfinished test first.'
+                : userNextLiveTest
+                  ? `Open My Tests and start ${userNextLiveTest.name}.`
+                  : userCompletedSessions.length
+                    ? 'Review your latest result and follow the study advice.'
+                    : 'Open My Tests to see what has been assigned to you.'
+              : 'Check live tests, review recent reports, and open Help if users are confused.'}
+          </p>
+        </div>
+        <div className="simple-dashboard-actions">
+          <span><ListChecks size={16} /> {currentUser?.role === 'employee' ? 'Open My Tests' : `${dashboardStats.liveTests} live test(s)`}</span>
+          <span><FileSpreadsheet size={16} /> {currentUser?.role === 'employee' ? `${userCompletedSessions.length} result(s)` : `${questions.length} questions`}</span>
+          <span><Headphones size={16} /> Help is available</span>
+        </div>
+      </section>
+      <section className="panel simple-dashboard-checklist" aria-label="Quick start checklist">
+        <div>
+          <span className="status-pill"><ListChecks size={16} /> Quick checklist</span>
+          <h2>{currentUser?.role === 'employee' ? 'Start here' : 'Daily basics'}</h2>
+        </div>
+        <div>
+          {simpleDashboardChecklist.map((item) => (
+            <span key={item}><CheckCircle2 size={16} /> {item}</span>
+          ))}
+        </div>
+      </section>
+      <div className={`dashboard-layout-toolbar ${editMode ? 'editing' : ''}`} role="toolbar" aria-label="Dashboard layout controls">
+        <button className="primary-button compact" type="button" onClick={() => setEditMode((current) => !current)}>
+          <Settings2 size={18} />
+          {editMode ? 'Done' : 'Customise Dashboard'}
+        </button>
+        <button className="secondary-button compact" type="button" onClick={resetDashboardLayout}>
+          <RotateCcw size={18} />
+          Reset to Default
+        </button>
+        <button className="secondary-button compact" type="button" onClick={undoDashboardLayout} disabled={!(draftLayout.revisionHistory ?? []).length}>
+          <ArrowLeft size={18} />
+          Undo
+        </button>
+        <button className="secondary-button compact" type="button" onClick={redoDashboardLayout} disabled={!redoWidgetsStack.length}>
+          <ArrowRight size={18} />
+          Redo
+        </button>
+        <span className={`dashboard-save-status ${saveStatus}`} role="status" aria-live="polite" aria-atomic="true">
+          {saveStatus === 'saving' ? <Save size={16} /> : saveStatus === 'failed' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+          {saveStatusLabel}
+        </span>
+      </div>
+
+      {contributionRecord && (
+        <section className="panel contribution-badge-card" aria-label="Contribution points badge">
+          <div>
+            <span className="status-pill supervised"><Bug size={16} /> {contributionRecord.currentBadge}</span>
+            <h2>{contributionRecord.totalPoints} contribution points</h2>
+            <p>
+              {(() => {
+                const nextBadge = nextContributionBadge(contributionRecord.totalPoints)
+                return nextBadge
+                  ? `You have earned ${contributionRecord.totalPoints} contribution points. ${nextBadge.points - contributionRecord.totalPoints} more point(s) to become a ${nextBadge.badge}.`
+                  : 'You have reached App Champion status. Thank you for helping improve the platform.'
+              })()}
+            </p>
+          </div>
+          <div className="contribution-badge-progress">
+            <span><strong>{contributionRecord.validBugReports}</strong> useful bug(s)</span>
+            <span><strong>{contributionRecord.validFeedbackReports}</strong> useful feedback</span>
+            <span><strong>{currentUserReports.filter((report) => ['Submitted', 'New', 'Under Review', 'Needs More Information'].includes(report.status)).length}</strong> pending</span>
+          </div>
         </section>
+      )}
+
+      {editMode && hiddenWidgets.length > 0 && (
+        <div className="hidden-dashboard-modules" aria-label="Hidden dashboard modules">
+          <strong>Hidden modules</strong>
+          <div>
+            {hiddenWidgets.map((widget) => {
+              const definition = dashboardWidgetDefinitionById.get(widget.widgetId)
+              return (
+                <button className="secondary-button compact" type="button" key={widget.widgetId} onClick={() => restoreWidget(widget.widgetId)}>
+                  <Eye size={16} />
+                  Restore {definition?.title ?? widget.widgetId}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="personal-dashboard-grid">
+        {visibleWidgets.map((widget) => {
+          const definition = dashboardWidgetDefinitionById.get(widget.widgetId)
+          const movableWidgets = visibleWidgets.filter((item) => !item.pinned)
+          const movableIndex = movableWidgets.findIndex((item) => item.widgetId === widget.widgetId)
+          const canMove = editMode && !widget.pinned && !widget.locked
+          const canHide = editMode && visibleWidgets.length > 1 && !widget.locked
+          return (
+            <article
+              className={`personal-dashboard-widget widget-size-${widget.size} ${widget.pinned ? 'pinned' : ''} ${widget.collapsed ? 'collapsed' : ''} ${editMode ? 'editing' : ''} ${draggedWidgetId === widget.widgetId ? 'dragging' : ''}`}
+              data-widget-id={widget.widgetId}
+              key={widget.widgetId}
+              aria-label={`${definition?.title ?? widget.widgetId} dashboard module`}
+              draggable={canMove}
+              aria-grabbed={canMove ? draggedWidgetId === widget.widgetId : undefined}
+              onDragStart={(event) => {
+                if (!canMove) return
+                setDraggedWidgetId(widget.widgetId)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', widget.widgetId)
+              }}
+              onDragOver={(event) => {
+                if (!canMove || !draggedWidgetId || draggedWidgetId === widget.widgetId) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                reorderWidgetByDrop(widget.widgetId)
+              }}
+              onDragEnd={() => setDraggedWidgetId('')}
+            >
+              <header className="personal-dashboard-widget-header">
+                <div className="dashboard-widget-title">
+                  <span className="dashboard-widget-grip" aria-hidden="true"><GripVertical size={18} /></span>
+                  <DeapIcon name={definition?.iconName ?? 'dashboard'} size={34} />
+                  <div>
+                    <h2>{definition?.title ?? widget.widgetId}</h2>
+                    <p>{definition?.summary ?? 'Saved dashboard module.'}</p>
+                  </div>
+                </div>
+                {editMode && (
+                  <div className="dashboard-widget-controls" aria-label={`${definition?.title ?? widget.widgetId} controls`}>
+                    <button className="icon-button" type="button" disabled={!canMove || movableIndex <= 0} onClick={() => moveWidget(widget.widgetId, 'top')} aria-label={`Move ${definition?.title ?? widget.widgetId} to top`}>
+                      <ArrowUpToLine size={16} />
+                    </button>
+                    <button className="icon-button" type="button" disabled={!canMove || movableIndex <= 0} onClick={() => moveWidget(widget.widgetId, 'up')} aria-label={`Move ${definition?.title ?? widget.widgetId} up`}>
+                      <ArrowUp size={16} />
+                    </button>
+                    <button className="icon-button" type="button" disabled={!canMove || movableIndex < 0 || movableIndex >= movableWidgets.length - 1} onClick={() => moveWidget(widget.widgetId, 'down')} aria-label={`Move ${definition?.title ?? widget.widgetId} down`}>
+                      <ArrowDown size={16} />
+                    </button>
+                    <button className="icon-button" type="button" disabled={!canMove || movableIndex < 0 || movableIndex >= movableWidgets.length - 1} onClick={() => moveWidget(widget.widgetId, 'bottom')} aria-label={`Move ${definition?.title ?? widget.widgetId} to bottom`}>
+                      <ArrowDownToLine size={16} />
+                    </button>
+                    <button className="icon-button" type="button" aria-pressed={widget.pinned} onClick={() => updateWidget(widget.widgetId, `${definition?.title ?? widget.widgetId} ${widget.pinned ? 'unpinned' : 'pinned'} on the dashboard.`, (item) => ({ ...item, pinned: !item.pinned }))} aria-label={`${widget.pinned ? 'Unpin' : 'Pin'} ${definition?.title ?? widget.widgetId}`}>
+                      {widget.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+                    </button>
+                    <button className="icon-button" type="button" aria-pressed={widget.collapsed} onClick={() => updateWidget(widget.widgetId, `${definition?.title ?? widget.widgetId} ${widget.collapsed ? 'expanded' : 'collapsed'} on the dashboard.`, (item) => ({ ...item, collapsed: !item.collapsed }))} aria-label={`${widget.collapsed ? 'Expand' : 'Collapse'} ${definition?.title ?? widget.widgetId}`}>
+                      {widget.collapsed ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+                    </button>
+                    <label className="dashboard-widget-size-control">
+                      <span>Size</span>
+                      <select
+                        value={widget.size}
+                        onChange={(event) => updateWidget(widget.widgetId, `${definition?.title ?? widget.widgetId} resized to ${event.target.value}.`, (item) => ({ ...item, size: event.target.value as DashboardWidgetSize }))}
+                        aria-label={`Set ${definition?.title ?? widget.widgetId} size`}
+                      >
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large">Large</option>
+                      </select>
+                    </label>
+                    <button className="icon-button danger-icon-button" type="button" disabled={!canHide} onClick={() => updateWidget(widget.widgetId, `${definition?.title ?? widget.widgetId} hidden from the dashboard.`, (item) => ({ ...item, visible: false }))} aria-label={`Hide ${definition?.title ?? widget.widgetId}`}>
+                      <EyeOff size={16} />
+                    </button>
+                  </div>
+                )}
+              </header>
+              {!widget.collapsed && <div className="personal-dashboard-widget-body">{renderWidgetContent(widget.widgetId)}</div>}
+            </article>
+          )
+        })}
       </div>
     </section>
   )
@@ -8563,7 +12883,7 @@ function LearningCatalog({ questions }: { questions: Question[] }) {
     <section className="lms-band" aria-labelledby="lms-catalog-title">
       <div className="lms-heading">
         <span>Organisation LMS</span>
-        <h2 id="lms-catalog-title">iicocece departmental learning map</h2>
+        <h2 id="lms-catalog-title">Training&assessment departmental learning map</h2>
         <p>Assessment questions are organised as workplace learning topics for departments, not university courses.</p>
       </div>
       <div className="department-grid">
@@ -9192,7 +13512,7 @@ function EmployeesPanel({
   }
   return (
     <section>
-      <PageTitle eyebrow="Manage users" title="iicocece user access and credentials" />
+      <PageTitle eyebrow="Manage users" title="Training&assessment user access and credentials" />
       <section className="panel">
         <div className="panel-heading-row">
           <div>
@@ -11356,6 +15676,7 @@ function Reports({
   auditEvents,
   analyticsEvents,
   trashRecords,
+  syncState,
   onTrashEntry,
   onRestoreTrashRecord,
 }: {
@@ -11370,14 +15691,16 @@ function Reports({
   auditEvents: AuditEvent[]
   analyticsEvents: AnalyticsEvent[]
   trashRecords: ReportTrashRecord[]
+  syncState: SyncState
   onTrashEntry: (itemType: ReportTrashItemType, itemId: string) => void
   onRestoreTrashRecord: (recordId: string) => void
 }) {
   const allEmployeesReportValue = 'all-employees'
-  const [activeReportTab, setActiveReportTab] = useState<'exports' | 'activity' | 'operational' | 'trash'>('exports')
+  const [activeReportTab, setActiveReportTab] = useState<'exports' | 'activity' | 'operational' | 'trash' | 'health'>('exports')
   const employeeUsers = useMemo(() => sortReportUsers(users), [users])
   const [selectedReportUserId, setSelectedReportUserId] = useState(allEmployeesReportValue)
   const [reportNow, setReportNow] = useState(() => Date.now())
+  const [healthRefreshedAt, setHealthRefreshedAt] = useState(() => new Date().toISOString())
   useEffect(() => {
     const timer = window.setInterval(() => setReportNow(Date.now()), 60_000)
     return () => window.clearInterval(timer)
@@ -11399,6 +15722,49 @@ function Reports({
   const inProgress = scoredSessions.filter((session) => session.status === 'in_progress')
   const nullified = sessions.filter(isSessionNullified)
   const activeTrashRecords = normalizeTrashRecords(trashRecords, reportNow)
+  const clientDiagnostics = readStored<Array<{ kind: string; detail: string; createdAt: string }>>(clientDiagnosticStorageKey, [])
+    .filter((item) => item?.detail && item?.createdAt)
+    .slice(0, 12)
+  const failedRequestCount = clientDiagnostics.filter((item) => /failed request|network failure/i.test(item.kind)).length
+  const activeTests = tests.filter((test) => test.status === 'Live').length
+  const protectedRecordCount = users.length + tests.length + sessions.length + auditEvents.length + analyticsEvents.length + questions.length
+  const backupScopeRows = [
+    ['Users and roles', users.length, 'Included'],
+    ['Tests and availability', tests.length, 'Included'],
+    ['Question bank records', questions.length, 'Included'],
+    ['Attempt sessions', sessions.length, 'Included'],
+    ['Audit and analytics events', auditEvents.length + analyticsEvents.length, 'Included'],
+    ['Recoverable trash entries', activeTrashRecords.length, 'Included'],
+  ]
+  const inProgressSessionsByUser = new Map<string, TestSession[]>()
+  inProgress.forEach((session) => {
+    const existing = inProgressSessionsByUser.get(session.userId) ?? []
+    existing.push(session)
+    inProgressSessionsByUser.set(session.userId, existing)
+  })
+  const duplicateActiveSessionUsers = Array.from(inProgressSessionsByUser.values()).filter((items) => items.length > 1).length
+  const activeSessionRows = inProgress.slice(0, 40).map((session) => {
+    const user = users.find((item) => item.id === session.userId)
+    const test = tests.find((item) => item.id === session.testId)
+    const lastSaved = session.lastSavedAt ?? session.startedAt
+    const minutesOpen = Math.max(0, Math.round((reportNow - sharedStateTime(session.startedAt)) / 60000))
+    const status = (inProgressSessionsByUser.get(session.userId)?.length ?? 0) > 1 ? 'Duplicate active session check' : minutesOpen > 180 ? 'Long running session' : 'Active'
+    return [
+      user?.fullName ?? session.userId,
+      test?.name ?? session.testId,
+      session.responses.length,
+      `${minutesOpen} min`,
+      lastSaved ? new Date(lastSaved).toLocaleString() : 'No autosave yet',
+      status,
+    ]
+  })
+  const releaseChecklistRows = [
+    ['Build check', 'Run before release', 'npm run build'],
+    ['Continuity guard', 'Protects users, tests, sessions, reports, and cloud state', 'npm run continuity:verify'],
+    ['Live smoke test', 'Checks core app flows after deploy', 'npm run smoke:live'],
+    ['Firebase deploy', 'Publishes the verified build', 'firebase deploy --only hosting'],
+    ['Post-deploy sync check', 'Open app and confirm Cloud saved', 'Sidebar sync badge'],
+  ]
   const trashRows = activeTrashRecords.map((record) => {
     const isAudit = record.itemType === 'audit_event'
     const item = record.item
@@ -11441,6 +15807,9 @@ function Reports({
         </button>
         <button className={activeReportTab === 'trash' ? 'active' : ''} type="button" onClick={() => setActiveReportTab('trash')}>
           <Trash2 size={18} /> Trash
+        </button>
+        <button className={activeReportTab === 'health' ? 'active' : ''} type="button" onClick={() => setActiveReportTab('health')}>
+          <Gauge size={18} /> System Health
         </button>
       </div>
 
@@ -11596,6 +15965,712 @@ function Reports({
         </section>
       )}
 
+      {activeReportTab === 'health' && (
+        <section className="system-health-panel">
+          <div className="panel-heading-row">
+            <div>
+              <h2>System Health</h2>
+              <p>Super Admin operational view for sync, backups, diagnostics, and release safety. This section is intentionally more technical than the everyday user screens.</p>
+            </div>
+            <button className="secondary-button compact" type="button" onClick={() => setHealthRefreshedAt(new Date().toISOString())}>
+              <RefreshCw size={16} /> Refresh health
+            </button>
+          </div>
+          <div className="metric-grid">
+            <Metric label="Cloud sync" value={syncState === 'saved' ? 'Healthy' : syncState === 'saving' ? 'Saving' : syncState === 'offline' ? 'Offline' : 'Delayed'} icon={<RefreshCw />} />
+            <Metric label="Protected records" value={protectedRecordCount} icon={<ShieldCheck />} />
+            <Metric label="Active tests" value={activeTests} icon={<ListChecks />} />
+            <Metric label="Open sessions" value={inProgress.length} icon={<Clock3 />} />
+            <Metric label="Recent diagnostics" value={clientDiagnostics.length} icon={<AlertCircle />} />
+          </div>
+          <div className="health-card-grid">
+            <article className={`health-card ${syncState === 'saved' ? 'healthy' : syncState}`}>
+              <div>
+                <span>Cloud status</span>
+                <strong>{syncState === 'saved' ? 'Cloud saved' : syncState === 'saving' ? 'Saving changes' : syncState === 'offline' ? 'Offline copy active' : 'Sync retrying'}</strong>
+              </div>
+              <p>
+                {syncState === 'saved'
+                  ? 'The latest browser state has confirmed cloud contact.'
+                  : syncState === 'saving'
+                    ? 'A cloud write is currently in progress.'
+                    : syncState === 'offline'
+                      ? 'The app is keeping a local copy until connection returns.'
+                      : 'The app is preserving local changes and will retry cloud sync.'}
+              </p>
+              <small>Last refreshed: {new Date(healthRefreshedAt).toLocaleString()}</small>
+            </article>
+            <article className="health-card">
+              <div>
+                <span>Backup readiness</span>
+                <strong>{backupScopeRows.reduce((total, row) => total + Number(row[1]), 0).toLocaleString()} records covered</strong>
+              </div>
+              <p>Use Download backup before large imports, bulk permission changes, report cleanup, or release verification.</p>
+              <button className="primary-button compact" type="button" onClick={onBackup}>
+                <FileDown size={16} /> Download backup now
+              </button>
+            </article>
+          </div>
+          <div className="split-layout">
+            <section className="panel">
+              <h2>Backup scope</h2>
+              <DataTable
+                columns={['Data area', 'Records', 'Backup status']}
+                rows={backupScopeRows}
+                resizable
+                tableId="reports-health-backup-scope"
+              />
+            </section>
+            <section className="panel">
+              <h2>Release safety checklist</h2>
+              <DataTable
+                columns={['Check', 'Purpose', 'Command or signal']}
+                rows={releaseChecklistRows}
+                resizable
+                tableId="reports-health-release-checklist"
+              />
+            </section>
+          </div>
+          <section className="panel">
+            <div className="panel-heading-row">
+              <div>
+                <h2>Active session control</h2>
+                <p>Use this to spot long-running attempts, duplicate active sessions, and learner sessions that may need support before they become reports.</p>
+              </div>
+              <span className={`sync-badge ${duplicateActiveSessionUsers ? 'delayed' : 'saved'}`}>
+                <Clock3 size={16} /> {duplicateActiveSessionUsers ? `${duplicateActiveSessionUsers} duplicate user check(s)` : 'No duplicate active users'}
+              </span>
+            </div>
+            <DataTable
+              columns={['User', 'Test', 'Answered', 'Open time', 'Last autosave', 'Status']}
+              rows={activeSessionRows}
+              resizable
+              tableId="reports-health-active-sessions"
+            />
+            {!activeSessionRows.length && <p className="hint">No active assessment sessions right now.</p>}
+          </section>
+          <section className="panel">
+            <div className="panel-heading-row">
+              <div>
+                <h2>Recent browser and cloud diagnostics</h2>
+                <p>Diagnostics are sanitised before storage. They are meant to help Super Admin spot failed requests, function errors, and browser problems without exposing passwords or hidden fields.</p>
+              </div>
+              <span className={`sync-badge ${failedRequestCount ? 'delayed' : 'saved'}`}>
+                <AlertCircle size={16} /> {failedRequestCount ? `${failedRequestCount} network issue(s)` : 'No recent network issues'}
+              </span>
+            </div>
+            <DataTable
+              columns={['Time', 'Type', 'Sanitised detail']}
+              rows={clientDiagnostics.map((item) => [
+                new Date(item.createdAt).toLocaleString(),
+                item.kind,
+                item.detail,
+              ])}
+              resizable
+              tableId="reports-health-diagnostics"
+            />
+            {!clientDiagnostics.length && <p className="hint">No recent client diagnostics recorded on this device.</p>}
+          </section>
+        </section>
+      )}
+
+    </section>
+  )
+}
+
+function SuperAdminBugReports({
+  problemReports,
+  bugAuditLogs,
+  contributionPoints,
+  users,
+  syncState,
+  affectedAreas,
+  onUpdateBugReport,
+  onUpdateAffectedArea,
+}: {
+  problemReports: ProblemReport[]
+  bugAuditLogs: BugAuditLog[]
+  contributionPoints: UserContributionPoints[]
+  users: User[]
+  syncState: SyncState
+  affectedAreas: AffectedArea[]
+  onUpdateBugReport: (reportId: string, patch: Partial<ProblemReport>, action: string, note?: string) => void
+  onUpdateAffectedArea: (areaId: string, patch: Partial<AffectedArea>, action: string, note?: string) => void
+}) {
+  const [statusFilter, setStatusFilter] = useState<'all' | ProblemStatus>('all')
+  const [search, setSearch] = useState('')
+  const [selectedReportId, setSelectedReportId] = useState(() => problemReports[0]?.id ?? '')
+  const [adminNote, setAdminNote] = useState('')
+  const [duplicateOf, setDuplicateOf] = useState('')
+  const [pointsDraft, setPointsDraft] = useState('')
+  const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users])
+  const contributionByUserId = useMemo(() => new Map(contributionPoints.map((record) => [record.userId, record])), [contributionPoints])
+  const affectedAreaById = useMemo(() => new Map(affectedAreas.map((area) => [area.id, area])), [affectedAreas])
+  const pendingAffectedAreas = affectedAreas.filter((area) => area.status === 'pendingReview')
+  const openReports = problemReports.filter(problemReportIsOpen)
+  const approvedReports = problemReports.filter((report) => ['Approved for Investigation', 'Approved for Repair', 'Repair in Progress', 'Testing in Progress'].includes(report.status))
+  const filteredReports = problemReports.filter((report) => {
+    const matchesStatus = statusFilter === 'all' || report.status === statusFilter
+    if (!matchesStatus) return false
+    const needle = search.trim().toLowerCase()
+    if (!needle) return true
+    return [
+      report.title,
+      report.description,
+      report.actualBehaviour,
+      report.expectedBehaviour,
+      report.moduleName,
+      report.reportMode,
+      report.category,
+      report.reporterName,
+      report.status,
+      report.id,
+    ].some((value) => String(value || '').toLowerCase().includes(needle))
+  })
+  const selectedReport = problemReports.find((report) => report.id === selectedReportId) ?? filteredReports[0] ?? problemReports[0]
+  const selectedReportKey = selectedReport?.id ?? ''
+  const selectedReportPoints = selectedReport?.pointsAwarded ?? 0
+  const selectedBugAuditLogs = selectedReport
+    ? bugAuditLogs.filter((log) => log.bugReportId === selectedReport.id)
+    : []
+  const selectedReportQuality = selectedReport ? bugReportQuality(selectedReport) : undefined
+  const selectedDuplicateCandidates = selectedReport ? bugDuplicateCandidates(selectedReport, problemReports) : []
+  const qualityScores = problemReports.map((report) => bugReportQuality(report).score)
+  const averageQualityScore = qualityScores.length ? Math.round(qualityScores.reduce((total, score) => total + score, 0) / qualityScores.length) : 0
+  const duplicateHintCount = problemReports.filter((report) => bugDuplicateCandidates(report, problemReports).length).length
+
+  useEffect(() => {
+    if (!selectedReportId && problemReports[0]?.id) setSelectedReportId(problemReports[0].id)
+  }, [problemReports, selectedReportId])
+
+  useEffect(() => {
+    if (selectedReport) setPointsDraft(String(selectedReport.pointsAwarded ?? 0))
+  }, [selectedReport, selectedReportKey, selectedReportPoints])
+
+  function transition(report: ProblemReport, status: ProblemStatus, action: string, note?: string) {
+    onUpdateBugReport(report.id, { status }, action, note)
+  }
+
+  function transitionAllowed(report: ProblemReport, status: ProblemStatus) {
+    return problemCanTransition(normalizeProblemStatus(report.status), status)
+  }
+
+  function addNote(report: ProblemReport) {
+    const note = adminNote.trim()
+    if (!note) return
+    onUpdateBugReport(report.id, {}, 'Bug report note added', note)
+    setAdminNote('')
+  }
+
+  function markDuplicate(report: ProblemReport) {
+    const target = duplicateOf.trim()
+    onUpdateBugReport(
+      report.id,
+      { status: 'Duplicate', duplicateOf: target || undefined, adminDecision: 'duplicate', pointsAwarded: 1, pointsReason: 'Duplicate report credit.' },
+      'Bug report marked duplicate',
+      target ? `Duplicate of ${target}. 1 contribution point awarded.` : 'Marked duplicate by Super Admin. 1 contribution point awarded.',
+    )
+    setDuplicateOf('')
+  }
+
+  function generateReport(report: ProblemReport) {
+    const finalReport = buildBugResolutionReport({ ...report, finalReport: report.finalReport })
+    onUpdateBugReport(report.id, { finalReport }, 'Bug resolution report generated', 'Super Admin generated the structured resolution report.')
+  }
+
+  function awardPoints(report: ProblemReport, decision: FeedbackAdminDecision, status: ProblemStatus, action: string, customPoints?: number) {
+    const pointsAwarded = Math.max(0, Math.round(customPoints ?? defaultContributionAward(report, decision)))
+    onUpdateBugReport(
+      report.id,
+      {
+        status,
+        adminDecision: decision,
+        pointsAwarded,
+        pointsReason: `${action}: ${pointsAwarded} contribution point(s).`,
+      },
+      action,
+      `Decision ${decision}; ${pointsAwarded} point(s) awarded.`,
+    )
+  }
+
+  function generateRepairPrompt(report: ProblemReport) {
+    const repairPrompt = buildCodexBugRepairPrompt(report)
+    onUpdateBugReport(report.id, { repairPrompt }, 'Codex repair prompt generated', 'Super Admin generated the approved Codex investigation prompt.')
+  }
+
+  async function copyRepairPrompt(report: ProblemReport) {
+    if (!report.repairPrompt) return
+    await navigator.clipboard?.writeText(report.repairPrompt)
+  }
+
+  function updateArrayField(report: ProblemReport, field: 'filesAffected' | 'testsPerformed', value: string, action: string) {
+    const nextValues = value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 30)
+    if (sameSerializedState(report[field] ?? [], nextValues)) return
+    onUpdateBugReport(report.id, { [field]: nextValues } as Partial<ProblemReport>, action, `${field} updated by Super Admin.`)
+  }
+
+  return (
+    <section className="bug-reports-gateway">
+      <PageTitle eyebrow="Super Admin Bug Reports" title="Repair approval gateway" />
+      <section className="panel notification-authority-panel">
+        <div>
+          <span className="status-pill supervised"><ShieldCheck size={16} /> Super Admin gateway</span>
+          <h2>Controlled bug review before investigation, repair, or deployment</h2>
+          <p>
+            User reports enter this queue as New. Investigation, repair, and deployment remain blocked until Ayodeji Falope Super Admin approves each stage. The app records every approval decision in the audit trail.
+          </p>
+        </div>
+        <div className={`sync-badge ${syncState}`}>
+          <RefreshCw size={16} /> Sync {syncState}
+        </div>
+      </section>
+
+      <div className="metric-grid">
+        <Metric label="Submitted reports" value={problemReports.filter((report) => report.status === 'Submitted' || report.status === 'New').length} icon={<Bug />} />
+        <Metric label="Feedback items" value={problemReports.filter((report) => report.reportMode === 'feedback').length} icon={<MessageSquare />} />
+        <Metric label="Open reports" value={openReports.length} icon={<Bell />} />
+        <Metric label="Approved work" value={approvedReports.length} icon={<ShieldCheck />} />
+        <Metric label="Points awarded" value={contributionPoints.reduce((total, record) => total + record.totalPoints, 0)} icon={<Sparkles />} />
+        <Metric label="Fixed reports" value={problemReports.filter((report) => report.status === 'Fixed' || report.status === 'Fixed and Monitored').length} icon={<CheckCircle2 />} />
+        <Metric label="Avg quality" value={problemReports.length ? `${averageQualityScore}%` : 'N/A'} icon={<Gauge />} />
+        <Metric label="Duplicate hints" value={duplicateHintCount} icon={<Copy />} />
+      </div>
+
+      <section className="panel bug-report-control-panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Affected area suggestions</h2>
+            <p>Review user-entered page or feature names before they become shared dropdown options.</p>
+          </div>
+        </div>
+        <DataTable
+          columns={['Suggested name', 'Submitted by', 'Date', 'Related report', 'Status', 'Actions']}
+          rows={pendingAffectedAreas.map((area) => {
+            const relatedReport = area.relatedBugReportId ? problemReports.find((report) => report.id === area.relatedBugReportId) : undefined
+            const submitter = area.createdBy ? userById.get(area.createdBy) : undefined
+            return [
+              area.displayName,
+              submitter ? `${submitter.fullName} (${submitter.userId})` : area.createdBy ?? 'Unknown',
+              new Date(area.createdAt).toLocaleString(),
+              relatedReport?.title ?? area.relatedBugReportId ?? 'N/A',
+              area.status,
+              <div className="table-action-group" key={`${area.id}-actions`}>
+                <button className="secondary-button compact" type="button" onClick={() => {
+                  const renamed = window.prompt('Rename before approving if needed.', area.displayName)
+                  if (renamed === null) return
+                  onUpdateAffectedArea(area.id, { displayName: renamed || area.displayName, status: 'active', type: area.type === 'other' ? 'feature' : area.type }, 'Affected area approved', 'Suggestion approved for shared use.')
+                }}>Approve</button>
+                <button className="secondary-button compact" type="button" onClick={() => onUpdateAffectedArea(area.id, { status: 'rejected' }, 'Affected area rejected', 'Suggestion rejected by admin review.')}>Reject</button>
+                <button className="secondary-button compact" type="button" onClick={() => {
+                  const target = window.prompt('Enter the exact existing affected area name to merge into.')
+                  const match = target ? findAffectedAreaMatch(target, affectedAreas) : undefined
+                  if (!match) return
+                  onUpdateAffectedArea(area.id, { status: 'merged', mergedInto: match.id }, 'Affected area merged', `Merged into ${match.displayName}.`)
+                }}>Merge</button>
+              </div>,
+            ]
+          })}
+          tableId="superadmin-affected-area-suggestions"
+          resizable
+        />
+        {!pendingAffectedAreas.length && <p className="hint">No affected-area suggestions are waiting for review.</p>}
+      </section>
+
+      <section className="panel feedback-leaderboard-panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Contribution rewards ledger</h2>
+            <p>Every awarded point, badge, duplicate decision, rejection, and useful report remains visible to Super Admin.</p>
+          </div>
+        </div>
+        <DataTable
+          columns={['User', 'Role', 'Points', 'Badge', 'Useful bugs', 'Useful feedback', 'Duplicates', 'Rejected']}
+          rows={contributionPoints.slice(0, 10).map((record) => {
+            const user = userById.get(record.userId)
+            return [
+              user?.fullName ?? record.userId,
+              user?.role ?? 'unknown',
+              record.totalPoints,
+              record.currentBadge,
+              record.validBugReports,
+              record.validFeedbackReports,
+              record.duplicateReports,
+              record.rejectedReports,
+            ]
+          })}
+          tableId="superadmin-contribution-ledger"
+          resizable
+        />
+        {!contributionPoints.length && <p className="hint">No contribution points have been awarded yet.</p>}
+      </section>
+
+      <section className="panel bug-report-control-panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Bug report queue</h2>
+            <p>Filter, review, approve, reject, duplicate, escalate, and archive user-submitted bug reports.</p>
+          </div>
+          <label className="search-box notification-search-box">
+            <Search size={18} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="Search bug reports" />
+          </label>
+        </div>
+        <div className="settings-tabs compact-tabs bug-status-tabs" role="tablist" aria-label="Bug report status filters">
+          <button className={statusFilter === 'all' ? 'active' : ''} type="button" onClick={() => setStatusFilter('all')}>All</button>
+          {problemStatuses.map((status) => (
+            <button className={statusFilter === status ? 'active' : ''} key={status} type="button" onClick={() => setStatusFilter(status)}>
+              {status}
+            </button>
+          ))}
+        </div>
+        <DataTable
+          columns={['Reported', 'Type', 'Title', 'Reporter', 'Category', 'Severity', 'Quality', 'Duplicate hints', 'Status', 'Action']}
+          rows={filteredReports.map((report) => {
+            const quality = bugReportQuality(report)
+            const duplicates = bugDuplicateCandidates(report, problemReports)
+            return [
+              new Date(report.createdAt).toLocaleString(),
+              report.reportMode === 'feedback' ? 'Feedback' : 'Bug',
+              report.title,
+              `${report.reporterName} (${report.reporterRole})`,
+              report.category || report.moduleName || report.view,
+              report.adminSeverity ?? report.userSeverity ?? report.severity,
+              `${quality.score}% · ${quality.label}`,
+              duplicates.length ? `${duplicates.length} possible` : 'None',
+              <span className={`bug-status-pill status-${report.status.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{report.status}</span>,
+              <button className="primary-button compact" type="button" onClick={() => setSelectedReportId(report.id)}>
+                <Eye size={16} /> View Report
+              </button>,
+            ]
+          })}
+          resizable
+          tableId="superadmin-bug-reports"
+        />
+        {!filteredReports.length && <EmptyState title="No bug reports match this view" body="User-submitted bug reports will appear here for Super Admin triage and approval." />}
+      </section>
+
+      {selectedReport && (
+        <section className="bug-report-detail-grid">
+          <article className="panel bug-report-detail-panel">
+            <div className="panel-heading-row">
+              <div>
+                <span className="status-pill"><Bug size={16} /> {selectedReport.id}</span>
+                <h2>{selectedReport.title}</h2>
+                <p>{selectedReport.description}</p>
+              </div>
+              <span className={`bug-status-pill status-${selectedReport.status.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{selectedReport.status}</span>
+            </div>
+            <div className="bug-report-facts">
+              <span><strong>Reporter</strong>{selectedReport.reporterName}</span>
+              <span><strong>Login ID</strong>{selectedReport.reporterUserId ?? selectedReport.reporterId}</span>
+              <span><strong>Email</strong>{selectedReport.reporterEmail ?? userById.get(selectedReport.reporterId)?.email ?? 'Not available'}</span>
+              <span><strong>Role</strong>{selectedReport.reporterRole}</span>
+              <span><strong>Type</strong>{selectedReport.reportMode === 'feedback' ? 'Feedback' : 'Bug report'}</span>
+              <span><strong>Category</strong>{selectedReport.category ?? 'Uncategorised'}</span>
+              <span><strong>Page or feature affected</strong>{selectedReport.affectedAreaId ? affectedAreaById.get(selectedReport.affectedAreaId)?.displayName ?? selectedReport.moduleName : selectedReport.affectedAreaText ?? selectedReport.moduleName ?? selectedReport.view}</span>
+              <span><strong>Module</strong>{selectedReport.moduleName || selectedReport.view}</span>
+              <span><strong>Suggested severity</strong>{selectedReport.systemSuggestedSeverity ?? selectedReport.severity}</span>
+              <span><strong>Points awarded</strong>{selectedReport.pointsAwarded ?? 0}</span>
+              <span><strong>User badge</strong>{contributionByUserId.get(selectedReport.reporterId)?.currentBadge ?? 'Getting Started'}</span>
+              <span><strong>Browser/device</strong>{selectedReport.diagnosticSnapshot?.deviceType ?? 'Not shared'}</span>
+              <span><strong>Screen</strong>{selectedReport.diagnosticSnapshot?.screenSize ?? 'Not shared'}</span>
+            </div>
+            {selectedReportQuality && (
+              <section className="bug-quality-panel" aria-label="Bug report quality and duplicate hints">
+                <div>
+                  <span>Report quality</span>
+                  <strong>{selectedReportQuality.score}% · {selectedReportQuality.label}</strong>
+                  <small>{selectedReportQuality.missing.length ? `Missing: ${selectedReportQuality.missing.join(', ')}` : 'The report contains the key details needed for triage.'}</small>
+                </div>
+                <div>
+                  <span>Possible duplicates</span>
+                  <strong>{selectedDuplicateCandidates.length}</strong>
+                  <small>{selectedDuplicateCandidates.length ? 'Review before marking duplicate.' : 'No similar report found.'}</small>
+                </div>
+              </section>
+            )}
+            {selectedDuplicateCandidates.length > 0 && (
+              <div className="duplicate-candidate-list">
+                {selectedDuplicateCandidates.map((candidate) => (
+                  <button
+                    className="secondary-button compact"
+                    key={candidate.report.id}
+                    type="button"
+                    onClick={() => setDuplicateOf(candidate.report.id)}
+                  >
+                    <Copy size={14} /> {candidate.score}% match · {candidate.report.title}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="bug-report-narrative">
+              <h3>Expected Behaviour</h3>
+              <p>{selectedReport.expectedBehaviour || 'Not provided.'}</p>
+              <h3>Actual Behaviour</h3>
+              <p>{selectedReport.actualBehaviour || selectedReport.description}</p>
+              <h3>Steps to Reproduce</h3>
+              <p>{selectedReport.reproductionSteps || 'Not provided.'}</p>
+              <h3>Diagnostic Snapshot</h3>
+              <p>{selectedReport.diagnosticSnapshot ? JSON.stringify(selectedReport.diagnosticSnapshot, null, 2) : 'Diagnostic sharing was not permitted.'}</p>
+              <h3>Additional User Comments</h3>
+              <p>{selectedReport.additionalComments || 'Not provided.'}</p>
+              <h3>Console Error</h3>
+              <p>{selectedReport.consoleError || 'Not provided.'}</p>
+              <h3>Attachments</h3>
+              {(selectedReport.attachments ?? []).length ? (
+                <div className="bug-attachment-list">
+                  {(selectedReport.attachments ?? []).map((attachment) => (
+                    <a href={attachment.dataUrl} download={attachment.name} key={attachment.id}>
+                      <FileDown size={16} />
+                      <span>{attachment.name}</span>
+                      <small>{Math.round(attachment.size / 1024)} KB</small>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p>No attachments were added.</p>
+              )}
+            </div>
+          </article>
+
+          <aside className="panel bug-report-gateway-panel" aria-label="Super Admin bug report actions">
+            <h2>Super Admin actions</h2>
+            <p className="hint">Approval gates are recorded in the audit trail. Repair remains blocked until the relevant approval status is selected.</p>
+            <div className="form-grid">
+              <label>
+                Final severity
+                <select
+                  value={selectedReport.adminSeverity ?? selectedReport.userSeverity ?? selectedReport.severity}
+                  onChange={(event) => onUpdateBugReport(selectedReport.id, { adminSeverity: event.target.value as ProblemSeverity }, 'Bug severity updated', `Severity set to ${event.target.value}.`)}
+                >
+                  {problemSeverities.map((severity) => <option key={severity} value={severity}>{severity}</option>)}
+                </select>
+              </label>
+              <label>
+                Priority
+                <select
+                  value={selectedReport.adminPriority ?? 'normal'}
+                  onChange={(event) => onUpdateBugReport(selectedReport.id, { adminPriority: event.target.value as ProblemPriority }, 'Bug priority updated', `Priority set to ${event.target.value}.`)}
+                >
+                  {problemPriorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+                </select>
+              </label>
+              <label>
+                Assign owner
+                <select
+                  value={selectedReport.assignedTo ?? ''}
+                  onChange={(event) => onUpdateBugReport(selectedReport.id, { assignedTo: event.target.value || undefined }, 'Bug owner assigned', `Assigned to ${userById.get(event.target.value)?.fullName ?? 'unassigned'}.`)}
+                >
+                  <option value="">Unassigned</option>
+                  {users.filter((user) => user.role === 'super_admin' || user.role === 'admin').map((user) => (
+                    <option key={user.id} value={user.id}>{user.fullName}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="bug-investigation-fields">
+              <label>
+                Investigation summary
+                <textarea
+                  key={`${selectedReport.id}-investigation`}
+                  defaultValue={selectedReport.investigationSummary ?? ''}
+                  rows={4}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.investigationSummary ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { investigationSummary: value }, 'Bug investigation summary updated', 'Investigation notes updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Root cause
+                <textarea
+                  key={`${selectedReport.id}-root-cause`}
+                  defaultValue={selectedReport.rootCause ?? ''}
+                  rows={3}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.rootCause ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { rootCause: value }, 'Bug root cause updated', 'Root cause updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Fix plan
+                <textarea
+                  key={`${selectedReport.id}-fix-plan`}
+                  defaultValue={selectedReport.fixPlan ?? ''}
+                  rows={4}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.fixPlan ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { fixPlan: value }, 'Bug fix plan updated', 'Repair plan updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Files affected, one per line
+                <textarea
+                  key={`${selectedReport.id}-files`}
+                  defaultValue={(selectedReport.filesAffected ?? []).join('\n')}
+                  rows={3}
+                  onBlur={(event) => updateArrayField(selectedReport, 'filesAffected', event.currentTarget.value, 'Bug affected files updated')}
+                />
+              </label>
+              <label>
+                Tests performed, one per line
+                <textarea
+                  key={`${selectedReport.id}-tests`}
+                  defaultValue={(selectedReport.testsPerformed ?? []).join('\n')}
+                  rows={3}
+                  onBlur={(event) => updateArrayField(selectedReport, 'testsPerformed', event.currentTarget.value, 'Bug test evidence updated')}
+                />
+              </label>
+              <label>
+                Verification result
+                <textarea
+                  key={`${selectedReport.id}-verification`}
+                  defaultValue={selectedReport.verificationResult ?? ''}
+                  rows={3}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.verificationResult ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { verificationResult: value }, 'Bug verification result updated', 'Verification result updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Risk review
+                <textarea
+                  key={`${selectedReport.id}-risk-review`}
+                  defaultValue={selectedReport.riskReview ?? ''}
+                  rows={3}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.riskReview ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { riskReview: value }, 'Bug risk review updated', 'Risk review updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Deployment recommendation
+                <textarea
+                  key={`${selectedReport.id}-deployment`}
+                  defaultValue={selectedReport.deploymentRecommendation ?? ''}
+                  rows={3}
+                  onBlur={(event) => {
+                    const value = event.currentTarget.value.trim()
+                    if (value !== (selectedReport.deploymentRecommendation ?? '')) {
+                      onUpdateBugReport(selectedReport.id, { deploymentRecommendation: value }, 'Bug deployment recommendation updated', 'Deployment recommendation updated by Super Admin.')
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <div className="bug-action-stack">
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Under Review')} onClick={() => transition(selectedReport, 'Under Review', 'Bug review started')}>Review Bug</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Needs More Information')} onClick={() => transition(selectedReport, 'Needs More Information', 'More bug information requested')}>Request More Information</button>
+              <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Accepted')} onClick={() => awardPoints(selectedReport, 'accepted', 'Accepted', selectedReport.reportMode === 'feedback' ? 'Feedback accepted and points awarded' : 'Bug report accepted and points awarded')}>
+                Accept & Award
+              </button>
+              <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Approved for Investigation')} onClick={() => transition(selectedReport, 'Approved for Investigation', 'Bug investigation approved')}>Approve Investigation</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Investigation in Progress')} onClick={() => transition(selectedReport, 'Investigation in Progress', 'Bug investigation started')}>Start Investigation</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Fix Proposed')} onClick={() => transition(selectedReport, 'Fix Proposed', 'Bug fix proposed')}>Mark Fix Proposed</button>
+              <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Approved for Repair')} onClick={() => awardPoints(selectedReport, 'repair-approved', 'Approved for Repair', 'Bug repair approved and confirmed-bug points awarded')}>Approve Repair</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Repair in Progress')} onClick={() => transition(selectedReport, 'Repair in Progress', 'Bug repair started')}>Start Repair</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Testing in Progress')} onClick={() => transition(selectedReport, 'Testing in Progress', 'Bug fix testing started')}>Testing in Progress</button>
+              <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Fixed')} onClick={() => awardPoints(selectedReport, 'fixed', 'Fixed', 'Bug marked fixed and final points awarded')}>Mark Fixed</button>
+              <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Fixed and Monitored')} onClick={() => transition(selectedReport, 'Fixed and Monitored', 'Bug deployment/monitoring approved')}>Approve Deployment</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Escalated')} onClick={() => transition(selectedReport, 'Escalated', 'Bug escalated')}>Escalate</button>
+              <button className="danger-button compact" type="button" disabled={!transitionAllowed(selectedReport, 'Rejected')} onClick={() => onUpdateBugReport(selectedReport.id, { status: 'Rejected', adminDecision: 'rejected', pointsAwarded: 0, pointsReason: 'Rejected report: no contribution points awarded.' }, 'Report rejected', 'Rejected by Super Admin. No contribution points awarded.')}>Reject</button>
+              <button className="danger-button compact" type="button" disabled={!transitionAllowed(selectedReport, 'Rejected')} onClick={() => onUpdateBugReport(selectedReport.id, { status: 'Rejected', adminDecision: 'abuse', pointsAwarded: 0, pointsReason: 'Abuse/spam decision: no contribution points awarded.' }, 'Report rejected for abuse', 'Rejected for abuse/spam. No contribution points awarded.')}>Spam / Abuse</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Closed')} onClick={() => transition(selectedReport, 'Closed', 'Report closed')}>Close Report</button>
+              <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Archived')} onClick={() => transition(selectedReport, 'Archived', 'Bug report archived')}>Archive Report</button>
+            </div>
+            <div className="feedback-admin-points-control">
+              <label>
+                Award or adjust points
+                <input type="number" min="0" step="1" value={pointsDraft} onChange={(event) => setPointsDraft(event.target.value)} />
+              </label>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => onUpdateBugReport(
+                  selectedReport.id,
+                  {
+                    pointsAwarded: Math.max(0, Math.round(Number(pointsDraft) || 0)),
+                    adminDecision: selectedReport.adminDecision ?? 'accepted',
+                    pointsReason: 'Manual Super Admin point adjustment.',
+                  },
+                  'Contribution points adjusted',
+                  `Manual points adjustment to ${Math.max(0, Math.round(Number(pointsDraft) || 0))}.`,
+                )}
+              >
+                <Sparkles size={16} /> Save Points
+              </button>
+            </div>
+            <label>
+              Duplicate of
+              <input value={duplicateOf} onChange={(event) => setDuplicateOf(event.target.value)} placeholder="Existing bug reference" />
+            </label>
+            <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Duplicate')} onClick={() => markDuplicate(selectedReport)}>
+              <Copy size={16} /> Mark as Duplicate
+            </button>
+            <label>
+              Internal note
+              <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} rows={4} placeholder="Add Super Admin note, evidence, or approval context." />
+            </label>
+            <button className="secondary-button" type="button" onClick={() => addNote(selectedReport)}>
+              <Plus size={16} /> Add Note
+            </button>
+            <button className="secondary-button" type="button" onClick={() => generateReport(selectedReport)}>
+              <FileDown size={16} /> Generate Report
+            </button>
+            <button className="secondary-button" type="button" disabled={!['Approved for Investigation', 'Investigation in Progress', 'Fix Proposed', 'Approved for Repair', 'Repair in Progress', 'Testing in Progress'].includes(selectedReport.status)} onClick={() => generateRepairPrompt(selectedReport)}>
+              <Bot size={16} /> Generate Codex Prompt
+            </button>
+          </aside>
+
+          <article className="panel bug-report-audit-panel">
+            <h2>Gateway notes and repair report</h2>
+            <div className="bug-note-list">
+              {(selectedReport.adminNotes ?? []).map((note, index) => <p key={`${selectedReport.id}-note-${index}`}>{note}</p>)}
+              {!(selectedReport.adminNotes ?? []).length && <p className="hint">No Super Admin notes yet.</p>}
+            </div>
+            <h3>Dedicated bug audit log</h3>
+            <div className="bug-note-list">
+              {selectedBugAuditLogs.map((log) => (
+                <p key={log.id}>
+                  <strong>{new Date(log.createdAt).toLocaleString()} · {log.action}</strong>
+                  <span>{[log.previousStatus, log.newStatus].filter(Boolean).join(' -> ') || 'Metadata update'}{log.notes ? ` · ${log.notes}` : ''}</span>
+                </p>
+              ))}
+              {!selectedBugAuditLogs.length && <p className="hint">No dedicated bug audit log entries yet.</p>}
+            </div>
+            {selectedReport.repairPrompt && (
+              <>
+                <div className="panel-heading-row compact-heading-row">
+                  <h3>Approved Codex repair prompt</h3>
+                  <button className="secondary-button compact" type="button" onClick={() => void copyRepairPrompt(selectedReport)}>
+                    <Copy size={16} /> Copy Prompt
+                  </button>
+                </div>
+                <pre className="bug-final-report">{selectedReport.repairPrompt}</pre>
+              </>
+            )}
+            {selectedReport.finalReport && <pre className="bug-final-report">{selectedReport.finalReport}</pre>}
+          </article>
+        </section>
+      )}
     </section>
   )
 }
@@ -11619,6 +16694,11 @@ function SuperAdminNotifications({
 }) {
   const [activityFilter, setActivityFilter] = useState<'all' | 'problem' | 'audit' | 'operational'>('all')
   const [activitySearch, setActivitySearch] = useState('')
+  const [notificationsNowTick, setNotificationsNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNotificationsNowTick(Date.now()), 30000)
+    return () => window.clearInterval(intervalId)
+  }, [])
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users])
   const activityItems = useMemo(() => {
     const auditItems = auditEvents.map((event) => ({
@@ -11657,8 +16737,8 @@ function SuperAdminNotifications({
       kind: 'problem' as const,
       source: 'Problem report',
       person: report.reporterName,
-      label: `${report.severity.toUpperCase()} · ${report.title}`,
-      detail: `${report.description} · View: ${report.view} · Status: ${report.status} · Sync: ${report.syncState}${report.activeTestId ? ` · Test ID: ${report.activeTestId}` : ''}`,
+      label: `${(report.adminSeverity ?? report.userSeverity ?? report.severity).toUpperCase()} · ${report.title}`,
+      detail: `${report.description} · Module: ${report.moduleName ?? report.view} · Status: ${report.status} · Sync: ${report.syncState}${report.activeTestId ? ` · Test ID: ${report.activeTestId}` : ''}`,
       createdAt: report.createdAt,
       metadata: report.url,
     }))
@@ -11686,8 +16766,58 @@ function SuperAdminNotifications({
     .sort((left, right) => left.person.localeCompare(right.person))
   const completedSessions = sessions.filter((session) => session.status === 'completed' && !isSessionNullified(session)).length
   const latestActivity = activityItems[0]?.createdAt ? new Date(activityItems[0].createdAt).toLocaleString() : 'No activity yet'
-  const openProblemReports = problemReports.filter((report) => report.status !== 'resolved')
-  const urgentProblemReports = openProblemReports.filter((report) => report.severity === 'critical' || report.severity === 'high')
+  const openProblemReports = problemReports.filter(problemReportIsOpen)
+  const urgentProblemReports = openProblemReports.filter((report) => ['critical', 'high'].includes(report.adminSeverity ?? report.userSeverity ?? report.severity))
+  const failedLogins = analyticsEvents.filter((event) => event.type === 'login_failed').length
+  const syncHealthLabel = syncState === 'saved' ? 'Healthy' : syncState === 'saving' ? 'Writing' : syncState === 'offline' ? 'Offline' : 'Pending'
+  const latestEventAgeMinutes = activityItems[0]?.createdAt ? Math.max(0, Math.round((notificationsNowTick - sharedStateTime(activityItems[0].createdAt)) / 60000)) : undefined
+  const lockedSessions = sessions.filter(isSessionNullified).length
+  const highRiskSignals = urgentProblemReports.length + failedLogins + lockedSessions
+  const commandCatalogueItems = [...productFeatureCatalogue, ...uiUxFeatureCatalogue, ...analyticsFeatureCatalogue]
+  const commandImplementedCount = commandCatalogueItems.filter((item) => upgradeStatusFor(item.title).className === 'implemented').length
+  const commandFoundationCount = commandCatalogueItems.filter((item) => upgradeStatusFor(item.title).className === 'foundation').length
+  const commandIntegrationCount = commandCatalogueItems.filter((item) => upgradeStatusFor(item.title).className === 'integration').length
+  const commandRoadmapCount = commandCatalogueItems.length - commandImplementedCount - commandFoundationCount - commandIntegrationCount
+  const protectedStateCount = users.length + tests.length + sessions.length + analyticsEvents.length + auditEvents.length + problemReports.length
+  const commandReadiness = highRiskSignals
+    ? 'Review required'
+    : syncState === 'saved'
+      ? 'Ready'
+      : 'Watch sync'
+
+  function exportCommandSnapshot() {
+    const exportedAt = new Date().toISOString()
+    downloadJsonFile(`DEAP_Super_Admin_Command_Snapshot_${exportedAt.slice(0, 10)}.json`, {
+      exportedAt,
+      syncState,
+      commandReadiness,
+      protectedState: {
+        users: users.length,
+        tests: tests.length,
+        sessions: sessions.length,
+        analyticsEvents: analyticsEvents.length,
+        auditEvents: auditEvents.length,
+        problemReports: problemReports.length,
+        protectedStateCount,
+      },
+      riskSignals: {
+        highRiskSignals,
+        urgentProblemReports: urgentProblemReports.length,
+        failedLogins,
+        nullifiedAttempts: lockedSessions,
+        latestEventAgeMinutes,
+      },
+      implementationBacklog: {
+        capturedExpansionItems: fullFeatureExpansionTotal,
+        visibleCatalogueItems: commandCatalogueItems.length,
+        implemented: commandImplementedCount,
+        foundationReady: commandFoundationCount,
+        integrationStage: commandIntegrationCount,
+        roadmap: commandRoadmapCount,
+      },
+      latestActivity,
+    })
+  }
 
   return (
     <section className="superadmin-notifications">
@@ -11706,25 +16836,76 @@ function SuperAdminNotifications({
       </section>
       <div className="metric-grid">
         <Metric label="Logged activities" value={activityItems.length} icon={<Bell />} />
-        <Metric label="Problem reports" value={problemReports.filter((report) => report.status !== 'resolved').length} icon={<Bug />} />
+        <Metric label="Problem reports" value={problemReports.filter(problemReportIsOpen).length} icon={<Bug />} />
         <Metric label="Audit actions" value={auditEvents.length} icon={<ShieldCheck />} />
         <Metric label="Operational events" value={analyticsEvents.length} icon={<BarChart3 />} />
         <Metric label="Users monitored" value={users.length} icon={<UsersRound />} />
         <Metric label="Completed attempts" value={completedSessions} icon={<CheckCircle2 />} />
         <Metric label="Live tests" value={tests.filter((test) => test.status === 'Live').length} icon={<ListChecks />} />
       </div>
+      <section className="panel superadmin-command-center" aria-label="Super Admin command center">
+        <div className="panel-heading-row">
+          <div>
+            <span className="status-pill supervised"><TerminalSquare size={16} /> Command center</span>
+            <h2>Super Admin control snapshot</h2>
+            <p>Technical operating picture for Ayodeji: protected state, implementation backlog, risk indicators, and exportable governance evidence.</p>
+          </div>
+          <button className="secondary-button compact" type="button" onClick={exportCommandSnapshot}>
+            <FileDown size={16} /> Export snapshot
+          </button>
+        </div>
+        <div className="command-center-grid">
+          <article>
+            <span>Readiness</span>
+            <strong>{commandReadiness}</strong>
+            <small>{syncState === 'saved' ? 'Cloud state is current.' : `Current sync state: ${syncState}.`}</small>
+          </article>
+          <article>
+            <span>Protected records</span>
+            <strong>{protectedStateCount.toLocaleString()}</strong>
+            <small>Users, tests, sessions, analytics, audit, and report records.</small>
+          </article>
+          <article>
+            <span>Expansion backlog</span>
+            <strong>{fullFeatureExpansionTotal}</strong>
+            <small>{commandImplementedCount} active · {commandFoundationCount} foundation · {commandIntegrationCount} integration · {commandRoadmapCount} roadmap.</small>
+          </article>
+          <article>
+            <span>Action queue</span>
+            <strong>{openProblemReports.length}</strong>
+            <small>{urgentProblemReports.length} urgent report(s), {failedLogins} failed login(s), {lockedSessions} nullified attempt(s).</small>
+          </article>
+        </div>
+      </section>
+      <section className="panel superadmin-health-panel">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Technical health signals</h2>
+            <p>Super Admin only: sync status, risk signals, stale activity, failed logins, and continuity-sensitive indicators.</p>
+          </div>
+          <span className={`sync-badge ${syncState}`}><RefreshCw size={16} /> {syncHealthLabel}</span>
+        </div>
+        <div className="metric-grid small">
+          <Metric label="Sync state" value={syncHealthLabel} icon={<RefreshCw />} />
+          <Metric label="Latest event age" value={latestEventAgeMinutes === undefined ? 'N/A' : `${latestEventAgeMinutes}m`} icon={<Clock3 />} />
+          <Metric label="Failed logins" value={failedLogins} icon={<AlertCircle />} />
+          <Metric label="Urgent reports" value={urgentProblemReports.length} icon={<Bug />} />
+          <Metric label="Nullified attempts" value={lockedSessions} icon={<Trash2 />} />
+          <Metric label="Risk signals" value={highRiskSignals} icon={<ShieldCheck />} />
+        </div>
+      </section>
       <section className="panel codex-repair-panel">
         <div>
           <span className="status-pill supervised"><Bot size={16} /> Codex monitored</span>
           <h2>Codex repair queue</h2>
           <p>
-            User problem reports are exposed to the scheduled Codex monitor through the guarded problem-report intake endpoint. Codex can triage, reproduce, recommend, and implement safe fixes under the continuity guard; the web app itself does not rewrite production code automatically.
+            User bug reports are exposed to the Codex monitor only after Super Admin approval. Codex can triage, reproduce, recommend, and implement safe fixes under the continuity guard; the web app itself does not rewrite production code automatically.
           </p>
         </div>
         <div className="codex-repair-stats" aria-label="Codex repair queue status">
           <span><strong>{openProblemReports.length}</strong> open</span>
           <span><strong>{urgentProblemReports.length}</strong> urgent</span>
-          <span><strong>Hourly</strong> monitor</span>
+          <span><strong>Daily</strong> 24-hour monitor</span>
         </div>
       </section>
       <section className="panel notification-control-panel">
@@ -11803,6 +16984,13 @@ function SuperAdminNotifications({
 function SettingsPanel({
   users,
   permissions,
+  canManageTesterAccounts,
+  onEnableTesterAccount,
+  onDisableTesterAccount,
+  onGenerateTesterAccountPassword,
+  onResetTesterAccountDefaultPassword,
+  onSetTesterAccountPassword,
+  onVerifyTesterAccountPassword,
   onResetPassword,
   onSetPermission,
   onBulkSetPermission,
@@ -11814,6 +17002,8 @@ function SettingsPanel({
   generatedApiToken,
   onCreateApiToken,
   onRevokeApiToken,
+  onRotateApiToken,
+  onArchiveApiToken,
   onDismissGeneratedApiToken,
   onDownloadCapabilityCsv,
   theme,
@@ -11828,6 +17018,13 @@ function SettingsPanel({
 }: {
   users: User[]
   permissions: Record<string, Record<PermissionKey, boolean>>
+  canManageTesterAccounts: boolean
+  onEnableTesterAccount: (accountKey: TesterAccountKey, generateFreshPassword: boolean) => TesterAccountOperationResult | undefined
+  onDisableTesterAccount: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onGenerateTesterAccountPassword: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onResetTesterAccountDefaultPassword: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onSetTesterAccountPassword: (accountKey: TesterAccountKey, password: string) => TesterAccountOperationResult | undefined
+  onVerifyTesterAccountPassword: (accountKey: TesterAccountKey, password: string) => TesterAccountOperationResult | undefined
   onResetPassword: (userId: string) => void
   onSetPermission: (userId: string, permission: PermissionKey, enabled: boolean) => void
   onBulkSetPermission: (userIds: string[], permission: PermissionKey, enabled: boolean) => void
@@ -11839,6 +17036,8 @@ function SettingsPanel({
   generatedApiToken?: GeneratedApiToken
   onCreateApiToken: (request: ApiTokenCreateRequest) => void | Promise<void>
   onRevokeApiToken: (tokenId: string) => void
+  onRotateApiToken: (tokenId: string) => void
+  onArchiveApiToken: (tokenId: string) => void
   onDismissGeneratedApiToken: () => void
   onDownloadCapabilityCsv: () => void
   theme: ThemeMode
@@ -11851,9 +17050,10 @@ function SettingsPanel({
   onToggleChats: () => void
   onToast: (message: string) => void
 }) {
-  const [activeTab, setActiveTab] = useState<'credentials' | 'permissions' | 'appearance' | 'branding' | 'apiTokens'>('permissions')
+  const [activeTab, setActiveTab] = useState<'testerAccounts' | 'credentials' | 'permissions' | 'appearance' | 'branding' | 'apiTokens'>('permissions')
   const [revealedUser, setRevealedUser] = useState<User>()
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))
+  const visibleSettingsUsers = useMemo(() => users.filter((user) => !isTesterAccount(user)), [users])
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => visibleSettingsUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))
   const [userFilter, setUserFilter] = useState('')
   const [bulkPermission, setBulkPermission] = useState<PermissionKey>('take_tests')
   const [openPermissionUserId, setOpenPermissionUserId] = useState<string>()
@@ -11861,13 +17061,37 @@ function SettingsPanel({
     () => apiCapabilityCatalog.filter((capability) => !capability.destructive && capability.accessTier !== 'SUPER_ADMIN').map((capability) => capability.scope),
     [],
   )
+  const [settingsNowTick, setSettingsNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setSettingsNowTick(Date.now()), 60000)
+    return () => window.clearInterval(intervalId)
+  }, [])
   const [tokenKind, setTokenKind] = useState<ApiTokenKind>('regular')
   const [tokenName, setTokenName] = useState('DEAP Partner Integration')
   const [tokenScopes, setTokenScopes] = useState<string[]>(() => defaultRegularScopes)
   const [tokenOauthProfile, setTokenOauthProfile] = useState(true)
   const [tokenExpiryDays, setTokenExpiryDays] = useState(90)
   const [tokenAcknowledged, setTokenAcknowledged] = useState(false)
-  const editableUsers = useMemo(() => users.filter((user) => user.role !== 'super_admin' && user.role !== 'admin'), [users])
+  const [tokenPurpose, setTokenPurpose] = useState('Connect a trusted internal tool to DEAP.')
+  const [tokenOwnerId, setTokenOwnerId] = useState(() => users.find((user) => user.role === 'super_admin')?.id ?? users[0]?.id ?? '')
+  const [tokenAllowedModules, setTokenAllowedModules] = useState('Assessments, Reports, Users')
+  const [tokenAllowedEnvironments, setTokenAllowedEnvironments] = useState('production')
+  const [tokenAllowedIps, setTokenAllowedIps] = useState('')
+  const [tokenRateLimit, setTokenRateLimit] = useState(1000)
+  const [tokenUsageLimit, setTokenUsageLimit] = useState(0)
+  const [tokenRotationPolicy, setTokenRotationPolicy] = useState<ApiTokenRotationPolicy>('90_days')
+  const [tokenDeploymentName, setTokenDeploymentName] = useState('')
+  const [tokenDeploymentEnvironment, setTokenDeploymentEnvironment] = useState('production')
+  const [tokenDeploymentService, setTokenDeploymentService] = useState('')
+  const [tokenNotes, setTokenNotes] = useState('')
+  const [tokenJustification, setTokenJustification] = useState('')
+  const [tokenSearch, setTokenSearch] = useState('')
+  const [tokenTypeFilter, setTokenTypeFilter] = useState<'all' | ApiTokenKind>('all')
+  const [tokenStatusFilter, setTokenStatusFilter] = useState<'all' | ApiTokenStatus>('all')
+  const [tokenRiskFilter, setTokenRiskFilter] = useState<'all' | ApiTokenRiskLevel>('all')
+  const [selectedTokenId, setSelectedTokenId] = useState('')
+  const [tokenDetailTab, setTokenDetailTab] = useState<'overview' | 'permissions' | 'deployments' | 'usage' | 'audit' | 'rotation' | 'notes'>('overview')
+  const editableUsers = useMemo(() => visibleSettingsUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin'), [visibleSettingsUsers])
   const groupedTokenCapabilities = useMemo(() => {
     return apiCapabilityCatalog.reduce<Record<string, ApiCapability[]>>((groups, capability) => {
       groups[capability.category] = [...(groups[capability.category] ?? []), capability]
@@ -11877,11 +17101,41 @@ function SettingsPanel({
   const tokenScopeSet = useMemo(() => new Set(tokenScopes), [tokenScopes])
   const tokenScopeCount = tokenKind === 'super' ? apiCapabilityCatalog.length : tokenScopes.length
   const activeApiTokens = apiTokens.filter((token) => token.status === 'active').length
+  const tokenOwnerById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users])
+  const tokenOwnerOptions = useMemo(() => users.filter((user) => (user.role === 'super_admin' || user.role === 'admin') && !isTesterAccount(user)), [users])
+  const tokensDueForRotation = apiTokens.filter((token) => token.status === 'active' && sharedStateTime(token.nextRotationDueAt) < settingsNowTick).length
+  const expiringSoonTokens = apiTokens.filter((token) => token.status === 'active' && sharedStateTime(token.expiresAt) < settingsNowTick + 14 * 24 * 60 * 60 * 1000).length
+  const unusedTokens = apiTokens.filter((token) => token.status === 'active' && !token.lastUsedAt).length
+  const riskyTokens = apiTokens.filter((token) => token.riskLevel === 'critical' || token.riskLevel === 'high').length
+  const undocumentedTokens = apiTokens.filter((token) => token.status === 'active' && !token.deploymentRecords.length).length
+  const suspiciousTokens = apiTokens.filter((token) => token.usageLogs.some((log) => ['denied', 'failed', 'expired', 'revoked', 'rate_limited'].includes(log.outcome))).length
+  const filteredApiTokens = apiTokens.filter((token) => {
+    if (tokenTypeFilter !== 'all' && token.kind !== tokenTypeFilter) return false
+    if (tokenStatusFilter !== 'all' && token.status !== tokenStatusFilter) return false
+    if (tokenRiskFilter !== 'all' && token.riskLevel !== tokenRiskFilter) return false
+    const query = tokenSearch.trim().toLowerCase()
+    if (!query) return true
+    const owner = tokenOwnerById.get(token.ownerId)
+    return [
+      token.name,
+      token.tokenFingerprint,
+      token.tokenPrefix,
+      token.kind,
+      token.status,
+      token.purpose,
+      owner?.fullName,
+      token.scopes.join(' '),
+      token.allowedModules.join(' '),
+      token.deploymentRecords.map((deployment) => `${deployment.deploymentName} ${deployment.serviceName} ${deployment.environment}`).join(' '),
+    ].some((value) => String(value || '').toLowerCase().includes(query))
+  })
+  const selectedToken = apiTokens.find((token) => token.id === selectedTokenId) ?? filteredApiTokens[0] ?? apiTokens[0]
+  const selectedTokenOwner = selectedToken ? tokenOwnerById.get(selectedToken.ownerId) : undefined
   const filteredUsers = useMemo(() => {
     const normalized = userFilter.toLowerCase().trim()
-    if (!normalized) return users
-    return users.filter((user) => `${user.userId} ${user.fullName} ${user.displayName} ${user.department} ${user.jobRole}`.toLowerCase().includes(normalized))
-  }, [userFilter, users])
+    if (!normalized) return visibleSettingsUsers
+    return visibleSettingsUsers.filter((user) => `${user.userId} ${user.fullName} ${user.displayName} ${user.department} ${user.jobRole}`.toLowerCase().includes(normalized))
+  }, [userFilter, visibleSettingsUsers])
   const supervisorName = (supervisorId?: string) => users.find((user) => user.userId === supervisorId)?.fullName ?? '—'
 
   /**
@@ -11913,20 +17167,60 @@ function SettingsPanel({
 
   function submitApiToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (tokenKind === 'super' && tokenJustification.trim().length < 10) {
+      onToast('Super Admin Token creation requires a clear justification.')
+      return
+    }
     void onCreateApiToken({
       name: tokenName,
       kind: tokenKind,
       scopes: tokenScopes,
       oauthProfile: tokenOauthProfile,
       expiresInDays: tokenKind === 'super' ? 365 : tokenExpiryDays,
+      purpose: tokenPurpose,
+      ownerId: tokenOwnerId,
+      allowedModules: tokenAllowedModules.split(',').map((item) => item.trim()).filter(Boolean),
+      allowedEnvironments: tokenAllowedEnvironments.split(',').map((item) => item.trim()).filter(Boolean),
+      allowedIps: tokenAllowedIps.split(',').map((item) => item.trim()).filter(Boolean),
+      rateLimit: tokenRateLimit > 0 ? tokenRateLimit : undefined,
+      usageLimit: tokenUsageLimit > 0 ? tokenUsageLimit : undefined,
+      rotationPolicy: tokenKind === 'super' ? '90_days' : tokenRotationPolicy,
+      deploymentName: tokenDeploymentName,
+      deploymentEnvironment: tokenDeploymentEnvironment,
+      deploymentService: tokenDeploymentService,
+      notes: tokenNotes,
+      justification: tokenJustification,
     })
     setTokenAcknowledged(false)
+  }
+
+  function exportTokenMetadata() {
+    const exportedAt = new Date().toISOString()
+    downloadJsonFile(`DEAP_Token_Metadata_${exportedAt.slice(0, 10)}.json`, {
+      exportedAt,
+      exportedBy: 'Ayodeji Falope',
+      note: 'Metadata export only. Raw token values and token hashes are intentionally excluded.',
+      tokens: filteredApiTokens.map(({ tokenHash: excludedTokenHash, usageLogs, auditLogs, ...token }) => {
+        void excludedTokenHash
+        return {
+          ...token,
+          usageLogCount: usageLogs.length,
+          auditLogCount: auditLogs.length,
+        }
+      }),
+    })
+    onToast('Token metadata exported without secret values.')
   }
 
   return (
     <section>
       <PageTitle eyebrow="Permissions" title="Control web app access by user" />
       <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+        {canManageTesterAccounts && (
+          <button className={activeTab === 'testerAccounts' ? 'active' : ''} type="button" onClick={() => setActiveTab('testerAccounts')}>
+            <ShieldCheck size={18} /> Tester accounts
+          </button>
+        )}
         <button className={activeTab === 'credentials' ? 'active' : ''} type="button" onClick={() => setActiveTab('credentials')}>
           <KeyRound size={18} /> User passwords
         </button>
@@ -11949,8 +17243,21 @@ function SettingsPanel({
             <Search size={18} />
             <input placeholder="Search users, departments, roles, or User IDs" value={userFilter} onChange={(event) => setUserFilter(event.target.value)} />
           </label>
-          <span>{filteredUsers.length} of {users.length} user(s) shown</span>
+          <span>{filteredUsers.length} of {visibleSettingsUsers.length} user(s) shown</span>
         </div>
+      )}
+
+      {activeTab === 'testerAccounts' && canManageTesterAccounts && (
+        <TesterAccountControl
+          users={users}
+          onEnableTesterAccount={onEnableTesterAccount}
+          onDisableTesterAccount={onDisableTesterAccount}
+          onGenerateTesterAccountPassword={onGenerateTesterAccountPassword}
+          onResetTesterAccountDefaultPassword={onResetTesterAccountDefaultPassword}
+          onSetTesterAccountPassword={onSetTesterAccountPassword}
+          onVerifyTesterAccountPassword={onVerifyTesterAccountPassword}
+          onToast={onToast}
+        />
       )}
 
       {activeTab === 'credentials' && (
@@ -11960,7 +17267,7 @@ function SettingsPanel({
               <h2>All user credentials</h2>
               <p>Passwords are hidden until you click a password button. Copy output is formatted for WhatsApp.</p>
             </div>
-            <button className="primary-button" type="button" onClick={() => copyCredential(allCredentialText(users))}>
+            <button className="primary-button" type="button" onClick={() => copyCredential(allCredentialText(visibleSettingsUsers))}>
               <Copy size={18} /> Copy all usernames and passwords
             </button>
           </div>
@@ -12015,7 +17322,7 @@ function SettingsPanel({
           </div>
           <div className="branding-control">
             <div className="logo-preview-card" aria-label="Current platform logo preview">
-              {branding.logoUrl ? <img src={branding.logoUrl} alt="Current iicocece platform logo" /> : <LogoPlaceholder large />}
+              {branding.logoUrl ? <img src={branding.logoUrl} alt="Current Training and assessment platform logo" /> : <LogoPlaceholder large />}
             </div>
             <div className="branding-actions">
               <label className="upload-button">
@@ -12081,33 +17388,62 @@ function SettingsPanel({
           <section className="panel api-token-summary-panel">
             <div className="panel-heading-row">
               <div>
-                <h2>Admin API Capability and Token Studio</h2>
-                <p>Sign in as Ayodeji Falope, choose Super Token or Regular Scoped Token, click Generate Token Package, then copy from the Bearer Token block.</p>
+                <h2>Token Management and Deployment Catalogue</h2>
+                <p>Ayodeji-only governance for Super Admin Tokens and Variable Read Write Tokens, with one-time secret display, deployment records, usage tracking, rotation, revocation, and audit history.</p>
               </div>
-              <button className="primary-button" type="button" onClick={onDownloadCapabilityCsv}>
-                <FileDown size={18} /> Export capability CSV
-              </button>
+              <div className="token-toolbar-actions">
+                <button className="secondary-button" type="button" onClick={exportTokenMetadata}>
+                  <FileDown size={18} /> Export metadata
+                </button>
+                <button className="primary-button" type="button" onClick={onDownloadCapabilityCsv}>
+                  <FileSpreadsheet size={18} /> Export capability CSV
+                </button>
+              </div>
             </div>
             <div className="token-summary-grid">
               <div>
-                <span>Total capabilities</span>
-                <strong>{apiCapabilityCatalog.length}</strong>
-              </div>
-              <div>
-                <span>Selected scopes</span>
-                <strong>{tokenScopeCount}</strong>
+                <span>Total tokens</span>
+                <strong>{apiTokens.length}</strong>
               </div>
               <div>
                 <span>Active tokens</span>
                 <strong>{activeApiTokens}</strong>
               </div>
               <div>
-                <span>Stored secret format</span>
-                <strong>Visible to Ayodeji</strong>
+                <span>Builder selected scopes</span>
+                <strong>{tokenScopeCount}</strong>
+              </div>
+              <div>
+                <span>Super Admin tokens</span>
+                <strong>{apiTokens.filter((token) => token.kind === 'super').length}</strong>
+              </div>
+              <div>
+                <span>Variable R/W tokens</span>
+                <strong>{apiTokens.filter((token) => token.kind === 'regular').length}</strong>
+              </div>
+              <div>
+                <span>Expiring soon</span>
+                <strong>{expiringSoonTokens}</strong>
+              </div>
+              <div>
+                <span>Rotation due</span>
+                <strong>{tokensDueForRotation}</strong>
+              </div>
+              <div>
+                <span>No deployment record</span>
+                <strong>{undocumentedTokens}</strong>
+              </div>
+              <div>
+                <span>Unused active tokens</span>
+                <strong>{unusedTokens}</strong>
+              </div>
+              <div>
+                <span>High risk signals</span>
+                <strong>{riskyTokens + suspiciousTokens}</strong>
               </div>
             </div>
             <p className="token-security-note">
-              Token packages are stored with bearer-token material visible only inside this Ayodeji-only studio. Anything created before the registry reset at {new Date(apiTokenRegistryResetAt).toLocaleString()} is invalid.
+              Full token values are shown only once during creation. The catalogue stores fingerprints, hashes, scopes, usage, deployment metadata, and audit history; raw tokens are not kept in the browser record.
             </p>
           </section>
 
@@ -12155,6 +17491,9 @@ function SettingsPanel({
               <label className="field-label" htmlFor="api-token-name">Token name</label>
               <input id="api-token-name" value={tokenName} onChange={(event) => setTokenName(event.target.value)} placeholder="e.g. DEAP to CRM bridge" />
 
+              <label className="field-label" htmlFor="api-token-purpose">Purpose</label>
+              <textarea id="api-token-purpose" value={tokenPurpose} onChange={(event) => setTokenPurpose(event.target.value)} placeholder="Describe what this token is for" />
+
               <div className="token-builder-row">
                 <label>
                   Expiry days
@@ -12173,6 +17512,78 @@ function SettingsPanel({
                   <span>Use OAuth-style metadata, expiry, scopes, and revocation tracking</span>
                 </label>
               </div>
+
+              <div className="token-builder-row token-builder-row-three">
+                <label>
+                  Owner
+                  <select value={tokenOwnerId} onChange={(event) => setTokenOwnerId(event.target.value)}>
+                    {(tokenOwnerOptions.length ? tokenOwnerOptions : users).map((user) => (
+                      <option key={user.id} value={user.id}>{user.fullName} · {user.role.replace('_', ' ')}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Rotation policy
+                  <select value={tokenKind === 'super' ? '90_days' : tokenRotationPolicy} disabled={tokenKind === 'super'} onChange={(event) => setTokenRotationPolicy(event.target.value as ApiTokenRotationPolicy)}>
+                    <option value="30_days">30 days</option>
+                    <option value="60_days">60 days</option>
+                    <option value="90_days">90 days</option>
+                    <option value="180_days">180 days</option>
+                    <option value="365_days">365 days</option>
+                  </select>
+                </label>
+                <label>
+                  Rate limit
+                  <input type="number" min={0} step={50} value={tokenRateLimit} onChange={(event) => setTokenRateLimit(Math.max(0, Number(event.target.value) || 0))} />
+                </label>
+              </div>
+
+              <div className="token-builder-row token-builder-row-three">
+                <label>
+                  Allowed modules
+                  <input value={tokenAllowedModules} onChange={(event) => setTokenAllowedModules(event.target.value)} placeholder="Assessments, Reports, Users" />
+                </label>
+                <label>
+                  Allowed environments
+                  <input value={tokenAllowedEnvironments} onChange={(event) => setTokenAllowedEnvironments(event.target.value)} placeholder="production, staging" />
+                </label>
+                <label>
+                  Usage limit
+                  <input type="number" min={0} step={100} value={tokenUsageLimit} onChange={(event) => setTokenUsageLimit(Math.max(0, Number(event.target.value) || 0))} />
+                </label>
+              </div>
+
+              <label className="field-label" htmlFor="api-token-ips">Allowed IP addresses</label>
+              <input id="api-token-ips" value={tokenAllowedIps} onChange={(event) => setTokenAllowedIps(event.target.value)} placeholder="Optional: 102.89.12.10, 41.190.2.5" />
+
+              <div className="token-builder-row token-builder-row-three">
+                <label>
+                  Deployment name
+                  <input value={tokenDeploymentName} onChange={(event) => setTokenDeploymentName(event.target.value)} placeholder="Optional: Payroll sync worker" />
+                </label>
+                <label>
+                  Environment
+                  <input value={tokenDeploymentEnvironment} onChange={(event) => setTokenDeploymentEnvironment(event.target.value)} placeholder="production" />
+                </label>
+                <label>
+                  Service
+                  <input value={tokenDeploymentService} onChange={(event) => setTokenDeploymentService(event.target.value)} placeholder="Optional: Cloud Function" />
+                </label>
+              </div>
+
+              {tokenKind === 'super' && (
+                <>
+                  <div className="token-critical-warning">
+                    <AlertCircle size={18} />
+                    <span>Super Admin Tokens are critical-risk credentials. They require an owner, expiry, justification, strict rotation, and a complete audit trail.</span>
+                  </div>
+                  <label className="field-label" htmlFor="api-token-justification">Super Admin justification</label>
+                  <textarea id="api-token-justification" value={tokenJustification} onChange={(event) => setTokenJustification(event.target.value)} placeholder="Explain why this privileged token is needed" />
+                </>
+              )}
+
+              <label className="field-label" htmlFor="api-token-notes">Security notes</label>
+              <textarea id="api-token-notes" value={tokenNotes} onChange={(event) => setTokenNotes(event.target.value)} placeholder="Rotation owner, deployment notes, or operational warnings" />
 
               {tokenKind === 'regular' && (
                 <div className="token-scope-actions">
@@ -12218,7 +17629,7 @@ function SettingsPanel({
 
               <label className="token-acknowledgement">
                 <input type="checkbox" checked={tokenAcknowledged} onChange={(event) => setTokenAcknowledged(event.target.checked)} />
-                <span>I understand only Ayodeji Falope can create, view, copy, or revoke token packages in this app.</span>
+                <span>I understand this token is shown once only, must be stored in a secrets manager, and all governance actions are audited.</span>
               </label>
               <button className="primary-button" type="submit" disabled={!tokenAcknowledged || (tokenKind === 'regular' && !tokenScopes.length)}>
                 <KeyRound size={18} /> Generate Token Package
@@ -12228,40 +17639,190 @@ function SettingsPanel({
             <section className="panel api-token-records">
               <div className="panel-heading-row">
                 <div>
-                  <h2>Issued token packages</h2>
-                  <p>Tokens remain visible here after creation for Ayodeji Falope. Old packages minted before this run are no longer valid.</p>
+                  <h2>Token catalogue</h2>
+                  <p>Search, filter, inspect, rotate, revoke, archive, and export token metadata without exposing token secrets.</p>
                 </div>
               </div>
+              <div className="token-filter-row">
+                <label className="search-box">
+                  <Search size={18} />
+                  <input placeholder="Search name, owner, fingerprint, scope, deployment" value={tokenSearch} onChange={(event) => setTokenSearch(event.target.value)} />
+                </label>
+                <select aria-label="Filter by token type" value={tokenTypeFilter} onChange={(event) => setTokenTypeFilter(event.target.value as 'all' | ApiTokenKind)}>
+                  <option value="all">All types</option>
+                  <option value="super">Super Admin Token</option>
+                  <option value="regular">Variable Read Write Token</option>
+                </select>
+                <select aria-label="Filter by token status" value={tokenStatusFilter} onChange={(event) => setTokenStatusFilter(event.target.value as 'all' | ApiTokenStatus)}>
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="rotation_pending">Rotation pending</option>
+                  <option value="revoked">Revoked</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <select aria-label="Filter by risk level" value={tokenRiskFilter} onChange={(event) => setTokenRiskFilter(event.target.value as 'all' | ApiTokenRiskLevel)}>
+                  <option value="all">All risk levels</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
               <div className="token-record-list">
-                {apiTokens.map((token) => (
-                  <article className={`token-record-card ${token.status}`} key={token.id}>
+                {filteredApiTokens.map((token) => {
+                  const owner = tokenOwnerById.get(token.ownerId)
+                  const latestDeployment = token.deploymentRecords[0]
+                  return (
+                  <article className={`token-record-card ${token.status} risk-${token.riskLevel} ${selectedToken?.id === token.id ? 'selected' : ''}`} key={token.id}>
                     <div>
                       <div className="token-record-heading">
                         <strong>{token.name}</strong>
-                        <span className={`token-status ${token.status}`}>{token.status}</span>
+                        <span className={`token-status ${token.status}`}>{token.status.replace('_', ' ')}</span>
                       </div>
-                      <p>{token.kind === 'super' ? 'Super Token' : 'Regular Scoped Token'} · {token.scopes.length} scope(s) · Prefix {token.tokenPrefix}...</p>
-                      <small>Created by {token.createdBy} on {new Date(token.createdAt).toLocaleString()} · Expires {new Date(token.expiresAt).toLocaleString()}</small>
+                      <p>{token.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'} · {token.scopes.length} scope(s) · {maskTokenPreview(token.tokenPrefix, token.tokenFingerprint)}</p>
+                      <small>Owner: {owner?.fullName ?? token.ownerId} · Created {new Date(token.createdAt).toLocaleString()} · Expires {new Date(token.expiresAt).toLocaleString()}</small>
+                      <small>Usage: {token.usageCount} · Last used: {token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString() : 'Never'} · Deployment: {latestDeployment ? `${latestDeployment.deploymentName} (${latestDeployment.status.replace('_', ' ')})` : 'Not documented'}</small>
                       {token.revokedAt && <small>Revoked by {token.revokedBy ?? 'Admin'} on {new Date(token.revokedAt).toLocaleString()}</small>}
-                      {token.tokenSecret && (
-                        <div className="token-record-secret" aria-label={`Bearer Token for ${token.name}`}>
-                          <span>Bearer Token</span>
-                          <code>{token.tokenSecret}</code>
-                          <button className="secondary-button compact" type="button" onClick={() => void copyTokenSecret(token.tokenSecret ?? '')}>
-                            <Copy size={16} /> Copy
-                          </button>
-                        </div>
-                      )}
+                      <div className="token-record-badges">
+                        <span className={`token-risk risk-${token.riskLevel}`}>{token.riskLevel} risk</span>
+                        <span>{token.rotationStatus.replace('_', ' ')}</span>
+                        {sharedStateTime(token.nextRotationDueAt) < settingsNowTick && token.status === 'active' && <span className="token-risk risk-high">rotation due</span>}
+                      </div>
                     </div>
-                    <button className="danger-button compact" type="button" disabled={token.status === 'revoked'} onClick={() => onRevokeApiToken(token.id)}>
-                      Revoke
-                    </button>
+                    <div className="token-card-actions">
+                      <button className="secondary-button compact" type="button" onClick={() => setSelectedTokenId(token.id)}>
+                        Details
+                      </button>
+                      <button className="secondary-button compact" type="button" disabled={token.status !== 'active'} onClick={() => onRotateApiToken(token.id)}>
+                        <RotateCcw size={16} /> Rotate
+                      </button>
+                      <button className="danger-button compact" type="button" disabled={token.status === 'revoked' || token.status === 'archived'} onClick={() => onRevokeApiToken(token.id)}>
+                        Revoke
+                      </button>
+                      <button className="secondary-button compact" type="button" disabled={token.status === 'active' || token.status === 'archived'} onClick={() => onArchiveApiToken(token.id)}>
+                        <Archive size={16} /> Archive
+                      </button>
+                    </div>
                   </article>
-                ))}
-                {!apiTokens.length && <p className="hint">No API token metadata yet. Generate a token to connect a trusted app to DEAP.</p>}
+                  )
+                })}
+                {!filteredApiTokens.length && <p className="hint">No token metadata matches the current filters.</p>}
               </div>
             </section>
           </div>
+
+          {selectedToken && (
+            <section className="panel token-detail-panel">
+              <div className="panel-heading-row">
+                <div>
+                  <h2>{selectedToken.name}</h2>
+                  <p>{selectedToken.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'} · {selectedToken.tokenFingerprint} · {maskTokenPreview(selectedToken.tokenPrefix, selectedToken.tokenFingerprint)}</p>
+                </div>
+                <span className={`token-risk risk-${selectedToken.riskLevel}`}>{selectedToken.riskLevel} risk</span>
+              </div>
+              <div className="token-detail-tabs" role="tablist" aria-label="Token detail tabs">
+                {[
+                  ['overview', 'Overview'],
+                  ['permissions', 'Permissions'],
+                  ['deployments', 'Deployments'],
+                  ['usage', 'Usage'],
+                  ['audit', 'Audit Logs'],
+                  ['rotation', 'Rotation'],
+                  ['notes', 'Security Notes'],
+                ].map(([id, label]) => (
+                  <button className={tokenDetailTab === id ? 'active' : ''} type="button" key={id} onClick={() => setTokenDetailTab(id as typeof tokenDetailTab)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {tokenDetailTab === 'overview' && (
+                <div className="token-governance-grid">
+                  <div><span>Status</span><strong>{selectedToken.status.replace('_', ' ')}</strong></div>
+                  <div><span>Owner</span><strong>{selectedTokenOwner?.fullName ?? selectedToken.ownerId}</strong></div>
+                  <div><span>Created by</span><strong>{selectedToken.createdBy}</strong></div>
+                  <div><span>Created</span><strong>{new Date(selectedToken.createdAt).toLocaleString()}</strong></div>
+                  <div><span>Expiry</span><strong>{new Date(selectedToken.expiresAt).toLocaleString()}</strong></div>
+                  <div><span>Last used</span><strong>{selectedToken.lastUsedAt ? new Date(selectedToken.lastUsedAt).toLocaleString() : 'Never'}</strong></div>
+                  <div><span>Usage count</span><strong>{selectedToken.usageCount}</strong></div>
+                  <div><span>Deployment records</span><strong>{selectedToken.deploymentRecords.length}</strong></div>
+                  <div className="wide"><span>Purpose</span><strong>{selectedToken.purpose}</strong></div>
+                </div>
+              )}
+
+              {tokenDetailTab === 'permissions' && (
+                <div className="token-metadata-grid">
+                  <div><span>Scopes</span><p>{selectedToken.scopes.join(', ') || 'No scopes'}</p></div>
+                  <div><span>Allowed modules</span><p>{selectedToken.allowedModules.join(', ') || 'All documented modules'}</p></div>
+                  <div><span>Allowed environments</span><p>{selectedToken.allowedEnvironments.join(', ') || 'production'}</p></div>
+                  <div><span>Allowed IPs</span><p>{selectedToken.allowedIps.join(', ') || 'No IP restriction recorded'}</p></div>
+                  <div><span>Rate limit</span><p>{selectedToken.rateLimit ? `${selectedToken.rateLimit} request(s)` : 'No explicit limit'}</p></div>
+                  <div><span>Usage limit</span><p>{selectedToken.usageLimit ? `${selectedToken.usageLimit} total use(s)` : 'No explicit limit'}</p></div>
+                </div>
+              )}
+
+              {tokenDetailTab === 'deployments' && (
+                <DataTable
+                  columns={['Deployment', 'Environment', 'Service', 'Status', 'Deployed by', 'Last verified']}
+                  rows={selectedToken.deploymentRecords.map((deployment) => [
+                    deployment.deploymentName,
+                    deployment.environment,
+                    deployment.serviceName,
+                    deployment.status.replace('_', ' '),
+                    deployment.deployedBy,
+                    deployment.lastVerifiedAt ? new Date(deployment.lastVerifiedAt).toLocaleString() : 'Not verified',
+                  ])}
+                  tableId={`token-deployments-${selectedToken.id}`}
+                />
+              )}
+
+              {tokenDetailTab === 'usage' && (
+                <DataTable
+                  columns={['Time', 'Outcome', 'Endpoint', 'Module', 'Environment', 'IP / Agent']}
+                  rows={selectedToken.usageLogs.map((log) => [
+                    new Date(log.timestamp).toLocaleString(),
+                    log.outcome.replace('_', ' '),
+                    `${log.method} ${log.endpoint}`,
+                    log.module,
+                    log.environment,
+                    `${log.ipAddress ?? 'unknown IP'} · ${log.userAgent ?? 'unknown agent'}`,
+                  ])}
+                  tableId={`token-usage-${selectedToken.id}`}
+                />
+              )}
+
+              {tokenDetailTab === 'audit' && (
+                <DataTable
+                  columns={['Time', 'Actor', 'Action', 'Result', 'Reason']}
+                  rows={selectedToken.auditLogs.map((log) => [
+                    new Date(log.timestamp).toLocaleString(),
+                    log.actor,
+                    log.action,
+                    log.result,
+                    log.reason ?? '—',
+                  ])}
+                  tableId={`token-audit-${selectedToken.id}`}
+                />
+              )}
+
+              {tokenDetailTab === 'rotation' && (
+                <div className="token-metadata-grid">
+                  <div><span>Policy</span><p>{selectedToken.rotationPolicy.replace('_', ' ')}</p></div>
+                  <div><span>Status</span><p>{selectedToken.rotationStatus.replace('_', ' ')}</p></div>
+                  <div><span>Last rotated</span><p>{selectedToken.lastRotatedAt ? new Date(selectedToken.lastRotatedAt).toLocaleString() : 'Never'}</p></div>
+                  <div><span>Next due</span><p>{new Date(selectedToken.nextRotationDueAt).toLocaleString()}</p></div>
+                  <div className="wide"><span>Safe rotation flow</span><p>Create replacement, mark old token rotation pending, update deployment, observe new usage, revoke old token, then archive when history is no longer operationally active.</p></div>
+                </div>
+              )}
+
+              {tokenDetailTab === 'notes' && (
+                <div className="token-metadata-grid">
+                  <div className="wide"><span>Notes</span><p>{selectedToken.notes || 'No security notes recorded.'}</p></div>
+                  <div className="wide"><span>Recommended controls</span><p>{selectedToken.kind === 'super' ? 'Keep expiry short, rotate aggressively, require justification, restrict deployments, and review usage after every sensitive operation.' : 'Keep scopes narrow, document deployment, review unused tokens, and revoke tokens that are no longer tied to a live integration.'}</p></div>
+                </div>
+              )}
+            </section>
+          )}
         </section>
       )}
 
@@ -12322,7 +17883,7 @@ function SettingsPanel({
             <h2>Current permission status</h2>
             <div className="permission-accordion-list">
               {filteredUsers.map((user) => {
-                const isAdminRow = user.role === 'super_admin' || user.role === 'admin'
+                const isAdminRow = (user.role === 'super_admin' || user.role === 'admin') && !isTesterAccount(user)
                 const isOpen = openPermissionUserId === user.id
                 const enabledCount = permissionCatalog.filter((permission) => isAdminRow || (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])).length
                 return (
@@ -12375,7 +17936,7 @@ function SettingsPanel({
           <section className="credential-modal api-token-modal" role="dialog" aria-modal="true" aria-labelledby="api-token-title">
             <h2 id="api-token-title">Token package generated</h2>
             <p>
-              Copy this token from the Bearer Token block. The package remains visible in the Ayodeji-only Token Studio until it is revoked or expires.
+              Copy this token now. After this dialog closes, DEAP keeps only the fingerprint, hash, governance metadata, deployment records, usage history, and audit trail.
             </p>
             <div className="token-secret-box">
               <span>Bearer Token</span>
@@ -12383,7 +17944,7 @@ function SettingsPanel({
             </div>
             <div className="token-secret-meta">
               <span>{generatedApiToken.record.name}</span>
-              <span>{generatedApiToken.record.kind === 'super' ? 'Super Token' : 'Regular Scoped Token'}</span>
+              <span>{generatedApiToken.record.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'}</span>
               <span>{generatedApiToken.record.scopes.length} scope(s)</span>
               <span>Expires {new Date(generatedApiToken.record.expiresAt).toLocaleString()}</span>
             </div>
@@ -12420,6 +17981,192 @@ function SettingsPanel({
           </section>
         </div>
       )}
+    </section>
+  )
+}
+
+function formatTesterAccountDate(value?: string): string {
+  if (!value) return 'Not recorded'
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? new Date(time).toLocaleString() : 'Not recorded'
+}
+
+function TesterAccountControl({
+  users,
+  onEnableTesterAccount,
+  onDisableTesterAccount,
+  onGenerateTesterAccountPassword,
+  onResetTesterAccountDefaultPassword,
+  onSetTesterAccountPassword,
+  onVerifyTesterAccountPassword,
+  onToast,
+}: {
+  users: User[]
+  onEnableTesterAccount: (accountKey: TesterAccountKey, generateFreshPassword: boolean) => TesterAccountOperationResult | undefined
+  onDisableTesterAccount: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onGenerateTesterAccountPassword: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onResetTesterAccountDefaultPassword: (accountKey: TesterAccountKey) => TesterAccountOperationResult | undefined
+  onSetTesterAccountPassword: (accountKey: TesterAccountKey, password: string) => TesterAccountOperationResult | undefined
+  onVerifyTesterAccountPassword: (accountKey: TesterAccountKey, password: string) => TesterAccountOperationResult | undefined
+  onToast: (message: string) => void
+}) {
+  const [chosenPasswords, setChosenPasswords] = useState<Record<TesterAccountKey, string>>({ testadmin: '', testuser: '' })
+  const [verifyInputs, setVerifyInputs] = useState<Record<TesterAccountKey, string>>({ testadmin: '', testuser: '' })
+  const [issuedCredential, setIssuedCredential] = useState<TesterAccountOperationResult>()
+  const [verificationResults, setVerificationResults] = useState<Partial<Record<TesterAccountKey, TesterAccountOperationResult>>>({})
+  const accounts = testerAccountDefinitions.map((definition) => {
+    const existing = users.find((user) => user.testAccountKey === definition.key || user.id === definition.id || user.userId === definition.userId)
+    return normalizeTesterAccount(definition, existing)
+  })
+
+  function captureResult(result: TesterAccountOperationResult | undefined) {
+    if (!result) return
+    if (result.password) setIssuedCredential(result)
+    if (typeof result.verificationPassed === 'boolean') {
+      setVerificationResults((existing) => ({ ...existing, [result.accountKey]: result }))
+    }
+  }
+
+  function submitChosenPassword(accountKey: TesterAccountKey, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const password = chosenPasswords[accountKey]
+    const result = onSetTesterAccountPassword(accountKey, password)
+    captureResult(result)
+    if (result?.password) setChosenPasswords((existing) => ({ ...existing, [accountKey]: '' }))
+  }
+
+  function submitVerification(accountKey: TesterAccountKey, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    captureResult(onVerifyTesterAccountPassword(accountKey, verifyInputs[accountKey]))
+  }
+
+  async function copyIssuedPassword() {
+    if (!issuedCredential?.password) return
+    await copyToClipboard(issuedCredential.password)
+    onToast('Tester password copied. Share it securely now.')
+  }
+
+  return (
+    <section className="tester-account-control">
+      <section className="panel tester-account-intro">
+        <div className="panel-heading-row">
+          <div>
+            <h2>Tester Account Control</h2>
+            <p>Use these controlled accounts when someone needs temporary access to test the app. Switch access on only when needed, set or generate a password, verify it, then switch access off after review.</p>
+          </div>
+          <span className="tester-owner-pill">Super Admin only</span>
+        </div>
+        <p className="hint">Do not share the real Super Admin login. These accounts give controlled testing access while preserving account history.</p>
+      </section>
+
+      {issuedCredential?.password && (
+        <section className="panel issued-credential-panel" aria-live="polite">
+          <div>
+            <span>Issued credential</span>
+            <h2>{issuedCredential.accountName}</h2>
+            <p>{issuedCredential.message}</p>
+          </div>
+          <div className="issued-password-box">
+            <span>Password</span>
+            <strong>{issuedCredential.password}</strong>
+            <small>{issuedCredential.verificationPassed ? 'Verification passed' : 'Verification pending'}</small>
+          </div>
+          <div className="tester-card-actions">
+            <button className="primary-button compact" type="button" onClick={() => void copyIssuedPassword()}>
+              <Copy size={16} /> Copy password
+            </button>
+                <button className="secondary-button compact" type="button" onClick={() => setIssuedCredential(undefined)}>
+                  <CheckCircle2 size={16} /> Done
+                </button>
+          </div>
+        </section>
+      )}
+
+      <div className="tester-account-grid">
+        {accounts.map((account) => {
+          const definition = testerAccountDefinitionFor(account.testAccountKey)
+          const accountKey = account.testAccountKey
+          if (!definition || !accountKey) return null
+          const active = !isUserDisabled(account)
+          const verificationResult = verificationResults[accountKey]
+          return (
+            <article className={`tester-account-card ${active ? 'is-active' : 'is-inactive'}`} key={accountKey}>
+              <div className="tester-card-heading">
+                <div>
+                  <span className="tester-role-badge">{definition.badge}</span>
+                  <h2>{account.fullName}</h2>
+                  <p>{definition.description}</p>
+                </div>
+                <span className={`tester-status-pill ${active ? 'active' : 'inactive'}`}>{active ? 'Active' : 'Inactive'}</span>
+              </div>
+
+              <div className="tester-detail-grid">
+                <span>User ID<strong>{account.userId}</strong></span>
+                <span>Role<strong>{roleDisplayName(account.role)}</strong></span>
+                <span>Department<strong>{account.department}</strong></span>
+                <span>Last login<strong>{formatTesterAccountDate(account.lastLoginAt)}</strong></span>
+                <span>Password reset<strong>{formatTesterAccountDate(account.passwordLastResetAt)}</strong></span>
+                <span>Reset by<strong>{account.passwordLastResetBy ?? 'Not recorded'}</strong></span>
+                <span>Default password<strong>{definition.defaultPassword}</strong></span>
+                <span>Controlled account<strong>Yes</strong></span>
+              </div>
+
+              <div className="tester-card-actions">
+                <button className="primary-button compact" type="button" onClick={() => captureResult(onEnableTesterAccount(accountKey, true))}>
+                  <KeyRound size={16} /> Enable and generate
+                </button>
+                <button className="secondary-button compact" type="button" onClick={() => captureResult(onEnableTesterAccount(accountKey, false))}>
+                  <CheckCircle2 size={16} /> Enable only
+                </button>
+                <button className="secondary-button compact" type="button" onClick={() => captureResult(onGenerateTesterAccountPassword(accountKey))}>
+                  <RefreshCw size={16} /> Generate password
+                </button>
+                <button className="secondary-button compact" type="button" onClick={() => captureResult(onResetTesterAccountDefaultPassword(accountKey))}>
+                  <RotateCcw size={16} /> Reset default
+                </button>
+                <button className="danger-button compact" type="button" disabled={!active} onClick={() => captureResult(onDisableTesterAccount(accountKey))}>
+                  <EyeOff size={16} /> Switch off
+                </button>
+              </div>
+
+              <form className="tester-password-form" onSubmit={(event) => submitChosenPassword(accountKey, event)}>
+                <label>
+                  <span>Set chosen password</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chosenPasswords[accountKey]}
+                    onChange={(event) => setChosenPasswords((existing) => ({ ...existing, [accountKey]: event.target.value }))}
+                  />
+                </label>
+                <button className="primary-button compact" type="submit">
+                  <KeyRound size={16} /> Save password and switch on
+                </button>
+              </form>
+
+              <form className="tester-password-form" onSubmit={(event) => submitVerification(accountKey, event)}>
+                <label>
+                  <span>Verify password before sharing</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={verifyInputs[accountKey]}
+                    onChange={(event) => setVerifyInputs((existing) => ({ ...existing, [accountKey]: event.target.value }))}
+                  />
+                </label>
+                <button className="secondary-button compact" type="submit">
+                  <CheckCircle2 size={16} /> Verify
+                </button>
+              </form>
+              {verificationResult && (
+                <p className={`tester-verification-result ${verificationResult.verificationPassed ? 'passed' : 'failed'}`} role="status">
+                  {verificationResult.message}
+                </p>
+              )}
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -12625,6 +18372,60 @@ const helpUiUxUpgradeBrief = uiUxFeatureCatalogue.map((item) => item.title).join
 const helpAnalyticsUpgradeBrief = analyticsFeatureCatalogue.map((item) => item.title).join('; ')
 const helpReportCapabilityBrief = reportImprovementIdeas.map((item) => `${item.title} (${item.category})`).join('; ')
 const helpUpgradeSourceBrief = recommendationSources.map((source) => source.label).join('; ')
+const fullFeatureExpansionRecommendations = [
+  {
+    category: 'Adaptive learning and mastery',
+    items: ['Adaptive learning paths', 'Skill gap dashboard', 'Role competency matrix', 'Department readiness heatmap', 'Personalized revision plan', 'Question-level mastery tracking', 'Topic-level mastery tracking', 'Weakness-based retest generator', 'Smart remediation lessons', 'Microlearning cards', 'Flashcard mode', 'Practice mode', 'Timed drill mode', 'Confidence rating', 'Hint usage analytics', 'Explanation quality rating', 'Learning streaks', 'Employee learning profile', 'Manager team progress view', 'Training completion certificates'],
+  },
+  {
+    category: 'Assessment quality',
+    items: ['Item analysis dashboard', 'Distractor analysis', 'Question difficulty calibration', 'Question discrimination index', 'Question exposure monitoring', 'Auto-retire overused questions', 'Duplicate question detection', 'Similar question grouping', 'Question version history', 'Question approval workflow', 'Question author attribution', 'Question review queue', 'Question feedback from users', 'Question issue flagging during tests', 'Question bank health score', 'Randomized test blueprint builder', 'Balanced test generation', 'Section-based tests', 'Partial credit support', 'Open-ended manual grading'],
+  },
+  {
+    category: 'Exam integrity',
+    items: ['Browser tab switch detection', 'Copy and paste blocking', 'Full-screen test mode', 'Test pause and resume rules', 'Attempt risk score', 'Suspicious behavior audit log', 'Identity confirmation', 'Test access PIN', 'Time-window enforcement', 'Device and session lock', 'One active attempt per user', 'Retake approval workflow', 'Emergency unlock', 'Integrity incident report', 'Proctoring-ready architecture'],
+  },
+  {
+    category: 'Analytics and reporting',
+    items: ['Executive dashboard', 'Department comparison dashboard', 'Individual progress report', 'Training ROI dashboard', 'Pass/fail trend chart', 'Topic risk trend chart', 'Test reliability score', 'Employee risk segmentation', 'Predictive readiness score', 'Who needs help now report', 'Exportable board report', 'Scheduled report export', 'Report builder with filters', 'Saved report views', 'Report annotations', 'Audit-ready compliance report', 'Multi-format report exports', 'Analytics glossary', 'Data freshness indicator', 'Analytics anomaly alerts'],
+  },
+  {
+    category: 'Admin and Super Admin control',
+    items: ['Feature flag dashboard', 'Super Admin approval queue', 'Admin activity replay', 'Permission change history', 'Role template manager', 'Bulk user import preview', 'Bulk user validation report', 'User lifecycle states', 'Department manager assignment', 'Admin delegation controls', 'Emergency rollback panel', 'System health dashboard', 'Firebase sync monitor', 'Data continuity monitor', 'Backup and restore history', 'Export history ledger', 'API capability explorer improvements', 'Admin onboarding checklist', 'Super Admin command center', 'Security review dashboard'],
+  },
+  {
+    category: 'Bug reports and feedback',
+    items: ['Affected-area suggestion analytics', 'Duplicate bug detection', 'Bug severity auto-suggestion', 'Bug report quality score', 'User bug report drafts', 'Screenshot annotation', 'Console log safe capture', 'Network error safe capture', 'Feedback trend dashboard', 'Contribution leaderboard', 'Badge history', 'Abuse and spam detection', 'Bug-to-release tracking', 'Fixed issue announcement feed', 'Known issues user page'],
+  },
+  {
+    category: 'Feature inventory',
+    items: ['Bulk export by selected features', 'Compare inventory versions', 'Feature dependency map', 'Feature owner field', 'Feature status lifecycle', 'Feature risk rating', 'Feature documentation completeness score', 'Feature screenshots', 'Feature usage analytics', 'Feature-to-route map', 'Feature-to-permission map', 'Feature-to-help-article linking', 'Feature reuse library', 'Feature roadmap board', 'Stakeholder export pack'],
+  },
+  {
+    category: 'Learning and Help Center',
+    items: ['Contextual help per page', 'Release notes inside app', 'FAQ search improvements', 'Guided tours', 'Admin tutorial path', 'Employee tutorial path', 'Super Admin tutorial path', 'Interactive help checklist', 'Help article feedback', 'Help article version history', 'Embedded screenshots and videos', 'FAQ entries for every feature', 'Troubleshooting guides', 'Assessment glossary', 'Contact Super Admin help path'],
+  },
+  {
+    category: 'UX and accessibility',
+    items: ['Mobile-first test-taking refinements', 'Keyboard-only test-taking audit', 'Screen reader optimized test flow', 'High contrast refinements', 'Reduced motion refinements', 'Better empty states', 'Better loading skeletons', 'Autosave status consistency', 'Universal toast center', 'Global command palette', 'User preferences panel', 'Table density controls', 'Column visibility controls', 'Saved table views', 'Better mobile navigation'],
+  },
+  {
+    category: 'Performance and reliability',
+    items: ['Large table virtualization', 'Lazy loading for heavy panels', 'Background export jobs', 'Offline draft queue', 'Automatic failed-sync retry', 'Sync conflict resolution UI', 'Local recovery dashboard', 'Module error boundaries', 'Performance monitor dashboard', 'Core Web Vitals tracker', 'Slow network mode', 'Attachment compression', 'Incremental cloud state storage', 'Firestore collection-backed reports', 'Monitoring alerts for failed saves'],
+  },
+  {
+    category: 'Security and compliance',
+    items: ['Stronger server-side role validation', 'Admin action re-authentication', 'Sensitive export warning', 'Download link expiry', 'Attachment scanning workflow', 'Input sanitization audit', 'Audit log integrity hash', 'Data deletion request workflow', 'Privacy settings page', 'Access review report', 'Permission anomaly detection', 'Session timeout controls', 'Device/session list', 'Suspicious login alerts', 'Backup encryption metadata'],
+  },
+  {
+    category: 'Integrations',
+    items: ['Google Drive import/export expansion', 'Microsoft Excel import/export', 'Google Sheets export', 'Calendar-based test scheduling', 'Email notifications', 'Slack and Teams notification-ready architecture', 'HR system import mapping', 'SCORM/xAPI readiness', 'LTI integration readiness', 'Webhook event system'],
+  },
+]
+const fullFeatureExpansionBrief = fullFeatureExpansionRecommendations
+  .map((group) => `${group.category}: ${group.items.join('; ')}.`)
+  .join(' ')
+const fullFeatureExpansionTotal = fullFeatureExpansionRecommendations.reduce((total, group) => total + group.items.length, 0)
 
 const helpKnowledgeItems: HelpContentItem[] = [
   {
@@ -12777,6 +18578,25 @@ const helpKnowledgeItems: HelpContentItem[] = [
     steps: ['Open the admin Dashboard.', 'Scroll to Product upgrade catalogue.', 'Review the count strip for implemented, foundation-ready, integration-stage, and roadmap totals.', 'Open the Product tab to review the 50 product features.', 'Use the status filter before making roadmap or procurement decisions.'],
   },
   {
+    id: 'help-complete-feature-expansion-backlog',
+    type: 'guide',
+    title: 'Complete DEAP feature expansion backlog',
+    shortSummary: `${fullFeatureExpansionTotal} recommended improvements are now documented for future implementation decisions.`,
+    body: `This backlog records the complete recommended DEAP expansion direction. It is not a promise that every feature is active today; it is the controlled product map for implementation, QA, Help Center updates, FAQ updates, and Super Admin review. The backlog covers adaptive learning, assessment quality, exam integrity, analytics, Super Admin control, bug reporting, feature inventory, Help Center, UX/accessibility, performance, security, compliance, and integrations. Full backlog: ${fullFeatureExpansionBrief}`,
+    category: 'Product Updates',
+    subcategory: 'Complete Expansion Backlog',
+    tags: ['feature backlog', 'roadmap', 'implementation', 'recommendations', 'product direction'],
+    audience: ['admin'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R041', 'R042', 'R087', 'R376', 'R497'],
+    estimatedMinutes: 12,
+    relatedIds: ['help-product-roadmap-2026', 'faq-complete-feature-expansion', 'learn-upgrade-catalogue-overview'],
+    steps: ['Open Dashboard as an admin.', 'Open Product upgrade catalogue.', 'Review Complete DEAP expansion backlog.', 'Prioritise features by business value, risk, and current operational pain.', 'When a feature is implemented, add the update to Learning, Help Center, and FAQ.'],
+  },
+  {
     id: 'help-report-capabilities-2026',
     type: 'guide',
     title: 'Reporting capability roadmap for admins',
@@ -12794,6 +18614,25 @@ const helpKnowledgeItems: HelpContentItem[] = [
     estimatedMinutes: 8,
     relatedIds: ['learn-upgrade-catalogue-overview', 'help-analytics-upgrades-2026', 'faq-upgrade-catalogue-location'],
     steps: ['Open Reports.', 'Stay on Export center.', 'Review the Reporting capability roadmap below the export actions.', 'Use the reporting domains to plan executive packs, compliance evidence, automation, export governance, and AI reporting workflows.', 'Use AI Help to ask about reporting capability names, categories, or intended usage.'],
+  },
+  {
+    id: 'help-system-health-console',
+    type: 'guide',
+    title: 'Super Admin System Health in Reports',
+    shortSummary: 'Ayodeji can use Reports > System Health to check sync, diagnostics, backups, and release readiness.',
+    body: 'System Health gives the Super Admin a compact operational view without adding complexity for ordinary users. It shows the current cloud sync state, protected record count, backup scope, active session control, recent sanitised browser or cloud diagnostics, and the release safety checklist used before and after deployment. Use it before bulk imports, backup restores, major permission changes, feature launches, and live release checks.',
+    category: 'Admin Operations',
+    subcategory: 'System Health',
+    tags: ['system health', 'sync', 'backup', 'diagnostics', 'active sessions', 'release checklist', 'super admin'],
+    audience: ['admin'],
+    owner: 'DEAP Operations',
+    status: 'published',
+    updatedAt: '2026-05-26',
+    lastReviewedAt: '2026-05-26',
+    requirementRefs: ['R376', 'R388', 'R392', 'R497'],
+    estimatedMinutes: 5,
+    relatedIds: ['help-report-capabilities-2026', 'help-admin-launch-live', 'help-feature-inventory-bulk-export'],
+    steps: ['Open Reports as Super Admin or Admin.', 'Choose System Health.', 'Confirm Cloud sync is healthy.', 'Review active sessions for long-running or duplicate attempts.', 'Review recent diagnostics for failed requests or browser errors.', 'Download a backup before major operational changes.', 'Use the release safety checklist after deployment.'],
   },
   {
     id: 'help-uiux-upgrades-2026',
@@ -12887,6 +18726,98 @@ const helpKnowledgeItems: HelpContentItem[] = [
     relatedIds: ['help-ai-boundaries'],
   },
   {
+    id: 'help-bug-feedback-simple',
+    type: 'guide',
+    title: 'Report a bug or send feedback',
+    shortSummary: 'Use the Bug Report and Feedback tab when something breaks or when you have an improvement idea.',
+    body: 'The Bug Report and Feedback tab is intentionally simple for everyday users. Choose Report a Bug or Give Feedback, enter a short summary, select the page or feature affected, describe what happened, and submit. DEAP records your login details automatically, so you do not need to type your name. Useful submissions can earn contribution points and badge progress.',
+    category: 'Support',
+    subcategory: 'Bug Report and Feedback',
+    tags: ['bug report', 'feedback', 'points', 'badge', 'affected area'],
+    audience: ['all'],
+    owner: 'DEAP Support',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R151', 'R175', 'R301'],
+    estimatedMinutes: 3,
+    relatedIds: ['faq-bug-feedback-points', 'faq-self-repairing-reports'],
+    steps: ['Open Bug Report and Feedback at the bottom of the sidebar.', 'Choose Report a Bug or Give Feedback.', 'Pick the Page or Feature Affected.', 'Describe what happened in plain words.', 'Add a screenshot only if you have one.', 'Submit and check the same page for updates.'],
+  },
+  {
+    id: 'help-dashboard-layout',
+    type: 'article',
+    title: 'Personalise your dashboard',
+    shortSummary: 'Dashboard modules can be arranged, hidden, restored, pinned, reset, and saved for the user.',
+    body: 'The dashboard layout tools let each user keep the most important modules near the top. Use Customise Dashboard, then move modules up or down, pin important modules, hide modules you do not need, restore hidden modules, undo recent layout changes, or reset to the default view. The interface stays simple on mobile and more detailed on desktop.',
+    category: 'Dashboard',
+    subcategory: 'Personalisation',
+    tags: ['dashboard', 'layout', 'customise', 'pin', 'hide', 'reset'],
+    audience: ['all'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R012', 'R401', 'R493'],
+    estimatedMinutes: 4,
+    relatedIds: ['faq-dashboard-layout-reset', 'help-bug-feedback-simple'],
+  },
+  {
+    id: 'help-feature-inventory-bulk-export',
+    type: 'guide',
+    title: 'Super Admin Feature Inventory and bulk export',
+    shortSummary: 'Ayodeji-only Feature Inventory supports scans, selection, multi-format exports, version history, and private Storage downloads.',
+    body: 'Feature Inventory is private to Ayodeji Falope Super Admin. It lists detected app features, categories, routes, components, visibility, confidence, scan history, and versions. The Super Admin can select individual features, select all visible filtered features, export selected or full inventory records, download multiple formats, and preserve generated files in private Firebase Storage.',
+    category: 'Super Admin',
+    subcategory: 'Feature Inventory',
+    tags: ['feature inventory', 'bulk export', 'firebase storage', 'version history', 'super admin'],
+    audience: ['admin'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R376', 'R388', 'R392', 'R497'],
+    estimatedMinutes: 7,
+    relatedIds: ['faq-feature-inventory-access', 'faq-feature-inventory-export-formats'],
+    steps: ['Open Feature Inventory as Ayodeji Falope Super Admin.', 'Use search and filters to narrow the catalogue.', 'Select features in table or card view.', 'Open Bulk Export.', 'Choose formats and scope.', 'Generate and Download.', 'Use Stored exports to download preserved files later.'],
+  },
+  {
+    id: 'help-table-sorting',
+    type: 'article',
+    title: 'Sort tables and reset columns',
+    shortSummary: 'Tables support descending, ascending, default reset, and optional multi-column sort locks.',
+    body: 'Most DEAP data tables now share the same sorting behaviour. Click a column title once for descending, twice for ascending, and a third time to return that column to the default order. Use Sort Options to lock more than one column into a sort chain, and Reset Columns to Default to clear sorting without changing the underlying records.',
+    category: 'Using Tables',
+    subcategory: 'Sorting',
+    tags: ['table', 'sort', 'columns', 'reset', 'multi sort'],
+    audience: ['all'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R401', 'R406', 'R493'],
+    estimatedMinutes: 3,
+    relatedIds: ['faq-table-sorting-reset'],
+  },
+  {
+    id: 'help-super-admin-repair-gateway',
+    type: 'policy',
+    title: 'Super Admin bug repair gateway',
+    shortSummary: 'Super Admin reviews reports, approves investigation, approves repair, and keeps an audit trail.',
+    body: 'The Super Admin Bug Reports tab is the technical control center for submitted bugs and feedback. Ayodeji Falope can review reporter details captured from login, inspect affected areas, assign severity and priority, mark duplicates, approve investigation, approve repair, record testing, generate repair prompts, and keep a full audit trail. This keeps ordinary users away from technical controls while giving Super Admin deep governance.',
+    category: 'Super Admin',
+    subcategory: 'Bug Governance',
+    tags: ['super admin', 'bug reports', 'approval', 'repair gateway', 'audit'],
+    audience: ['admin'],
+    owner: 'DEAP Security',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R376', 'R388', 'R392', 'R497'],
+    estimatedMinutes: 8,
+    relatedIds: ['help-bug-feedback-simple', 'faq-super-admin-bug-gateway'],
+  },
+  {
     id: 'faq-what-is-deap',
     type: 'faq',
     title: 'What is DEAP?',
@@ -12959,6 +18890,150 @@ const helpKnowledgeItems: HelpContentItem[] = [
     relatedIds: ['help-test-availability'],
   },
   {
+    id: 'faq-bug-feedback-points',
+    type: 'faq',
+    title: 'Do I get points for bug reports and feedback?',
+    shortSummary: 'Yes. Useful reports and feedback can earn contribution points and badges.',
+    body: 'A valid bug report starts at 10 points, valid feedback starts at 5 points, useful evidence can add points, duplicates receive reduced points, and rejected spam receives none. Super Admin review controls final point decisions.',
+    category: 'Support',
+    subcategory: 'Contribution Points',
+    tags: ['bug report', 'feedback', 'points', 'badge'],
+    audience: ['all'],
+    owner: 'DEAP Support',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R151', 'R156', 'R175'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-bug-feedback-simple'],
+  },
+  {
+    id: 'faq-self-repairing-reports',
+    type: 'faq',
+    title: 'What does self-repairing bug report mean?',
+    shortSummary: 'It means DEAP captures clear report details so corrections can happen faster.',
+    body: 'When a user submits a clear bug report, DEAP captures the affected page, safe device details, screenshots when provided, and reproduction notes. This helps the software correction workflow move faster, and users can return to Bug Report and Feedback to see updates.',
+    category: 'Support',
+    subcategory: 'Bug Report and Feedback',
+    tags: ['self repairing', 'self correcting', 'bug report', 'feedback'],
+    audience: ['all'],
+    owner: 'DEAP Support',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R151', 'R156', 'R175'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-bug-feedback-simple'],
+  },
+  {
+    id: 'faq-dashboard-layout-reset',
+    type: 'faq',
+    title: 'Can I reset my dashboard if I move things around?',
+    shortSummary: 'Yes. Reset restores the default dashboard layout without deleting records.',
+    body: 'Use Customise Dashboard and choose Reset when you want the default module order, visibility, size, and pin settings back. Undo is available for recent layout changes, and hidden modules can be restored.',
+    category: 'Dashboard',
+    subcategory: 'Personalisation',
+    tags: ['dashboard', 'reset', 'customise', 'layout'],
+    audience: ['all'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R151', 'R156', 'R401'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-dashboard-layout'],
+  },
+  {
+    id: 'faq-table-sorting-reset',
+    type: 'faq',
+    title: 'Does sorting a table change the saved data?',
+    shortSummary: 'No. Sorting only changes the view on screen.',
+    body: 'Clicking column titles only changes the display order. It does not delete, rewrite, or permanently reorder records. Reset Columns to Default clears the sorting and restores the table view.',
+    category: 'Using Tables',
+    subcategory: 'Sorting',
+    tags: ['table', 'sort', 'reset', 'columns'],
+    audience: ['all'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R151', 'R156', 'R401'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-table-sorting'],
+  },
+  {
+    id: 'faq-feature-inventory-access',
+    type: 'faq',
+    title: 'Who can open Feature Inventory?',
+    shortSummary: 'Only Ayodeji Falope Super Admin can open the private Feature Inventory.',
+    body: 'Feature Inventory is identity locked to Ayodeji Falope Super Admin. Other users should not see the tab or receive inventory API responses.',
+    category: 'Super Admin',
+    subcategory: 'Feature Inventory',
+    tags: ['feature inventory', 'super admin', 'access control'],
+    audience: ['admin'],
+    owner: 'DEAP Security',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R376', 'R388', 'R392'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-feature-inventory-bulk-export'],
+  },
+  {
+    id: 'faq-feature-inventory-export-formats',
+    type: 'faq',
+    title: 'Which Feature Inventory export formats are supported?',
+    shortSummary: 'PDF, DOCX, TXT, Markdown, JSON, CSV, HTML, and XLSX are available.',
+    body: 'The Super Admin can choose one or more export formats during bulk export. Files download in the browser and are also preserved in private Firebase Storage for later download from Stored exports.',
+    category: 'Super Admin',
+    subcategory: 'Feature Inventory',
+    tags: ['feature inventory', 'export', 'pdf', 'docx', 'xlsx', 'firebase storage'],
+    audience: ['admin'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R376', 'R388', 'R392'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-feature-inventory-bulk-export'],
+  },
+  {
+    id: 'faq-super-admin-bug-gateway',
+    type: 'faq',
+    title: 'Where does Super Admin approve bug repairs?',
+    shortSummary: 'Use the Super Admin Bug Reports tab.',
+    body: 'The Bug Reports tab shows submitted reports, reporter login details, affected area, diagnostics, points, duplicate hints, repair status, audit trail, and approval controls for investigation, repair, testing, and monitoring.',
+    category: 'Super Admin',
+    subcategory: 'Bug Governance',
+    tags: ['bug reports', 'super admin', 'approval', 'repair'],
+    audience: ['admin'],
+    owner: 'DEAP Security',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R376', 'R388', 'R392'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-super-admin-repair-gateway'],
+  },
+  {
+    id: 'faq-system-health-location',
+    type: 'faq',
+    title: 'Where can Super Admin check sync and release health?',
+    shortSummary: 'Open Reports and choose System Health.',
+    body: 'System Health shows cloud sync status, protected record coverage, backup scope, active assessment sessions, recent sanitised diagnostics, and the release safety checklist. It is designed for Super Admin and admin operations, not ordinary employee work.',
+    category: 'Super Admin',
+    subcategory: 'System Health',
+    tags: ['system health', 'sync', 'release checklist', 'backup', 'diagnostics', 'active sessions'],
+    audience: ['admin'],
+    owner: 'DEAP Operations',
+    status: 'published',
+    updatedAt: '2026-05-26',
+    lastReviewedAt: '2026-05-26',
+    requirementRefs: ['R376', 'R388', 'R392'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-system-health-console'],
+  },
+  {
     id: 'faq-ai-safe',
     type: 'faq',
     title: 'Is AI Help allowed to see everything?',
@@ -13011,6 +19086,24 @@ const helpKnowledgeItems: HelpContentItem[] = [
     requirementRefs: ['R016', 'R100', 'R392'],
     estimatedMinutes: 1,
     relatedIds: ['help-product-roadmap-2026'],
+  },
+  {
+    id: 'faq-complete-feature-expansion',
+    type: 'faq',
+    title: 'Are all recommended features active now?',
+    shortSummary: 'No. The complete expansion list is a controlled backlog; active features are marked through implementation status.',
+    body: `The complete DEAP expansion backlog contains ${fullFeatureExpansionTotal} recommended improvements. Some are already implemented, some have foundation scaffolding, and many remain future build items. Every implemented feature should also receive Help Center guidance, FAQ coverage, responsive checks, accessibility checks, and Super Admin documentation where relevant.`,
+    category: 'Product Updates',
+    subcategory: 'Complete Expansion Backlog',
+    tags: ['feature backlog', 'implemented', 'roadmap', 'faq', 'help center'],
+    audience: ['all'],
+    owner: 'DEAP Product',
+    status: 'published',
+    updatedAt: '2026-05-25',
+    lastReviewedAt: '2026-05-25',
+    requirementRefs: ['R041', 'R392', 'R497'],
+    estimatedMinutes: 1,
+    relatedIds: ['help-complete-feature-expansion-backlog', 'help-product-roadmap-2026'],
   },
   {
     id: 'faq-new-analytics-metrics',
@@ -13075,7 +19168,7 @@ const helpLearningPaths: LearningPath[] = [
     description: 'First login to confident daily use.',
     audience: ['all'],
     required: true,
-    lessonIds: ['learn-beginner-start', 'help-test-availability', 'help-taking-tests', 'help-results-learning', 'learn-upgrade-catalogue-overview'],
+    lessonIds: ['learn-beginner-start', 'help-test-availability', 'help-taking-tests', 'help-results-learning', 'help-bug-feedback-simple', 'help-dashboard-layout', 'learn-upgrade-catalogue-overview'],
   },
   {
     id: 'path-assessment-confidence',
@@ -13091,7 +19184,7 @@ const helpLearningPaths: LearningPath[] = [
     description: 'Understand what changed in DEAP, how the new UI/UX catalogue helps users, and how to ask AI Help about updates.',
     audience: ['all'],
     required: false,
-    lessonIds: ['learn-upgrade-catalogue-overview', 'help-uiux-upgrades-2026', 'faq-upgrade-catalogue-location', 'faq-uiux-mobile-dark-mode', 'faq-upgrade-ai-help'],
+    lessonIds: ['learn-upgrade-catalogue-overview', 'help-uiux-upgrades-2026', 'help-table-sorting', 'faq-upgrade-catalogue-location', 'faq-uiux-mobile-dark-mode', 'faq-upgrade-ai-help'],
   },
   {
     id: 'path-admin-knowledge',
@@ -13099,7 +19192,7 @@ const helpLearningPaths: LearningPath[] = [
     description: 'Launch logic, question banks, AI boundaries, analytics, content gaps, and audit-friendly help.',
     audience: ['admin'],
     required: true,
-    lessonIds: ['help-admin-launch-live', 'help-question-banks', 'help-ai-boundaries', 'help-admin-analytics', 'help-product-roadmap-2026', 'help-analytics-upgrades-2026', 'help-upgrade-research-sources'],
+    lessonIds: ['help-admin-launch-live', 'help-question-banks', 'help-feature-inventory-bulk-export', 'help-super-admin-repair-gateway', 'help-ai-boundaries', 'help-admin-analytics', 'help-product-roadmap-2026', 'help-complete-feature-expansion-backlog', 'help-analytics-upgrades-2026', 'help-upgrade-research-sources'],
   },
 ]
 
@@ -13155,6 +19248,230 @@ function helpEventId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+function normalizeAccordionId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-|-$/g, '') || 'section'
+}
+
+function readSessionAccordionState(storageKey: string | undefined, fallback: string[]): string[] {
+  if (!storageKey || typeof sessionStorage === 'undefined') return fallback
+  try {
+    const stored = sessionStorage.getItem(storageKey)
+    const parsed = stored ? JSON.parse(stored) : fallback
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function ResponsiveAccordion({
+  items,
+  mode = 'multiple',
+  storageKey,
+  labelledBy,
+  activeItemId,
+  onToggle,
+  onOpenIdsChange,
+  emptyTitle = 'No sections available yet',
+  emptyBody = 'Add sections or clear your filters to see accordion content.',
+}: {
+  items: ResponsiveAccordionItem[]
+  mode?: ResponsiveAccordionMode
+  storageKey?: string
+  labelledBy?: string
+  activeItemId?: string | null
+  onToggle?: (item: ResponsiveAccordionItem, open: boolean) => void
+  onOpenIdsChange?: (openIds: string[]) => void
+  emptyTitle?: string
+  emptyBody?: string
+}) {
+  const componentId = normalizeAccordionId(useId())
+  const headerRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const defaultOpenIds = useMemo(() => items.filter((item) => item.defaultOpen && !item.disabled).map((item) => item.id), [items])
+  const [openIds, setOpenIds] = useState<string[]>(() => {
+    const restored = readSessionAccordionState(storageKey, defaultOpenIds)
+    return mode === 'single' ? restored.slice(0, 1) : restored
+  })
+  const [mountedIds, setMountedIds] = useState<Set<string>>(() => new Set(openIds))
+  const enabledItemIds = useMemo(() => items.filter((item) => !item.disabled).map((item) => item.id), [items])
+
+  useEffect(() => {
+    const validIds = new Set(items.map((item) => item.id))
+    setOpenIds((existing) => {
+      const next = existing.filter((id) => validIds.has(id))
+      return next.length === existing.length ? existing : next
+    })
+  }, [items])
+
+  useEffect(() => {
+    if (!storageKey || typeof sessionStorage === 'undefined') return
+    sessionStorage.setItem(storageKey, JSON.stringify(openIds))
+  }, [openIds, storageKey])
+
+  useEffect(() => {
+    if (!activeItemId) return
+    const item = items.find((candidate) => candidate.id === activeItemId && !candidate.disabled)
+    if (!item || openIds.includes(item.id)) return
+    const next = mode === 'single' ? [item.id] : [...openIds, item.id]
+    setOpenIds(next)
+    onOpenIdsChange?.(next)
+  }, [activeItemId, items, mode, onOpenIdsChange, openIds])
+
+  useEffect(() => {
+    if (!openIds.length) return
+    setMountedIds((existing) => new Set([...existing, ...openIds]))
+  }, [openIds])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.hash) return
+    const hashId = decodeURIComponent(window.location.hash.slice(1))
+    const match = items.find((item) => item.id === hashId || `accordion-${item.id}` === hashId)
+    if (!match || match.disabled) return
+    setOpenIds((existing) => (mode === 'single' ? [match.id] : Array.from(new Set([...existing, match.id]))))
+    window.requestAnimationFrame(() => {
+      document.getElementById(`${componentId}-trigger-${normalizeAccordionId(match.id)}`)?.focus()
+    })
+  }, [componentId, items, mode])
+
+  function commitOpenIds(nextIds: string[], toggledItem?: ResponsiveAccordionItem, toggledOpen?: boolean) {
+    const allowed = new Set(enabledItemIds)
+    const normalized = Array.from(new Set(nextIds.filter((id) => allowed.has(id))))
+    const next = mode === 'single' ? normalized.slice(-1) : normalized
+    setOpenIds(next)
+    onOpenIdsChange?.(next)
+    if (toggledItem && typeof toggledOpen === 'boolean') onToggle?.(toggledItem, toggledOpen)
+  }
+
+  function toggleItem(item: ResponsiveAccordionItem) {
+    if (item.disabled) return
+    const isOpen = openIds.includes(item.id)
+    const next = isOpen ? openIds.filter((id) => id !== item.id) : mode === 'single' ? [item.id] : [...openIds, item.id]
+    commitOpenIds(next, item, !isOpen)
+  }
+
+  function expandAll() {
+    commitOpenIds(mode === 'single' ? enabledItemIds.slice(0, 1) : enabledItemIds)
+  }
+
+  function collapseAll() {
+    commitOpenIds([])
+  }
+
+  function smartToggleAll() {
+    const allOpen = enabledItemIds.length > 0 && enabledItemIds.every((id) => openIds.includes(id))
+    if (allOpen) collapseAll()
+    else expandAll()
+  }
+
+  function focusHeader(index: number) {
+    const enabledIndexes = items.map((item, itemIndex) => (item.disabled ? -1 : itemIndex)).filter((itemIndex) => itemIndex >= 0)
+    if (!enabledIndexes.length) return
+    const wrappedIndex = (index + enabledIndexes.length) % enabledIndexes.length
+    headerRefs.current[enabledIndexes[wrappedIndex]]?.focus()
+  }
+
+  function handleHeaderKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, itemIndex: number) {
+    const currentEnabledIndex = items.slice(0, itemIndex + 1).filter((item) => !item.disabled).length - 1
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      focusHeader(currentEnabledIndex + 1)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusHeader(currentEnabledIndex - 1)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      focusHeader(0)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      focusHeader(enabledItemIds.length - 1)
+    }
+  }
+
+  if (!items.length) return <EmptyState title={emptyTitle} body={emptyBody} />
+
+  return (
+    <section className="responsive-accordion" aria-labelledby={labelledBy}>
+      <div className="responsive-accordion-toolbar" aria-label="Accordion controls">
+        <button className="secondary-button compact" type="button" onClick={smartToggleAll} disabled={!enabledItemIds.length}>
+          {mode === 'single' ? 'Open first' : enabledItemIds.every((id) => openIds.includes(id)) ? 'Collapse all' : 'Expand all'}
+        </button>
+        <button className="secondary-button compact" type="button" onClick={collapseAll} disabled={!openIds.length}>
+          Collapse all
+        </button>
+      </div>
+      <div className="responsive-accordion-list">
+        {items.map((item, itemIndex) => {
+          const itemSlug = normalizeAccordionId(item.id)
+          const triggerId = `${componentId}-trigger-${itemSlug}`
+          const panelId = `${componentId}-panel-${itemSlug}`
+          const isOpen = openIds.includes(item.id)
+          const shouldMountContent = isOpen || mountedIds.has(item.id) || !item.lazyLoad
+          return (
+            <article className={`responsive-accordion-item ${isOpen ? 'open' : ''} ${item.disabled ? 'disabled' : ''}`} key={item.id}>
+              <h3 className="responsive-accordion-heading">
+                <button
+                  ref={(element) => {
+                    headerRefs.current[itemIndex] = element
+                  }}
+                  id={triggerId}
+                  type="button"
+                  className="responsive-accordion-trigger"
+                  aria-expanded={isOpen}
+                  aria-controls={panelId}
+                  disabled={item.disabled}
+                  onClick={() => toggleItem(item)}
+                  onKeyDown={(event) => handleHeaderKeyDown(event, itemIndex)}
+                >
+                  <span className="responsive-accordion-title-block">
+                    <strong>{item.title}</strong>
+                    {item.summary && <small>{item.summary}</small>}
+                  </span>
+                  <span className="responsive-accordion-meta">
+                    {item.status && <span className={`accordion-status ${item.status}`}>{item.status}</span>}
+                    {typeof item.badgeCount === 'number' && <span className="accordion-count">{item.badgeCount}</span>}
+                    {item.meta && <small>{item.meta}</small>}
+                    <ChevronDown size={18} aria-hidden="true" />
+                  </span>
+                </button>
+              </h3>
+              <div
+                id={panelId}
+                className="responsive-accordion-panel"
+                role="region"
+                aria-labelledby={triggerId}
+                hidden={!isOpen}
+              >
+                {shouldMountContent ? item.content : <p className="hint">Loading section...</p>}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function HelpFeedbackButtons({
+  item,
+  rating,
+  onRate,
+}: {
+  item: HelpContentItem
+  rating?: 'helpful' | 'not_helpful'
+  onRate: (item: HelpContentItem, rating: 'helpful' | 'not_helpful') => void
+}) {
+  return (
+    <div className="help-feedback-actions" aria-label={`Rate ${item.title}`}>
+      <span>Was this useful?</span>
+      <button className={rating === 'helpful' ? 'active' : ''} type="button" onClick={() => onRate(item, 'helpful')}>
+        Yes
+      </button>
+      <button className={rating === 'not_helpful' ? 'active' : ''} type="button" onClick={() => onRate(item, 'not_helpful')}>
+        Needs work
+      </button>
+    </div>
+  )
+}
+
 function HelpFaq({ currentUser }: { currentUser?: User }) {
   const isAdminUser = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
   const [activeTab, setActiveTab] = useState<HelpCenterTab>('learning')
@@ -13165,6 +19482,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
   const helpEventsKey = `deap-help-events-${currentUser?.id ?? 'guest'}`
   const chatStorageKey = `deap-help-ai-chat-threads-${currentUser?.id ?? 'guest'}`
   const [helpEvents, setHelpEvents] = useState<Array<{ id: string; type: string; detail: string; createdAt: string }>>(() => readStored(helpEventsKey, []))
+  const [contentFeedback, setContentFeedback] = useState<Record<string, 'helpful' | 'not_helpful'>>(() => readStored(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
   const [chatThreads, setChatThreads] = useState<AiChatThread[]>(() => readStored(chatStorageKey, [createAiThread('Ask DEAP Help')]))
   const [selectedChatId, setSelectedChatId] = useState(() => readStored(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
   const [aiDraft, setAiDraft] = useState('')
@@ -13188,11 +19506,25 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
     const done = path.lessonIds.filter((lessonId) => completedSet.has(lessonId)).length
     return path.lessonIds.length ? Math.round((done / path.lessonIds.length) * 100) : 0
   }
+  const releaseNotes = isAdminUser
+    ? [
+        'Super Admin Command Center now exports a technical snapshot.',
+        'Bug reports now include clearer affected-area selection and correction status.',
+        'Feature Inventory supports bulk selected exports and versioned governance records.',
+        'Tables now support reusable column sorting and reset controls.',
+      ]
+    : [
+        'Bug reports are now simpler to send.',
+        'You can see corrected reports on the feedback page.',
+        'The dashboard now shows a simple next step.',
+        'Help and FAQ have more guidance for tests and results.',
+      ]
 
   useEffect(() => {
     setSavedIds(readStored(`deap-help-saved-${currentUser?.id ?? 'guest'}`, []))
     setCompletedLessonIds(readStored(`deap-help-progress-${currentUser?.id ?? 'guest'}`, []))
     setHelpEvents(readStored(helpEventsKey, []))
+    setContentFeedback(readStored(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
     const nextThreads = readStored<AiChatThread[]>(chatStorageKey, [createAiThread('Ask DEAP Help')])
     setChatThreads(nextThreads.length ? nextThreads : [createAiThread('Ask DEAP Help')])
     setSelectedChatId(readStored(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
@@ -13201,6 +19533,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
   useEffect(() => localStorage.setItem(`deap-help-saved-${currentUser?.id ?? 'guest'}`, JSON.stringify(savedIds)), [currentUser?.id, savedIds])
   useEffect(() => localStorage.setItem(`deap-help-progress-${currentUser?.id ?? 'guest'}`, JSON.stringify(completedLessonIds)), [completedLessonIds, currentUser?.id])
   useEffect(() => localStorage.setItem(helpEventsKey, JSON.stringify(helpEvents)), [helpEvents, helpEventsKey])
+  useEffect(() => localStorage.setItem(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, JSON.stringify(contentFeedback)), [contentFeedback, currentUser?.id])
   useEffect(() => localStorage.setItem(chatStorageKey, JSON.stringify(chatThreads)), [chatStorageKey, chatThreads])
   useEffect(() => {
     if (!chatThreads.length) return
@@ -13209,9 +19542,9 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
     localStorage.setItem(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, nextSelected)
   }, [chatThreads, currentUser?.id, selectedChatId])
 
-  function recordHelpEvent(type: string, detail: string) {
+  const recordHelpEvent = useCallback((type: string, detail: string) => {
     setHelpEvents((existing) => [{ id: helpEventId(type), type, detail, createdAt: new Date().toISOString() }, ...existing])
-  }
+  }, [])
 
   function openContent(item: HelpContentItem) {
     recordHelpEvent(`${item.type}_viewed`, item.title)
@@ -13234,6 +19567,11 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
       return next
     })
   }
+
+  const rateHelpContent = useCallback((item: HelpContentItem, rating: 'helpful' | 'not_helpful') => {
+    setContentFeedback((existing) => ({ ...existing, [item.id]: rating }))
+    recordHelpEvent(rating === 'helpful' ? 'content_marked_helpful' : 'content_marked_not_helpful', item.title)
+  }, [recordHelpEvent])
 
   function createHelpChat(prompt = 'Ask DEAP Help') {
     const thread = createAiThread(prompt)
@@ -13350,25 +19688,64 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
     item.updatedAt,
     item.relatedIds.length ? 'Linked' : 'Needs links',
   ])
+  const faqAccordionItems = useMemo<ResponsiveAccordionItem[]>(
+    () =>
+      faqItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        summary: item.shortSummary,
+        status: item.status === 'published' ? 'complete' : item.status,
+        badgeCount: item.requirementRefs.length,
+        defaultOpen: openFaqId === item.id,
+        lazyLoad: true,
+        meta: item.category,
+        content: (
+          <div className="faq-accordion-content">
+            <p><strong>Short answer:</strong> {item.shortSummary}</p>
+            <p>{item.body}</p>
+            <div className="faq-accordion-meta">
+              <span>Owner: {item.owner}</span>
+              <span>Reviewed: {item.lastReviewedAt}</span>
+              <span>Sources: {item.requirementRefs.join(', ')}</span>
+            </div>
+            <HelpFeedbackButtons item={item} rating={contentFeedback[item.id]} onRate={rateHelpContent} />
+          </div>
+        ),
+      })),
+    [contentFeedback, faqItems, openFaqId, rateHelpContent],
+  )
 
   useEffect(() => {
     if (query.trim() && !searchResults.length) recordHelpEvent('failed_search', query.trim().slice(0, 120))
-  }, [query, searchResults.length])
+  }, [query, searchResults.length, recordHelpEvent])
 
   return (
     <section className="learning-help-center">
       <PageTitle eyebrow={`Learning Help${currentUser ? ` for ${currentUser.fullName}` : ''}`} title="DEAP Learning, Help and FAQ Center" />
       <section className="panel learning-help-hero">
         <div>
-          <span>AI-powered self-service support</span>
-          <h2>Learn the portal, understand upgrades, search FAQs, and ask DEAP AI Help without leaving your workflow.</h2>
-          <p>Built from the PRD model for Learning Center, Help Center, FAQ Center, AI support, content governance, analytics, product upgrades, and continuous improvement.</p>
+          <span>{isAdminUser ? 'Admin self-service support' : 'Simple self-service support'}</span>
+          <h2>{isAdminUser ? 'Learn the portal, understand upgrades, search FAQs, and use DEAP Help without leaving your workflow.' : 'Find simple help for tests, results, reports, and feedback.'}</h2>
+          <p>{isAdminUser ? 'Built from the PRD model for Learning Center, Help Center, FAQ Center, support, content governance, analytics, product upgrades, and continuous improvement.' : 'Use the lessons, help articles, and FAQs when you are not sure what to do next.'}</p>
         </div>
         <div className="learning-help-stats">
           <span><strong>{visibleLearningPaths.length}</strong> Paths</span>
           <span><strong>{visibleContent.length}</strong> Articles</span>
           <span><strong>{faqItems.length}</strong> FAQs</span>
           <span><strong>{chatThreads.length}</strong> AI chats</span>
+        </div>
+      </section>
+
+      <section className="panel release-notes-panel" aria-label="Latest app updates">
+        <div>
+          <span className="status-pill"><Bell size={16} /> What changed</span>
+          <h2>{isAdminUser ? 'Latest implementation updates' : 'Latest simple updates'}</h2>
+          <p>{isAdminUser ? 'Recent production-safe upgrades added during the current expansion cycle.' : 'Recent changes that make DEAP easier to use.'}</p>
+        </div>
+        <div className="release-note-list">
+          {releaseNotes.map((note) => (
+            <span key={note}><CheckCircle2 size={16} /> {note}</span>
+          ))}
         </div>
       </section>
 
@@ -13407,6 +19784,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
                   <button className="secondary-button compact" type="button" onClick={() => openContent(item)}>Open</button>
                   <button className="secondary-button compact" type="button" onClick={() => toggleSaved(item.id)}>{savedIds.includes(item.id) ? 'Saved' : 'Save'}</button>
                 </div>
+                <HelpFeedbackButtons item={item} rating={contentFeedback[item.id]} onRate={rateHelpContent} />
               </article>
             ))}
           </div>
@@ -13463,6 +19841,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
                   <h3>{item.title}</h3>
                   <p>{item.body}</p>
                   {item.steps && <ol>{item.steps.map((step) => <li key={step}>{step}</li>)}</ol>}
+                  <HelpFeedbackButtons item={item} rating={contentFeedback[item.id]} onRate={rateHelpContent} />
                 </article>
               ))}
             </div>
@@ -13487,6 +19866,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
                   <button className="secondary-button compact" type="button" onClick={() => toggleSaved(item.id)}>
                     {savedIds.includes(item.id) ? 'Saved' : 'Save article'}
                   </button>
+                  <HelpFeedbackButtons item={item} rating={contentFeedback[item.id]} onRate={rateHelpContent} />
                 </article>
               ))}
             </div>
@@ -13499,6 +19879,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
                   <span>{helpContentTypeLabel(item.type)}</span>
                   <h3>{item.title}</h3>
                   <p>{item.shortSummary}</p>
+                  <HelpFeedbackButtons item={item} rating={contentFeedback[item.id]} onRate={rateHelpContent} />
                 </article>
               ))}
               {!savedIds.length && <p className="hint">Save useful articles, lessons, or FAQs so you can return to them quickly.</p>}
@@ -13511,31 +19892,27 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
         <section className="panel help-panel">
           <div className="panel-heading-row">
             <div>
-              <h2>FAQ Center</h2>
+              <h2 id="deap-faq-heading">FAQ Center</h2>
               <p>Short answers first, with one open FAQ at a time for clean scanning.</p>
             </div>
           </div>
           <div className="faq-category-strip">
             {Array.from(new Set(faqItems.map((item) => item.category))).map((category) => <span key={category}>{category}</span>)}
           </div>
-          <div className="accordion-list">
-            {faqItems.map((item) => (
-              <details key={item.id} open={openFaqId === item.id}>
-                <summary
-                  onClick={(event) => {
-                    event.preventDefault()
-                    setOpenFaqId((current) => (current === item.id ? null : item.id))
-                    recordHelpEvent('faq_viewed', item.title)
-                  }}
-                >
-                  {item.title}
-                </summary>
-                <p><strong>Short answer:</strong> {item.shortSummary}</p>
-                <p>{item.body}</p>
-                <small>Owner: {item.owner} · Reviewed: {item.lastReviewedAt} · Sources: {item.requirementRefs.join(', ')}</small>
-              </details>
-            ))}
-          </div>
+          <ResponsiveAccordion
+            key={`faq-accordion-${currentUser?.id ?? 'guest'}`}
+            items={faqAccordionItems}
+            mode="single"
+            storageKey={`deap-help-faq-accordion-${currentUser?.id ?? 'guest'}`}
+            labelledBy="deap-faq-heading"
+            activeItemId={openFaqId}
+            onOpenIdsChange={(ids) => setOpenFaqId(ids[0] ?? null)}
+            onToggle={(item, open) => {
+              if (open) recordHelpEvent('faq_viewed', item.title)
+            }}
+            emptyTitle="No FAQs available yet"
+            emptyBody="No FAQ content matches your role or current search."
+          />
         </section>
       )}
 
@@ -13618,6 +19995,8 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
             <Metric label="Content views" value={views} icon={<FileSpreadsheet />} />
             <Metric label="AI questions" value={helpEvents.filter((event) => event.type === 'ai_question').length} icon={<Bot />} />
             <Metric label="Failed searches" value={failedSearches} icon={<AlertCircle />} />
+            <Metric label="Helpful ratings" value={Object.values(contentFeedback).filter((rating) => rating === 'helpful').length} icon={<CheckCircle2 />} />
+            <Metric label="Needs work" value={Object.values(contentFeedback).filter((rating) => rating === 'not_helpful').length} icon={<AlertCircle />} />
           </div>
           <div className="support-layout">
             <section>
@@ -14026,6 +20405,8 @@ const deapIconLabels: Record<DeapIconName, string> = {
   admin: 'Admin',
   settings: 'Settings',
   notifications: 'Notifications',
+  feedback: 'Bug Report and Feedback',
+  inventory: 'Feature Inventory',
   help: 'Help',
   'my-tests': 'My tests',
   'my-results': 'My results',
@@ -14110,6 +20491,17 @@ function DeapIcon({
             <path d="M33 30h12M33 40h12" stroke={`url(#${gold})`} strokeWidth="4.2" strokeLinecap="round" />
           </>
         )
+      case 'inventory':
+        return (
+          <>
+            <rect x="11" y="12" width="42" height="42" rx="13" fill={`url(#${face})`} filter={`url(#${shadow})`} />
+            <rect x="18" y="20" width="28" height="6" rx="3" fill={`url(#${blue})`} />
+            <rect x="18" y="30" width="21" height="5" rx="2.5" fill={`url(#${green})`} opacity="0.88" />
+            <rect x="18" y="39" width="25" height="5" rx="2.5" fill={`url(#${gold})`} opacity="0.9" />
+            <circle cx="46" cy="44" r="8" fill={`url(#${violet})`} />
+            <path d="M42 44h8M46 40v8" stroke="#ffffff" strokeWidth="2.8" strokeLinecap="round" />
+          </>
+        )
       case 'tests':
       case 'my-tests':
         return (
@@ -14166,6 +20558,19 @@ function DeapIcon({
             <path d="M20 39V28c0-8 5-14 12-14s12 6 12 14v11l5 6H15l5-6Z" fill={`url(#${blue})`} filter={`url(#${shadow})`} />
             <path d="M27 50c2 5 8 5 10 0" stroke={`url(#${gold})`} strokeWidth="4" strokeLinecap="round" />
             <circle cx="45" cy="18" r="7" fill={`url(#${coral})`} />
+          </>
+        )
+      case 'feedback':
+        return (
+          <>
+            <rect x="10" y="16" width="31" height="25" rx="10" fill={`url(#${blue})`} filter={`url(#${shadow})`} />
+            <path d="M20 41l-7 8 2-11" fill={`url(#${blue})`} />
+            <circle cx="21" cy="28" r="2.7" fill="#ffffff" />
+            <circle cx="28" cy="28" r="2.7" fill="#ffffff" />
+            <circle cx="35" cy="28" r="2.7" fill="#ffffff" />
+            <circle cx="43" cy="39" r="10" fill={`url(#${gold})`} filter={`url(#${shadow})`} />
+            <path d="M38 39.5l3.2 3.1 6.4-7.2" fill="none" stroke="#ffffff" strokeWidth="3.3" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="45" cy="18" r="6" fill={`url(#${coral})`} />
           </>
         )
       case 'help':
@@ -14356,6 +20761,8 @@ function iconForPage(eyebrow: string, title: string): DeapIconName {
   if (text.includes('question')) return 'question-bank'
   if (text.includes('test')) return 'tests'
   if (text.includes('analytics') || text.includes('intelligence')) return 'analytics'
+  if (text.includes('feature inventory') || text.includes('feature registry') || text.includes('catalogue')) return 'inventory'
+  if (text.includes('bug') || text.includes('repair approval')) return 'notifications'
   if (text.includes('report') || text.includes('evidence')) return 'reports'
   if (text.includes('user') || text.includes('employee')) return 'employees'
   if (text.includes('notification') || text.includes('activity ledger')) return 'notifications'
@@ -14398,6 +20805,58 @@ function getInitialColumnWidth(column: string) {
   return Math.min(REPORT_COLUMN_MAX_WIDTH, Math.max(136, column.length * 9 + 92))
 }
 
+type TableSortDirection = 'desc' | 'asc'
+
+interface TableSortRule {
+  columnId: string
+  columnIndex: number
+  direction: TableSortDirection
+  priority: number
+  locked: boolean
+}
+
+function isColumnSortable(column: string): boolean {
+  return !/^(select|action|actions|admin action|restore|delete|edit|view)$/i.test(column.trim())
+}
+
+function sortableCellText(cell: ReactNode): string {
+  if (cell === null || cell === undefined || typeof cell === 'boolean') return ''
+  if (typeof cell === 'string' || typeof cell === 'number') return String(cell)
+  if (Array.isArray(cell)) return cell.map(sortableCellText).join(' ')
+  if (typeof cell === 'object' && 'props' in cell) {
+    const props = (cell as { props?: { children?: ReactNode; 'aria-label'?: string; title?: string } }).props
+    return sortableCellText(props?.children) || props?.['aria-label'] || props?.title || ''
+  }
+  return ''
+}
+
+function normalizeSortableValue(value: string): string | number {
+  const text = value.trim()
+  if (!text) return ''
+  const percent = text.match(/^[-+]?\d+(?:\.\d+)?%$/)
+  if (percent) return Number(text.replace('%', ''))
+  const currency = text.replace(/[,$£₦€]/g, '')
+  if (/^[-+]?\d+(?:\.\d+)?$/.test(currency)) return Number(currency)
+  const date = Date.parse(text)
+  if (/^\d{1,4}[/-]\d{1,2}|[A-Z][a-z]{2,}/.test(text) && Number.isFinite(date)) return date
+  return text.toLowerCase()
+}
+
+function compareSortableValues(leftRaw: string, rightRaw: string, direction: TableSortDirection): number {
+  const leftEmpty = !leftRaw.trim()
+  const rightEmpty = !rightRaw.trim()
+  if (leftEmpty && rightEmpty) return 0
+  if (leftEmpty) return 1
+  if (rightEmpty) return -1
+  const left = normalizeSortableValue(leftRaw)
+  const right = normalizeSortableValue(rightRaw)
+  const result =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' })
+  return direction === 'desc' ? -result : result
+}
+
 function DataTable({
   columns,
   rows,
@@ -14411,18 +20870,135 @@ function DataTable({
 }) {
   const columnSignature = columns.join('\u001f')
   const [columnWidths, setColumnWidths] = useState(() => columns.map(getInitialColumnWidth))
+  const sortStorageKey = tableId ? `deap-table-sort-${tableId}` : ''
+  const [activeSorts, setActiveSorts] = useState<TableSortRule[]>(() => readStored<TableSortRule[]>(sortStorageKey, []))
+  const [advancedSortMode, setAdvancedSortMode] = useState(false)
+  const [sortAnnouncement, setSortAnnouncement] = useState('Default table order active.')
   const activeResizeRef = useRef(false)
+  const holdTimerRef = useRef<number | undefined>(undefined)
+  const holdTriggeredRef = useRef(false)
 
   useEffect(() => {
     const signedColumns = columnSignature ? columnSignature.split('\u001f') : []
     setColumnWidths((current) => signedColumns.map((column, index) => current[index] ?? getInitialColumnWidth(column)))
+    setActiveSorts((existing) => existing.filter((rule) => signedColumns[rule.columnIndex] && rule.columnId === signedColumns[rule.columnIndex]))
   }, [columnSignature])
+
+  useEffect(() => {
+    if (!sortStorageKey) return
+    if (activeSorts.length) sessionStorage.setItem(sortStorageKey, JSON.stringify(activeSorts))
+    else sessionStorage.removeItem(sortStorageKey)
+  }, [activeSorts, sortStorageKey])
 
   const tableMinWidth = useMemo(() => {
     if (!resizable) return undefined
     return Math.max(columns.length * REPORT_COLUMN_MIN_WIDTH, columnWidths.reduce((total, width) => total + width, 0))
   }, [columnWidths, columns.length, resizable])
   const tableStyle = tableMinWidth ? { minWidth: `${tableMinWidth}px`, width: `${tableMinWidth}px` } : undefined
+  const sortedRows = useMemo(() => {
+    if (!activeSorts.length) return rows
+    return rows
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        for (const rule of activeSorts) {
+          const result = compareSortableValues(sortableCellText(left.row[rule.columnIndex]), sortableCellText(right.row[rule.columnIndex]), rule.direction)
+          if (result !== 0) return result
+        }
+        return left.index - right.index
+      })
+      .map(({ row }) => row)
+  }, [activeSorts, rows])
+  const primarySort = activeSorts[0]
+
+  function renumberSorts(sorts: TableSortRule[]) {
+    return sorts.map((rule, index) => ({ ...rule, priority: index + 1 }))
+  }
+
+  function nextDirection(current?: TableSortDirection): TableSortDirection | 'default' {
+    if (!current) return 'desc'
+    if (current === 'desc') return 'asc'
+    return 'default'
+  }
+
+  function sortLabel(rule?: TableSortRule) {
+    if (!rule) return 'Default order'
+    return `${rule.columnId} ${rule.direction === 'desc' ? 'descending' : 'ascending'}`
+  }
+
+  function cycleColumnSort(column: string, columnIndex: number) {
+    if (!isColumnSortable(column)) return
+    const existing = activeSorts.find((rule) => rule.columnIndex === columnIndex)
+    const direction = nextDirection(existing?.direction)
+    if (direction === 'default') {
+      const next = renumberSorts(activeSorts.filter((rule) => rule.columnIndex !== columnIndex))
+      setActiveSorts(next)
+      setSortAnnouncement(`${column} restored to default. ${next.length ? `Remaining sort: ${next.map(sortLabel).join(', then ')}.` : 'Default table order restored.'}`)
+      return
+    }
+    const nextRule: TableSortRule = {
+      columnId: column,
+      columnIndex,
+      direction,
+      priority: existing?.priority ?? 1,
+      locked: existing?.locked ?? advancedSortMode,
+    }
+    const next = existing?.locked
+      ? renumberSorts(activeSorts.map((rule) => (rule.columnIndex === columnIndex ? nextRule : rule)))
+      : [{ ...nextRule, priority: 1, locked: advancedSortMode }]
+    setActiveSorts(next)
+    setSortAnnouncement(`Sorted by ${column}, ${direction === 'desc' ? 'descending' : 'ascending'}.${next.length > 1 ? ` Sort chain: ${next.map(sortLabel).join(', then ')}.` : ''}`)
+  }
+
+  function toggleSortLock(column: string, columnIndex: number) {
+    if (!isColumnSortable(column)) return
+    const existing = activeSorts.find((rule) => rule.columnIndex === columnIndex)
+    if (existing?.locked) {
+      const next = renumberSorts(activeSorts.filter((rule) => rule.columnIndex !== columnIndex))
+      setActiveSorts(next)
+      setSortAnnouncement(`${column} removed from the locked sort chain.`)
+      return
+    }
+    const nextRule: TableSortRule = {
+      columnId: column,
+      columnIndex,
+      direction: existing?.direction ?? 'desc',
+      priority: activeSorts.length + 1,
+      locked: true,
+    }
+    const withoutColumn = activeSorts.filter((rule) => rule.columnIndex !== columnIndex)
+    const next = renumberSorts([...withoutColumn, nextRule])
+    setActiveSorts(next)
+    setAdvancedSortMode(true)
+    setSortAnnouncement(`${column} added as ${nextRule.priority === 1 ? 'primary' : `priority ${nextRule.priority}`} sort, ${nextRule.direction === 'desc' ? 'descending' : 'ascending'}.`)
+  }
+
+  function clearHoldTimer() {
+    if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = undefined
+  }
+
+  function beginSortHold(column: string, columnIndex: number) {
+    if (!isColumnSortable(column)) return
+    holdTriggeredRef.current = false
+    clearHoldTimer()
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true
+      setAdvancedSortMode(true)
+      toggleSortLock(column, columnIndex)
+    }, 600)
+  }
+
+  function resetSorting() {
+    setActiveSorts([])
+    setAdvancedSortMode(false)
+    setSortAnnouncement('All sorting cleared. Default table order restored.')
+    if (sortStorageKey) sessionStorage.removeItem(sortStorageKey)
+  }
+
+  function sortSummary() {
+    if (!activeSorts.length) return 'Default table order'
+    return `Sorted by: ${activeSorts.map((rule) => `${rule.columnId} ${rule.direction}${rule.locked ? ` (${rule.priority})` : ''}`).join(', then ')}`
+  }
 
   function beginColumnResize(index: number, startX: number) {
     if (!resizable) return
@@ -14460,6 +21036,16 @@ function DataTable({
 
   return (
     <div className={`table-wrap${resizable ? ' resizable-table-wrap' : ''}`} data-table-id={tableId}>
+      <div className="universal-table-toolbar" aria-label="Table sorting controls">
+        <span className="table-sort-summary">{sortSummary()}</span>
+        <button className="secondary-button compact" type="button" onClick={() => setAdvancedSortMode((current) => !current)}>
+          {advancedSortMode ? 'Hide Sort Locks' : 'Sort Options'}
+        </button>
+        <button className="secondary-button compact" type="button" disabled={!activeSorts.length && !advancedSortMode} onClick={resetSorting}>
+          Reset Columns to Default
+        </button>
+      </div>
+      <div className="sr-only" role="status" aria-live="polite">{sortAnnouncement}</div>
       <table className={resizable ? 'resizable-table' : undefined} style={tableStyle}>
         {resizable && (
           <colgroup>
@@ -14471,8 +21057,52 @@ function DataTable({
         <thead>
           <tr>
             {columns.map((column, index) => (
-              <th key={`${column}-${index}`}>
-                <span>{column}</span>
+              <th
+                aria-sort={primarySort?.columnIndex === index ? (primarySort.direction === 'desc' ? 'descending' : 'ascending') : undefined}
+                className={activeSorts.some((rule) => rule.columnIndex === index) ? 'sorted-column-header' : undefined}
+                key={`${column}-${index}`}
+              >
+                <button
+                  className="sortable-header-button"
+                  disabled={!isColumnSortable(column)}
+                  onClick={() => {
+                    if (holdTriggeredRef.current) {
+                      holdTriggeredRef.current = false
+                      return
+                    }
+                    cycleColumnSort(column, index)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      cycleColumnSort(column, index)
+                    } else if (event.key === 'Escape') {
+                      setAdvancedSortMode(false)
+                    }
+                  }}
+                  onMouseDown={() => beginSortHold(column, index)}
+                  onMouseLeave={clearHoldTimer}
+                  onMouseUp={clearHoldTimer}
+                  onPointerCancel={clearHoldTimer}
+                  title={isColumnSortable(column) ? `Sort ${column}: first click descending, second ascending, third default. Hold to lock into multi-sort.` : `${column} cannot be sorted.`}
+                  type="button"
+                >
+                  <span>{column}</span>
+                  <span aria-hidden="true" className="sort-direction-icon">
+                    {activeSorts.find((rule) => rule.columnIndex === index)?.direction === 'desc' ? '↓' : activeSorts.find((rule) => rule.columnIndex === index)?.direction === 'asc' ? '↑' : '↕'}
+                  </span>
+                  {activeSorts.find((rule) => rule.columnIndex === index)?.locked && <span className="sort-priority-badge">{activeSorts.find((rule) => rule.columnIndex === index)?.priority}</span>}
+                </button>
+                {advancedSortMode && isColumnSortable(column) && (
+                  <label className="sort-lock-control">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(activeSorts.find((rule) => rule.columnIndex === index)?.locked)}
+                      onChange={() => toggleSortLock(column, index)}
+                    />
+                    Lock
+                  </label>
+                )}
                 {resizable && (
                   <button
                     aria-label={`Resize ${column} column`}
@@ -14503,7 +21133,7 @@ function DataTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
+          {sortedRows.map((row, rowIndex) => (
             <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={`${rowIndex}-${cellIndex}`}>{cell}</td>)}</tr>
           ))}
           {!rows.length && (

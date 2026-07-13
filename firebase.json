@@ -9,7 +9,11 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
+    "site": "training-assessment-1c8ef",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
@@ -40,6 +44,22 @@
       {
         "source": "/api/deap-token/introspect",
         "function": "deapTokenIntrospection"
+      },
+      {
+        "source": "/api/superadmin/feature_inventory",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/superadmin/feature_inventory/refresh",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/superadmin/feature_inventory/export",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/superadmin/feature_inventory/export/**",
+        "function": "deapFeatureInventory"
       },
       {
         "source": "**",

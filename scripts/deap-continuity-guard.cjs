@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const defaultPortalUrl = process.env.DEAP_PORTAL_URL || 'https://iicocece-assessment.web.app'
+const defaultPortalUrl = process.env.DEAP_PORTAL_URL || 'https://training-assessment-1c8ef.web.app'
 const defaultSnapshotPath = path.resolve(process.cwd(), '.deap-continuity', 'predeploy-state.json')
 
 function usage() {
@@ -70,6 +70,8 @@ function criticalSummary(state, courseImages = {}) {
   const auditEvents = Array.isArray(state.auditEvents) ? state.auditEvents : []
   const analyticsEvents = Array.isArray(state.analyticsEvents) ? state.analyticsEvents : []
   const problemReports = Array.isArray(state.problemReports) ? state.problemReports : []
+  const bugAuditLogs = Array.isArray(state.bugAuditLogs) ? state.bugAuditLogs : []
+  const contributionPoints = Array.isArray(state.contributionPoints) ? state.contributionPoints : []
   const trashRecords = Array.isArray(state.trashRecords) ? state.trashRecords : []
   const trainingSources = Array.isArray(state.questionBankTrainingSources) ? state.questionBankTrainingSources : []
   const contentModules = Array.isArray(state.trainingContentModules) ? state.trainingContentModules : []
@@ -79,6 +81,7 @@ function criticalSummary(state, courseImages = {}) {
   const progress = state.trainingProgress && typeof state.trainingProgress === 'object' ? state.trainingProgress : {}
   const exposure = state.questionExposureCounts && typeof state.questionExposureCounts === 'object' ? state.questionExposureCounts : {}
   const mastery = state.questionMastery && typeof state.questionMastery === 'object' ? state.questionMastery : {}
+  const dashboardLayouts = state.dashboardLayouts && typeof state.dashboardLayouts === 'object' ? state.dashboardLayouts : {}
   const apiTokens = Array.isArray(state.apiTokens) ? state.apiTokens : []
   return {
     capturedAt: new Date().toISOString(),
@@ -111,6 +114,9 @@ function criticalSummary(state, courseImages = {}) {
     auditPreservationIds: eventPreservationIds(auditEvents, trashRecords, 'audit_event'),
     analyticsPreservationIds: eventPreservationIds(analyticsEvents, trashRecords, 'analytics_event'),
     problemReportIds: sorted(problemReports.map((report) => String(report.id)).filter(Boolean)),
+    bugAuditLogIds: sorted(bugAuditLogs.map((log) => String(log.id)).filter(Boolean)),
+    contributionPointIds: sorted(contributionPoints.map((record) => String(record.id)).filter(Boolean)),
+    contributionPointSignature: stableStringify(contributionPoints),
     trashPreservationIds: sorted(
       trashRecords
         .filter((record) => record && record.itemType && record.itemId)
@@ -128,6 +134,8 @@ function criticalSummary(state, courseImages = {}) {
     courseImageSignature: stableStringify(courseImages),
     trainingContentModuleIds: sorted(contentModules.map((module) => String(module.id)).filter(Boolean)),
     trainingProgress: progress,
+    dashboardLayoutUserIds: sorted(Object.keys(dashboardLayouts)),
+    dashboardLayoutSignature: stableStringify(dashboardLayouts),
     apiTokenIds: sorted(apiTokens.map((token) => String(token.id)).filter(Boolean)),
   }
 }
@@ -190,6 +198,17 @@ function compareSummaries(before, after) {
   for (const id of before.problemReportIds || []) {
     if (!(after.problemReportIds || []).includes(id)) errors.push(`Missing user problem report after deployment: ${id}`)
   }
+  for (const id of before.bugAuditLogIds || []) {
+    if (!(after.bugAuditLogIds || []).includes(id)) errors.push(`Missing bug audit log after deployment: ${id}`)
+  }
+  for (const id of before.contributionPointIds || []) {
+    if (!(after.contributionPointIds || []).includes(id)) errors.push(`Missing contribution point record after deployment: ${id}`)
+  }
+  const beforeContributionPointSignature = before.contributionPointSignature ?? stableStringify([])
+  const afterContributionPointSignature = after.contributionPointSignature ?? stableStringify([])
+  if (beforeContributionPointSignature !== afterContributionPointSignature) {
+    errors.push('Contribution points changed during deployment.')
+  }
   for (const id of before.trashPreservationIds || []) {
     const preservedElsewhere = (after.auditPreservationIds || []).includes(id) || (after.analyticsPreservationIds || []).includes(id)
     if (!preservedElsewhere) errors.push(`Missing recoverable report trash data after deployment: ${id}`)
@@ -243,6 +262,12 @@ function compareSummaries(before, after) {
   for (const id of before.apiTokenIds || []) {
     if (!(after.apiTokenIds || []).includes(id)) errors.push(`Missing API token metadata after deployment: ${id}`)
   }
+  for (const id of before.dashboardLayoutUserIds || []) {
+    if (!(after.dashboardLayoutUserIds || []).includes(id)) errors.push(`Missing personalised dashboard layout after deployment: ${id}`)
+  }
+  if (before.dashboardLayoutSignature !== after.dashboardLayoutSignature) {
+    errors.push('Personalised dashboard layout data changed during deployment.')
+  }
   if (before.courseDeploymentSignature !== after.courseDeploymentSignature) {
     errors.push('Course deployment visibility mapping changed during deployment.')
   }
@@ -283,7 +308,7 @@ async function snapshot(args) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true })
   fs.writeFileSync(outPath, JSON.stringify({ portalUrl, summary }, null, 2))
   console.log(`Continuity snapshot saved: ${outPath}`)
-  console.log(`Users: ${summary.users.length}; tests: ${summary.tests.length}; sessions: ${summary.sessions.length}; analytics events: ${summary.analyticsPreservationIds.length}; audit events: ${summary.auditPreservationIds.length}; problem reports: ${summary.problemReportIds.length}; training sources: ${summary.questionBankTrainingSourceIds.length}; course images: ${summary.courseImageIds.length}`)
+  console.log(`Users: ${summary.users.length}; tests: ${summary.tests.length}; sessions: ${summary.sessions.length}; analytics events: ${summary.analyticsPreservationIds.length}; audit events: ${summary.auditPreservationIds.length}; problem reports: ${summary.problemReportIds.length}; bug audit logs: ${(summary.bugAuditLogIds || []).length}; contribution records: ${(summary.contributionPointIds || []).length}; dashboard layouts: ${summary.dashboardLayoutUserIds.length}; training sources: ${summary.questionBankTrainingSourceIds.length}; course images: ${summary.courseImageIds.length}`)
 }
 
 async function verify(args) {

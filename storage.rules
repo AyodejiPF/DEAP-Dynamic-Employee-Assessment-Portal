@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Firebase Storage files are written and read through Cloud Functions using
+// the Admin SDK and short-lived signed URLs. Direct client access is denied.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
