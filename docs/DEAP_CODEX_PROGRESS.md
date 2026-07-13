@@ -12,7 +12,7 @@
 | **Live URL** | https://training-assessment-1c8ef.web.app |
 | **Firebase Project ID** | `iicocece-assessment` |
 | **Firebase Site** | `training-assessment-1c8ef` |
-| **Repository** | No remote configured (see `docs/GITHUB_SETUP.md`) |
+| **Repository** | https://github.com/AyodejiPF/DEAP-Dynamic-Employee-Assessment-Portal |
 | **Tech Stack** | React 19 + TypeScript 6 + Vite 8 + Firebase (Hosting, Functions, Firestore, Storage) |
 | **Current Version** | 1.0.0 |
 | **Last Updated** | 2026-07-13 |
@@ -75,7 +75,7 @@ These accounts are created dynamically by `scripts/smoke.cjs` during test runs a
 
 | Priority | Task | Notes |
 |----------|------|-------|
-| 🔴 High | Set up GitHub remote repository | See `docs/GITHUB_SETUP.md` for instructions |
+| ~~🔴 High~~ | ~~Set up GitHub remote repository~~ | ✅ Done — https://github.com/AyodejiPF/DEAP-Dynamic-Employee-Assessment-Portal |
 | 🟡 Medium | Implement recommendations from DEAP_25_RECOMMENDATIONS_2026.md | Prioritise Security, Simplicity, and CEO Dashboard first |
 | 🟡 Medium | Replace demo credentials with Firebase Authentication | Security risk to keep testadmin/testuser in production |
 | 🟡 Medium | Split App.tsx into feature-based modules | Single 3000+ line file is hard to maintain |
