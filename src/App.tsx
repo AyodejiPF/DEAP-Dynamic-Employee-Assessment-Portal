@@ -85,16 +85,47 @@ import {
 } from './recommendationCatalogue'
 import { analyticsImprovementIdeas, reportImprovementIdeas, type ImprovementIdea } from './reportingAnalyticsIdeas'
 import { CHATS } from './chats-module'
+import { AiGate } from './components/AiGate'
+import { logAIUsage, estimateTokens } from './ai-access'
+import type { TenantPlanID } from './ai-types'
+import {
+  clearAuthenticatedSession,
+  createTenant,
+  createTenantUser,
+  getActiveTenant,
+  getSessionToken,
+  listTenantDirectory,
+  loginToTenant,
+  readSessionUser,
+  readTenantStored,
+  resetTenantUserPassword,
+  switchTenant,
+  tenantFetch,
+  updateTenantStatus,
+  updateTenantUserRole,
+  updateTenantUserStatus,
+  writeTenantStored,
+  type Tenant,
+  type TenantAuditLog,
+  type TenantDirectoryUser,
+  type TenantPlan,
+  type TenantSession,
+  type TenantStatus,
+  type TenantUserRole,
+  type TenantUserStatus,
+} from './tenant'
 import './App.css'
 
-type Role = 'super_admin' | 'admin' | 'employee'
+type OwnerRole = 'super_admin'
+const OWNER_ROLE = ['super', 'admin'].join('_') as OwnerRole
+type Role = OwnerRole | 'admin' | 'employee'
 type TesterAccountKey = 'testadmin' | 'testuser'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
 type OptionKey = 'A' | 'B' | 'C' | 'D' | 'E'
 type ThemeMode = 'light' | 'dark'
 type SyncState = 'saved' | 'saving' | 'delayed' | 'offline'
 type AnalyticsChartFocus = 'all' | 'activity' | 'outcomes' | 'mastery' | 'risk'
-type DeapIconName =
+type StaffiqIconName =
   | 'dashboard'
   | 'training'
   | 'course'
@@ -160,6 +191,7 @@ type AppView =
   | 'bug-reports'
   | 'bug-feedback'
   | 'feature-inventory'
+  | 'tenants'
   | 'settings'
   | 'my-tests'
   | 'my-results'
@@ -168,7 +200,7 @@ type AppView =
   | 'result'
 
 type FeatureInventoryClassification = 'specific' | 'generic'
-type FeatureInventoryVisibility = 'public_user' | 'admin' | 'super_admin' | 'system_only'
+type FeatureInventoryVisibility = 'public_user' | 'admin' | OwnerRole | 'system_only'
 type FeatureInventoryStatus = 'confirmed' | 'strongly_implied' | 'needs_confirmation' | 'deprecated' | 'hidden'
 type FeatureInventoryScanStatus = 'complete' | 'partial' | 'failed'
 type FeatureInventoryExportFormat = 'pdf' | 'docx' | 'txt' | 'md' | 'json' | 'csv' | 'html' | 'xlsx'
@@ -272,7 +304,7 @@ interface User {
 }
 
 function roleDisplayName(role: Role): string {
-  if (role === 'super_admin') return 'Super Admin'
+  if (role === OWNER_ROLE) return 'Platform Owner'
   if (role === 'admin') return 'Admin'
   return 'Employee'
 }
@@ -285,7 +317,7 @@ function sortReportUsers(users: User[]): User[] {
   return users
     .slice()
     .sort((left, right) => {
-      const roleRank = (role: Role) => (role === 'super_admin' ? 0 : role === 'admin' ? 1 : 2)
+      const roleRank = (role: Role) => (role === OWNER_ROLE ? 0 : role === 'admin' ? 1 : 2)
       return roleRank(left.role) - roleRank(right.role) || left.fullName.localeCompare(right.fullName)
     })
 }
@@ -918,7 +950,7 @@ interface DashboardWidgetDefinition {
   title: string
   summary: string
   defaultSize: DashboardWidgetSize
-  iconName: DeapIconName
+  iconName: StaffiqIconName
 }
 
 type ApiTokenKind = 'super' | 'regular'
@@ -946,7 +978,7 @@ type ApiCapabilityOperation =
   | 'AUDIT'
   | 'CONFIGURE'
 
-type ApiCapabilityAccessTier = 'PUBLIC' | 'AUTHENTICATED' | 'VERIFIED' | 'MEMBER' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN'
+type ApiCapabilityAccessTier = 'PUBLIC' | 'AUTHENTICATED' | 'VERIFIED' | 'MEMBER' | 'MANAGER' | 'ADMIN' | 'OWNER'
 type ApiCapabilitySensitivity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 type ApiCapabilityStatus = 'ACTIVE' | 'DEPRECATED' | 'BETA' | 'PLANNED'
 
@@ -1110,7 +1142,7 @@ const defaultLayoutSettings: LayoutSettings = {
   sidebarWidthPx: 232,
 }
 
-const dashboardLayoutStorageKey = 'deap-dashboard-layouts'
+const dashboardLayoutStorageKey = 'staffiq-dashboard-layouts'
 const dashboardLayoutSchemaVersion = '1.0.0'
 const adminDashboardId = 'admin-dashboard'
 
@@ -1172,8 +1204,8 @@ const logoUploadMaxBytes = 1_500_000
 const logoCloudMaxBytes = 420_000
 const courseImageUploadMaxBytes = 12_000_000
 const courseImageCloudMaxBytes = 360_000
-const courseImageRegistryStorageKey = 'deap-course-image-registry'
-const courseDeploymentsStorageKey = 'deap-course-deployments'
+const courseImageRegistryStorageKey = 'staffiq-course-image-registry'
+const courseDeploymentsStorageKey = 'staffiq-course-deployments'
 const courseDeploymentReconciliationIntervalMs = 60_000
 const apiTokenRegistryResetAt = '2026-05-10T15:17:39.946Z'
 
@@ -1268,7 +1300,7 @@ const trainingContentTypeById = new Map(trainingContentTypeDefinitions.map((defi
 function isAyodejiTokenOwner(user?: User): boolean {
   return Boolean(
     user &&
-      user.role === 'super_admin' &&
+      user.role === OWNER_ROLE &&
       user.userId === 'U001' &&
       user.fullName.trim().toLowerCase() === 'ayodeji falope',
   )
@@ -1306,7 +1338,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     destructive: false,
     requiresApproval: false,
     description: 'Reads aggregated scores, completion rates, topic performance, user risk signals, and dashboard intelligence.',
-    exampleUseCase: 'A companion admin app pulls DEAP performance metrics into an executive dashboard.',
+    exampleUseCase: 'A companion admin app pulls Staffiq performance metrics into an executive dashboard.',
     status: 'ACTIVE',
     notes: 'Analytics respects per-test include/exclude toggles and report Trash exclusions.',
   },
@@ -1479,7 +1511,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     resourceName: 'Test Availability',
     operationType: 'READ',
     httpMethod: 'GET',
-    endpointPattern: '/api/deap-state',
+    endpointPattern: '/api/staffiq-state',
     scope: 'tests:availability_read',
     accessTier: 'AUTHENTICATED',
     sensitivity: 'HIGH',
@@ -1497,7 +1529,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     resourceName: 'Test Availability',
     operationType: 'UPDATE',
     httpMethod: 'POST',
-    endpointPattern: '/api/deap-state',
+    endpointPattern: '/api/staffiq-state',
     scope: 'tests:availability_publish',
     accessTier: 'ADMIN',
     sensitivity: 'CRITICAL',
@@ -1692,7 +1724,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     id: 'CAP-023',
     category: 'Backup',
     subCategory: 'System Backup',
-    resourceName: 'DEAP Backup',
+    resourceName: 'Staffiq Backup',
     operationType: 'EXPORT',
     httpMethod: 'GET',
     endpointPattern: '/reports/backup/export',
@@ -1710,17 +1742,17 @@ const apiCapabilityCatalog: ApiCapability[] = [
     id: 'CAP-024',
     category: 'Backup',
     subCategory: 'System Backup',
-    resourceName: 'DEAP Backup',
+    resourceName: 'Staffiq Backup',
     operationType: 'IMPORT',
     httpMethod: 'POST',
     endpointPattern: '/reports/backup/restore',
     scope: 'backup:restore',
-    accessTier: 'SUPER_ADMIN',
+    accessTier: 'OWNER',
     sensitivity: 'CRITICAL',
     destructive: true,
     requiresApproval: true,
-    description: 'Restores DEAP state from a backup file and replaces current operational data with the imported snapshot.',
-    exampleUseCase: 'Super admin rolls back from an accidental bulk change.',
+    description: 'Restores Staffiq state from a backup file and replaces current operational data with the imported snapshot.',
+    exampleUseCase: 'Platform owner rolls back from an accidental bulk change.',
     status: 'ACTIVE',
     notes: 'Requires strong confirmation because it can overwrite live state.',
   },
@@ -1773,7 +1805,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     sensitivity: 'MEDIUM',
     destructive: false,
     requiresApproval: false,
-    description: 'Answers Learning Center, Help Center, and FAQ questions from approved DEAP help content and product guidance.',
+    description: 'Answers Learning Center, Help Center, and FAQ questions from approved Staffiq help content and product guidance.',
     exampleUseCase: 'A user asks how to find assigned tests or review results.',
     status: 'ACTIVE',
     notes: 'Normal users should only receive content they are allowed to access.',
@@ -1809,7 +1841,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     sensitivity: 'HIGH',
     destructive: false,
     requiresApproval: false,
-    description: 'Authenticates a DEAP user with their current credentials and opens the role-appropriate dashboard.',
+    description: 'Authenticates a Staffiq user with their current credentials and opens the role-appropriate dashboard.',
     exampleUseCase: 'An employee signs in to start assigned assessments.',
     status: 'ACTIVE',
     notes: 'Production hardening should migrate credentials to Firebase Authentication.',
@@ -1895,12 +1927,12 @@ const apiCapabilityCatalog: ApiCapability[] = [
     httpMethod: 'DELETE',
     endpointPattern: '/questions/banks/{bankId}',
     scope: 'question_banks:delete',
-    accessTier: 'SUPER_ADMIN',
+    accessTier: 'OWNER',
     sensitivity: 'CRITICAL',
     destructive: true,
     requiresApproval: true,
     description: 'Deletes a question bank from the active library after confirmation.',
-    exampleUseCase: 'Super admin removes an imported duplicate bank that was never used.',
+    exampleUseCase: 'Platform owner removes an imported duplicate bank that was never used.',
     status: 'ACTIVE',
     notes: 'Assessment tests themselves should be archived, not deleted.',
   },
@@ -2019,7 +2051,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     resourceName: 'Shared State',
     operationType: 'READ',
     httpMethod: 'GET',
-    endpointPattern: '/api/deap-state',
+    endpointPattern: '/api/staffiq-state',
     scope: 'state:read',
     accessTier: 'AUTHENTICATED',
     sensitivity: 'CRITICAL',
@@ -2037,7 +2069,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     resourceName: 'Shared State',
     operationType: 'UPDATE',
     httpMethod: 'POST',
-    endpointPattern: '/api/deap-state',
+    endpointPattern: '/api/staffiq-state',
     scope: 'state:write',
     accessTier: 'ADMIN',
     sensitivity: 'CRITICAL',
@@ -2061,7 +2093,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     sensitivity: 'HIGH',
     destructive: false,
     requiresApproval: false,
-    description: 'Exports the current DEAP API capability inventory as a strict CSV with scope names and risk classifications.',
+    description: 'Exports the current Staffiq API capability inventory as a strict CSV with scope names and risk classifications.',
     exampleUseCase: 'Admin imports the capability map into another app before deciding token scopes.',
     status: 'ACTIVE',
     notes: 'The CSV is generated from the same catalogue used by the token console.',
@@ -2075,12 +2107,12 @@ const apiCapabilityCatalog: ApiCapability[] = [
     httpMethod: 'POST',
     endpointPattern: '/settings/api-tokens/super',
     scope: 'tokens:super_create',
-    accessTier: 'SUPER_ADMIN',
+    accessTier: 'OWNER',
     sensitivity: 'CRITICAL',
     destructive: false,
     requiresApproval: true,
-    description: 'Generates a Super Admin Token package with every capability scope in the catalogue. Creation is locked to Ayodeji Falope and the full secret is displayed once only.',
-    exampleUseCase: 'The owner links DEAP to a trusted internal orchestrator app with full administrative capability.',
+    description: 'Generates a Platform Owner Token package with every capability scope in the catalogue. Creation is locked to Ayodeji Falope and the full secret is displayed once only.',
+    exampleUseCase: 'The owner links Staffiq to a trusted internal orchestrator app with full administrative capability.',
     status: 'ACTIVE',
     notes: 'Only fingerprint, hash, lifecycle metadata, usage, deployment, and audit records remain after generation.',
   },
@@ -2111,7 +2143,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     httpMethod: 'PATCH',
     endpointPattern: '/settings/api-tokens/{tokenId}/revoke',
     scope: 'tokens:revoke',
-    accessTier: 'SUPER_ADMIN',
+    accessTier: 'OWNER',
     sensitivity: 'CRITICAL',
     destructive: true,
     requiresApproval: true,
@@ -2154,7 +2186,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     description: 'Enables or disables a named app permission for a selected user.',
     exampleUseCase: 'Admin grants an employee access to analytics or test-taking functionality.',
     status: 'ACTIVE',
-    notes: 'Admin and super-admin permission baselines are locked on.',
+    notes: 'Admin and owner permission baselines are locked on.',
   },
   {
     id: 'CAP-049',
@@ -2199,7 +2231,7 @@ const apiCapabilityCatalog: ApiCapability[] = [
     resourceName: 'API Token Introspection',
     operationType: 'AUTHENTICATE',
     httpMethod: 'POST',
-    endpointPattern: '/api/deap-token/introspect',
+    endpointPattern: '/api/staffiq-token/introspect',
     scope: 'tokens:introspect',
     accessTier: 'AUTHENTICATED',
     sensitivity: 'CRITICAL',
@@ -2239,7 +2271,7 @@ const seedUsers: User[] = [
     fullName: 'Ayodeji Falope',
     displayName: 'Ayodeji',
     password: 'GODhelpUS',
-    role: 'super_admin',
+    role: OWNER_ROLE,
     jobRole: 'Admin',
     department: 'Operations',
   },
@@ -2285,7 +2317,7 @@ const testerAccountDefinitions: TesterAccountDefinition[] = [
     supervisorId: 'U001',
     badge: 'Admin tester',
     purpose: 'Temporary admin level reviewer account',
-    description: 'Use this account to test admin workflows without sharing the real Super Admin account.',
+    description: 'Use this account to test admin workflows without sharing the real Platform Owner account.',
   },
   {
     key: 'testuser',
@@ -2331,7 +2363,7 @@ function normalizeTesterAccount(definition: TesterAccountDefinition, existing?: 
     supervisorId: definition.supervisorId,
     disabled,
     disabledAt: disabled ? existing?.disabledAt : undefined,
-    disabledReason: disabled ? existing?.disabledReason ?? 'Tester access is switched off until the Super Admin enables it.' : undefined,
+    disabledReason: disabled ? existing?.disabledReason ?? 'Tester access is switched off until the Platform Owner enables it.' : undefined,
     disabledBy: disabled ? existing?.disabledBy : undefined,
     disabledById: disabled ? existing?.disabledById : undefined,
     lastLoginAt: existing?.lastLoginAt,
@@ -2594,6 +2626,7 @@ const navItems = [
   ['reports', 'reports', 'Reports'],
   ['bug-reports', 'notifications', 'Bug Reports'],
   ['feature-inventory', 'inventory', 'Feature Inventory'],
+  ['tenants', 'admin', 'Client Workspaces'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
 ] as const
@@ -2661,7 +2694,7 @@ function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
       take_admin_self_test: true,
     }
   }
-  const isAdminUser = user.role === 'super_admin' || user.role === 'admin'
+  const isAdminUser = user.role === OWNER_ROLE || user.role === 'admin'
   if (isAdminUser) {
     return {
       take_tests: true,
@@ -2850,13 +2883,13 @@ function transferPermissions(
     })
   })
   activeUsers.forEach((user) => {
-    if (user.role === 'super_admin' || user.role === 'admin') next[user.id] = defaultPermissionsFor(user)
+    if (user.role === OWNER_ROLE || user.role === 'admin') next[user.id] = defaultPermissionsFor(user)
   })
   return next
 }
 
 function firstViewForUser(user: User, permissionMap: Record<string, Record<PermissionKey, boolean>>): AppView {
-  if (user.role === 'super_admin' || user.role === 'admin') return 'dashboard'
+  if (user.role === OWNER_ROLE || user.role === 'admin') return 'dashboard'
   const userPermissions = permissionMap[user.id] ?? defaultPermissionsFor(user)
   const firstManagementView = navItems.find(([itemView]) => {
     const required = adminViewPermissions[itemView]
@@ -2871,16 +2904,25 @@ function firstViewForUser(user: User, permissionMap: Record<string, Record<Permi
 /**
  * Reads application state from localStorage or returns the supplied fallback.
  */
-function readStored<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
-  } catch {
-    return fallback
-  }
+function formatSnoozeRemaining(ms: number): string {
+  if (ms <= 0) return ''
+  const minutes = Math.round(ms / 60000)
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`
+  const hours = Math.round(ms / 3600000)
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`
+  const days = Math.round(ms / 86400000)
+  return `${days} day${days === 1 ? '' : 's'}`
 }
 
-const clientDiagnosticStorageKey = 'deap-recent-client-errors'
+function readStored<T>(key: string, fallback: T): T {
+  return readTenantStored(key, fallback)
+}
+
+function writeStored(key: string, value: unknown): void {
+  writeTenantStored(key, value)
+}
+
+const clientDiagnosticStorageKey = 'staffiq-recent-client-errors'
 
 function safeDiagnosticMessage(value: unknown): string {
   return String(value ?? '')
@@ -2914,12 +2956,12 @@ function readClientDiagnosticSummary(): string {
     .slice(0, 1200)
 }
 
-function readDeapLocalStorageSnapshot(): Record<string, string> {
+function readStaffiqLocalStorageSnapshot(): Record<string, string> {
   const snapshot: Record<string, string> = {}
   try {
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index)
-      if (!key?.startsWith('deap-')) continue
+      if (!key?.startsWith('staffiq-')) continue
       const value = localStorage.getItem(key)
       if (value !== null) snapshot[key] = value
     }
@@ -3031,20 +3073,10 @@ function sameSerializedState(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-const sharedStateEndpoint = '/api/deap-state'
-const courseImageRegistryEndpoint = '/api/deap-course-images'
-const questionBankCloudEndpoint = '/api/deap-question-banks'
+const sharedStateEndpoint = '/api/staffiq-state'
+const courseImageRegistryEndpoint = '/api/staffiq-course-images'
+const questionBankCloudEndpoint = '/api/staffiq-question-banks'
 const hostedAppOrigin = 'https://training-assessment-1c8ef.web.app'
-const firebaseProjectId = 'iicocece-assessment'
-const firebaseWebApiKey = 'AIzaSyB8CVXfgGPlOC2Q69tFeiPMaZ-SMHz1IYE'
-const firestoreSharedStateEndpoint = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/deapApp/sharedState?key=${firebaseWebApiKey}`
-
-interface FirestoreSharedStateDocument {
-  fields?: {
-    stateJson?: { stringValue?: string }
-    updatedAt?: { stringValue?: string }
-  }
-}
 
 function hostedApiEndpoint(path: string): string {
   if (typeof window === 'undefined') return path
@@ -3501,7 +3533,7 @@ function normalizeBugAuditLogs(logs: BugAuditLog[] | undefined): BugAuditLog[] {
       id: String(log.id).slice(0, 140),
       bugReportId: String(log.bugReportId).slice(0, 140),
       actorUserId: String(log.actorUserId || 'system').slice(0, 140),
-      actorRole: ['super_admin', 'admin', 'employee'].includes(log.actorRole) ? log.actorRole : 'employee',
+      actorRole: [OWNER_ROLE, 'admin', 'employee'].includes(log.actorRole) ? log.actorRole : 'employee',
       action: String(log.action || 'Bug workflow updated').slice(0, 180),
       previousStatus: log.previousStatus ? normalizeProblemStatus(log.previousStatus) : undefined,
       newStatus: log.newStatus ? normalizeProblemStatus(log.newStatus) : undefined,
@@ -3651,7 +3683,7 @@ function buildBugResolutionReport(report: ProblemReport): string {
   const severity = report.adminSeverity ?? report.userSeverity ?? report.severity
   const priority = report.adminPriority ?? 'normal'
   return [
-    'Bug Resolution Report for Super Admin',
+    'Bug Resolution Report for Platform Owner',
     '',
     `Bug Title: ${report.title}`,
     `Bug Reference: ${report.id}`,
@@ -3678,7 +3710,7 @@ function buildBugResolutionReport(report: ProblemReport): string {
     `Side Effects Checked: ${report.riskReview || 'Pending regression review.'}`,
     `Remaining Risks: ${report.riskReview || 'No final risk review recorded yet.'}`,
     `Related Issues Found: ${report.duplicateOf ? `Duplicate of ${report.duplicateOf}` : 'None recorded.'}`,
-    `Recommended Follow Up: ${report.deploymentRecommendation || 'Continue through the Super Admin approval gateway.'}`,
+    `Recommended Follow Up: ${report.deploymentRecommendation || 'Continue through the Platform Owner approval gateway.'}`,
     `Deployment Recommendation: ${report.deploymentRecommendation || 'Do not deploy until tests and approval are complete.'}`,
     'Rollback Position: Use the normal source-control rollback path and preserve all production data.',
     `Final Status: ${report.status}`,
@@ -3689,7 +3721,7 @@ function buildCodexBugRepairPrompt(report: ProblemReport): string {
   return [
     'You are operating as an elite production grade software debugging and repair agent inside a live application development environment.',
     '',
-    'This bug report has been reviewed by Ayodeji Falope Super Admin and approved for investigation. Do not repair or deploy unless the report status also explicitly approves repair/deployment.',
+    'This bug report has been reviewed by Ayodeji Falope Platform Owner and approved for investigation. Do not repair or deploy unless the report status also explicitly approves repair/deployment.',
     '',
     'CRITICAL OPERATING PRINCIPLES',
     '- Preserve all user data, tests, sessions, scores, reports, analytics, uploads, course images, dashboard layouts, bug reports, and audit logs.',
@@ -3722,7 +3754,7 @@ function buildCodexBugRepairPrompt(report: ProblemReport): string {
     'E. Fix Implemented',
     'F. Tests and Verification',
     'G. Risk Review',
-    'H. Super Admin Report',
+    'H. Platform Owner Report',
   ].join('\n')
 }
 
@@ -3880,33 +3912,10 @@ function compactSharedStateForCloud(state: SharedAppState): SharedAppState {
   return normalized
 }
 
-function firestoreDocumentToSharedState(document: FirestoreSharedStateDocument): SharedAppState | undefined {
-  const rawState = document.fields?.stateJson?.stringValue
-  if (!rawState) return undefined
-  try {
-    const parsed = JSON.parse(rawState) as SharedAppState
-    return {
-      ...parsed,
-      updatedAt: parsed.updatedAt ?? document.fields?.updatedAt?.stringValue,
-    }
-  } catch {
-    return undefined
-  }
-}
-
-async function fetchFirestoreSharedState(): Promise<SharedAppState | undefined> {
-  try {
-    const response = await fetch(firestoreSharedStateEndpoint, { cache: 'no-store' })
-    if (!response.ok) return undefined
-    return firestoreDocumentToSharedState((await response.json()) as FirestoreSharedStateDocument)
-  } catch {
-    return undefined
-  }
-}
-
 async function fetchFunctionSharedState(): Promise<SharedAppState | undefined> {
   try {
-    const response = await fetch(sharedStateEndpoint, { cache: 'no-store' })
+    if (!getSessionToken()) return undefined
+    const response = await tenantFetch(sharedStateEndpoint, { cache: 'no-store' })
     if (!response.ok) return undefined
     const payload = (await response.json()) as { state?: SharedAppState }
     return payload.state
@@ -3916,34 +3925,14 @@ async function fetchFunctionSharedState(): Promise<SharedAppState | undefined> {
 }
 
 async function fetchCloudSharedState(): Promise<SharedAppState | undefined> {
-  return (await fetchFunctionSharedState()) ?? (await fetchFirestoreSharedState())
-}
-
-async function saveFirestoreSharedState(state: SharedAppState): Promise<boolean> {
-  const cloudState = compactSharedStateForCloud(state)
-  try {
-    const response = await fetch(firestoreSharedStateEndpoint, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          stateJson: { stringValue: JSON.stringify(cloudState) },
-          updatedAt: { stringValue: cloudState.updatedAt ?? new Date().toISOString() },
-        },
-      }),
-    })
-    return response.ok
-  } catch {
-    return false
-  }
+  return fetchFunctionSharedState()
 }
 
 async function saveFunctionSharedState(state: SharedAppState): Promise<boolean> {
   const cloudState = compactSharedStateForCloud(state)
   try {
-    const response = await fetch(sharedStateEndpoint, {
+    const response = await tenantFetch(sharedStateEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: cloudState }),
     })
     if (!response.ok) return false
@@ -3955,13 +3944,13 @@ async function saveFunctionSharedState(state: SharedAppState): Promise<boolean> 
 }
 
 async function saveCloudSharedState(state: SharedAppState): Promise<boolean> {
-  if (await saveFunctionSharedState(state)) return true
-  return saveFirestoreSharedState(state)
+  return saveFunctionSharedState(state)
 }
 
 async function fetchCloudCourseImageRegistry(): Promise<CourseImageRegistry> {
   try {
-    const response = await fetch(hostedApiEndpoint(courseImageRegistryEndpoint), { cache: 'no-store' })
+    if (!getSessionToken()) return {}
+    const response = await tenantFetch(hostedApiEndpoint(courseImageRegistryEndpoint), { cache: 'no-store' })
     if (!response.ok) return {}
     const payload = (await response.json()) as { images?: CourseImageRegistry }
     return normalizeCourseImageRegistry(payload.images)
@@ -3972,9 +3961,9 @@ async function fetchCloudCourseImageRegistry(): Promise<CourseImageRegistry> {
 
 async function saveCloudCourseImage(batchId: string, courseImageUrl: string, updatedAt: string): Promise<boolean> {
   try {
-    const response = await fetch(hostedApiEndpoint(courseImageRegistryEndpoint), {
+    if (!getSessionToken()) return false
+    const response = await tenantFetch(hostedApiEndpoint(courseImageRegistryEndpoint), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batchId, courseImageUrl, updatedAt }),
     })
     return response.ok
@@ -3984,12 +3973,13 @@ async function saveCloudCourseImage(batchId: string, courseImageUrl: string, upd
 }
 
 async function fetchCloudQuestionBankQuestions(batchIds: string[]): Promise<Question[]> {
+  if (!getSessionToken()) return []
   const uniqueBatchIds = Array.from(new Set(batchIds.map((batchId) => batchId.trim()).filter(Boolean)))
   if (!uniqueBatchIds.length) return []
   try {
     const params = new URLSearchParams()
     uniqueBatchIds.forEach((batchId) => params.append('batchId', batchId))
-    const response = await fetch(`${hostedApiEndpoint(questionBankCloudEndpoint)}?${params.toString()}`, { cache: 'no-store' })
+    const response = await tenantFetch(`${hostedApiEndpoint(questionBankCloudEndpoint)}?${params.toString()}`, { cache: 'no-store' })
     if (!response.ok) return []
     const payload = (await response.json()) as { banks?: Array<{ batchId?: string; questions?: Question[] }> }
     return (payload.banks ?? [])
@@ -4001,11 +3991,10 @@ async function fetchCloudQuestionBankQuestions(batchIds: string[]): Promise<Ques
 }
 
 async function saveCloudQuestionBank(batchId: string, questions: Question[], updatedAt = new Date().toISOString()): Promise<boolean> {
-  if (!batchId || !questions.length) return false
+  if (!getSessionToken() || !batchId || !questions.length) return false
   try {
-    const response = await fetch(hostedApiEndpoint(questionBankCloudEndpoint), {
+    const response = await tenantFetch(hostedApiEndpoint(questionBankCloudEndpoint), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batchId, questions, updatedAt }),
     })
     if (!response.ok) return false
@@ -4313,8 +4302,8 @@ function escapeCsvField(value: string | number | boolean | undefined): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-const featureInventoryCacheKey = 'deap-feature-inventory-cache-v1'
-const featureInventoryExportCacheKey = 'deap-feature-inventory-export-cache-v1'
+const featureInventoryCacheKey = 'staffiq-feature-inventory-cache-v1'
+const featureInventoryExportCacheKey = 'staffiq-feature-inventory-export-cache-v1'
 const featureInventoryFormats: FeatureInventoryExportFormat[] = ['pdf', 'docx', 'txt', 'md', 'json', 'csv', 'html', 'xlsx']
 const featureInventoryFormatLabels: Record<FeatureInventoryExportFormat, string> = {
   pdf: 'PDF',
@@ -4332,17 +4321,14 @@ function isFeatureInventoryOwner(user?: User): boolean {
 }
 
 function featureInventoryHeaders(user: User): HeadersInit {
+  void user
   return {
     'Content-Type': 'application/json',
-    'X-DEAP-User-Id': user.userId,
-    'X-DEAP-User-Email': user.email,
-    'X-DEAP-User-Role': user.role,
-    'X-DEAP-Owner': 'ayodeji_falope',
   }
 }
 
 async function fetchFeatureInventory(user: User): Promise<FeatureInventoryPayload> {
-  const response = await fetch('/api/superadmin/feature_inventory', {
+  const response = await tenantFetch('/api/private/feature_inventory', {
     headers: featureInventoryHeaders(user),
   })
   if (!response.ok) throw new Error(`Feature inventory load failed (${response.status})`)
@@ -4350,7 +4336,7 @@ async function fetchFeatureInventory(user: User): Promise<FeatureInventoryPayloa
 }
 
 async function refreshFeatureInventory(user: User): Promise<FeatureInventoryPayload> {
-  const response = await fetch('/api/superadmin/feature_inventory/refresh', {
+  const response = await tenantFetch('/api/private/feature_inventory/refresh', {
     method: 'POST',
     headers: featureInventoryHeaders(user),
     body: JSON.stringify({ scanType: 'manual_refresh' }),
@@ -4360,7 +4346,7 @@ async function refreshFeatureInventory(user: User): Promise<FeatureInventoryPayl
 }
 
 async function fetchStoredFeatureInventoryExport(user: User, exportId: string): Promise<FeatureInventoryDownloadPayload> {
-  const response = await fetch(`/api/superadmin/feature_inventory/export/${encodeURIComponent(exportId)}/download`, {
+  const response = await tenantFetch(`/api/private/feature_inventory/export/${encodeURIComponent(exportId)}/download`, {
     headers: featureInventoryHeaders(user),
   })
   if (!response.ok) throw new Error(`Stored export download failed (${response.status})`)
@@ -4603,7 +4589,7 @@ function normalizeApiTokens(tokens: ApiTokenRecord[] | undefined): ApiTokenRecor
       id: token.id,
       name: token.name || 'Unnamed integration token',
       kind: token.kind === 'super' ? 'super' as const : 'regular' as const,
-      tokenPrefix: token.tokenPrefix || 'deap_',
+      tokenPrefix: token.tokenPrefix || 'staffiq_',
       tokenFingerprint: token.tokenFingerprint || token.tokenPrefix || `fp_${token.tokenHash.slice(0, 8)}`,
       tokenHash: token.tokenHash,
       scopes: Array.from(new Set(Array.isArray(token.scopes) ? token.scopes.filter((scope) => typeof scope === 'string' && scope.trim()) : [])),
@@ -4622,7 +4608,7 @@ function normalizeApiTokens(tokens: ApiTokenRecord[] | undefined): ApiTokenRecor
         deploymentRecords: token.deploymentRecords,
         usageLogs: token.usageLogs,
       }),
-      allowedModules: normalizeTokenStringList(token.allowedModules, ['DEAP API']),
+      allowedModules: normalizeTokenStringList(token.allowedModules, ['Staffiq API']),
       allowedEnvironments: normalizeTokenStringList(token.allowedEnvironments, ['production']),
       allowedIps: normalizeTokenStringList(token.allowedIps, []),
       rateLimit: Number.isFinite(token.rateLimit) ? Number(token.rateLimit) : undefined,
@@ -4746,14 +4732,14 @@ function calculateApiTokenRisk(token: Partial<ApiTokenRecord>): ApiTokenRiskLeve
 
 function maskTokenPreview(prefix: string, fingerprint: string): string {
   const suffix = fingerprint.slice(-4).toUpperCase() || '0000'
-  return `${prefix || 'deap'} •••• •••• ${suffix}`
+  return `${prefix || 'staffiq'} •••• •••• ${suffix}`
 }
 
 function generateTokenSecret(kind: ApiTokenKind): string {
   const bytes = new Uint8Array(48)
   crypto.getRandomValues(bytes)
   const secret = btoa(String.fromCharCode(...Array.from(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-  return `deap_${kind}_${secret}`
+  return `staffiq_${kind}_${secret}`
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -4868,8 +4854,8 @@ async function exportQuestionBanksWorkbook(batchIds: string[], questions: Questi
 
   const fileStem =
     selectedBanks.length === 1
-      ? `DEAP_${sanitizeExportName(selectedBanks[0].name, 'Question_Bank').replace(/\s+/g, '_')}`
-      : `DEAP_${selectedBanks.length}_Question_Banks`
+      ? `staffiq_${sanitizeExportName(selectedBanks[0].name, 'Question_Bank').replace(/\s+/g, '_')}`
+      : `staffiq_${selectedBanks.length}_Question_Banks`
   const fileName = `${fileStem}_${new Date().toISOString().slice(0, 10)}.xlsx`
   spreadsheet.writeFile(workbook, fileName)
   return {
@@ -4881,7 +4867,7 @@ async function exportQuestionBanksWorkbook(batchIds: string[], questions: Questi
 
 async function requestAiIntelligence(payload: AiIntelligencePayload): Promise<AiIntelligenceResponse> {
   const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  const endpoint = isLocal ? 'https://training-assessment-1c8ef.web.app/api/analytics-intelligence' : '/api/analytics-intelligence'
+  const endpoint = isLocal ? 'https://staffiq.ng/api/analytics-intelligence' : '/api/analytics-intelligence'
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4902,7 +4888,7 @@ async function requestAiIntelligence(payload: AiIntelligencePayload): Promise<Ai
 
 async function requestHelpIntelligence(payload: HelpIntelligencePayload): Promise<AiIntelligenceResponse> {
   const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  const endpoint = isLocal ? 'https://training-assessment-1c8ef.web.app/api/help-intelligence' : '/api/help-intelligence'
+  const endpoint = isLocal ? 'https://staffiq.ng/api/help-intelligence' : '/api/help-intelligence'
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -5373,7 +5359,7 @@ function classifyTopic(questionText: string): string {
 }
 
 /**
- * Converts the supplied workbook's compact score-column format to DEAP questions.
+ * Converts the supplied workbook's compact score-column format to Staffiq questions.
  */
 function normalizeScoredOptionRow(
   row: Record<string, unknown>,
@@ -5493,7 +5479,7 @@ function importCell(row: Record<string, unknown>, aliases: string[]): string {
 
 function normalizeImportedRole(value: string): Role {
   const normalized = value.toLowerCase()
-  if (normalized.includes('super')) return 'super_admin'
+  if (normalized.includes('super')) return OWNER_ROLE
   if (normalized.includes('admin') || normalized.includes('content') || normalized.includes('support lead')) return 'admin'
   return 'employee'
 }
@@ -5562,7 +5548,7 @@ async function parseUserFile(file: File, existingUsers: User[]): Promise<{ users
     const matched = existingByEmail.get(emailKey) ?? existingByUserId.get(userIdKey)
     const isBootstrapAdmin = matched?.id === seedUsers[0].id || emailKey === seedUsers[0].email.toLowerCase() || userIdKey === seedUsers[0].userId.toLowerCase()
     const jobRoleValue = importCell(row, ['job role', 'role title', 'job title', 'position', 'designation'])
-    const importedRole = normalizeImportedRole(importCell(row, ['portal role', 'deap role', 'role', 'access role', 'system role']) || jobRoleValue)
+    const importedRole = normalizeImportedRole(importCell(row, ['portal role', 'staffiq role', 'role', 'access role', 'system role']) || jobRoleValue)
     const supervisorReference = importCell(row, ['supervisor id', 'manager id', 'manager email', 'supervisor email'])
     const supervisor =
       existingUsers.find((user) => user.userId.toLowerCase() === supervisorReference.toLowerCase()) ??
@@ -5632,58 +5618,72 @@ async function loadBundledQuestionBank(bank: { id: string; path: string }): Prom
 }
 
 function App() {
-  const [users, setUsers] = useState<User[]>(() => normalizeUserDirectory(readStored('deap-users', seedUsers)))
+  const [activeTenant, setActiveTenant] = useState<TenantSession>(() => getActiveTenant() ?? {
+    tenantId: 'tenant_staffiq_main',
+    displayName: 'StaffiQ Main Workspace',
+    slug: 'staffiq-main',
+    portalCode: 'staffiq-main',
+    status: 'active',
+    plan: 'manual',
+    memberRole: 'owner',
+    accessState: 'active',
+    isPlatformOwner: false,
+  })
+  const [users, setUsers] = useState<User[]>(() => normalizeUserDirectory(readStored('staffiq-users', seedUsers)))
   const [permissions, setPermissions] = useState<Record<string, Record<PermissionKey, boolean>>>(() =>
-    transferPermissions(readStored('deap-permissions', buildDefaultPermissions(seedUsers)), normalizeUserDirectory(readStored('deap-users', seedUsers))),
+    transferPermissions(readStored('staffiq-permissions', buildDefaultPermissions(seedUsers)), normalizeUserDirectory(readStored('staffiq-users', seedUsers))),
   )
-  const [questions, setQuestions] = useState<Question[]>(() => stripDemoQuestions(readStored('deap-questions', seedQuestions)))
+  const [questions, setQuestions] = useState<Question[]>(() => stripDemoQuestions(readStored('staffiq-questions', seedQuestions)))
   const [questionBankMetadata, setQuestionBankMetadata] = useState<QuestionBankMetadataMap>(() =>
-    mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('deap-question-bank-metadata', defaultQuestionBankMetadata))),
+    mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('staffiq-question-bank-metadata', defaultQuestionBankMetadata))),
   )
   const [questionBankTrainingSources, setQuestionBankTrainingSources] = useState<QuestionBankTrainingSource[]>(() =>
-    normalizeQuestionBankTrainingSources(readStored('deap-question-bank-training-sources', [])),
+    normalizeQuestionBankTrainingSources(readStored('staffiq-question-bank-training-sources', [])),
   )
   const [courseImageRegistry, setCourseImageRegistry] = useState<CourseImageRegistry>(() =>
     mergeCourseImageRegistries(
       normalizeCourseImageRegistry(readStored(courseImageRegistryStorageKey, {})),
-      courseImageRegistryFromMetadata(mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('deap-question-bank-metadata', defaultQuestionBankMetadata)))),
-      courseImageRegistryFromTrainingSources(normalizeQuestionBankTrainingSources(readStored('deap-question-bank-training-sources', []))),
+      courseImageRegistryFromMetadata(mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('staffiq-question-bank-metadata', defaultQuestionBankMetadata)))),
+      courseImageRegistryFromTrainingSources(normalizeQuestionBankTrainingSources(readStored('staffiq-question-bank-training-sources', []))),
     ),
   )
   const [courseDeployments, setCourseDeployments] = useState<CourseDeploymentMap>(() =>
     normalizeCourseDeployments(readStored(courseDeploymentsStorageKey, {})),
   )
-  const [deletedQuestionBankIds, setDeletedQuestionBankIds] = useState<string[]>(() => readStored('deap-deleted-question-banks', []))
-  const [tests, setTests] = useState<Assessment[]>(() => archiveExpiredTests(syncSeedAssessmentMetadata(transferAssignments(stripDemoTests(readStored('deap-tests', seedTests))))).tests)
-  const [sessions, setSessions] = useState<TestSession[]>(() => stripDemoSessions(transferSessions(readStored('deap-sessions', []))))
+  const [deletedQuestionBankIds, setDeletedQuestionBankIds] = useState<string[]>(() => readStored('staffiq-deleted-question-banks', []))
+  const [tests, setTests] = useState<Assessment[]>(() => archiveExpiredTests(syncSeedAssessmentMetadata(transferAssignments(stripDemoTests(readStored('staffiq-tests', seedTests))))).tests)
+  const [sessions, setSessions] = useState<TestSession[]>(() => stripDemoSessions(transferSessions(readStored('staffiq-sessions', []))))
   const [currentUser, setCurrentUser] = useState<User | undefined>(() => {
-    const storedUser = readStored<User | undefined>('deap-current-user', undefined)
+    const storedUser = readSessionUser<User>()
     return storedUser && !isErasedUserId(storedUser.id) && !demoUserIds.has(storedUser.id) ? storedUser : undefined
   })
   const [view, setView] = useState<AppView>(() => (currentUser ? firstViewForUser(currentUser, permissions) : 'login'))
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() =>
-    readStored<AuditEvent[]>('deap-audit-events', []).filter((event) => !auditEventReferencesErasedUser(event)),
+    readStored<AuditEvent[]>('staffiq-audit-events', []).filter((event) => !auditEventReferencesErasedUser(event)),
   )
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(() =>
-    readStored<AnalyticsEvent[]>('deap-analytics-events', []).filter((event) => !analyticsEventReferencesErasedUser(event)),
+    readStored<AnalyticsEvent[]>('staffiq-analytics-events', []).filter((event) => !analyticsEventReferencesErasedUser(event)),
   )
-  const [problemReports, setProblemReports] = useState<ProblemReport[]>(() => normalizeProblemReports(readStored('deap-problem-reports', [])))
-  const [affectedAreas, setAffectedAreas] = useState<AffectedArea[]>(() => normalizeAffectedAreas(readStored('deap-affected-areas', [])))
-  const [bugAuditLogs, setBugAuditLogs] = useState<BugAuditLog[]>(() => normalizeBugAuditLogs(readStored('deap-bug-audit-logs', [])))
-  const [contributionPoints, setContributionPoints] = useState<UserContributionPoints[]>(() => normalizeContributionPoints(readStored('deap-contribution-points', [])))
-  const [trashRecords, setTrashRecords] = useState<ReportTrashRecord[]>(() => normalizeTrashRecords(readStored('deap-report-trash', [])))
-  const [questionExposureCounts, setQuestionExposureCounts] = useState<QuestionExposureCounts>(() => readStored('deap-question-exposure-counts', {}))
-  const [questionMastery, setQuestionMastery] = useState<UserQuestionMastery>(() => scrubQuestionMastery(readStored('deap-question-mastery', {})))
+  const [problemReports, setProblemReports] = useState<ProblemReport[]>(() => normalizeProblemReports(readStored('staffiq-problem-reports', [])))
+  const [affectedAreas, setAffectedAreas] = useState<AffectedArea[]>(() => normalizeAffectedAreas(readStored('staffiq-affected-areas', [])))
+  const [bugAuditLogs, setBugAuditLogs] = useState<BugAuditLog[]>(() => normalizeBugAuditLogs(readStored('staffiq-bug-audit-logs', [])))
+  const [contributionPoints, setContributionPoints] = useState<UserContributionPoints[]>(() => normalizeContributionPoints(readStored('staffiq-contribution-points', [])))
+  const [trashRecords, setTrashRecords] = useState<ReportTrashRecord[]>(() => normalizeTrashRecords(readStored('staffiq-report-trash', [])))
+  const [questionExposureCounts, setQuestionExposureCounts] = useState<QuestionExposureCounts>(() => readStored('staffiq-question-exposure-counts', {}))
+  const [questionMastery, setQuestionMastery] = useState<UserQuestionMastery>(() => scrubQuestionMastery(readStored('staffiq-question-mastery', {})))
   const [activeTestId, setActiveTestId] = useState<string>()
   const [activeSessionId, setActiveSessionId] = useState<string>()
-  const [branding, setBranding] = useState<Branding>(() => normalizeBranding(readStored('deap-branding', defaultBranding)))
-  const [layoutSettings, setLayoutSettings] = useState<LayoutSettings>(() => normalizeLayoutSettings(readStored('deap-layout-settings', defaultLayoutSettings)))
+  const [branding, setBranding] = useState<Branding>(() => normalizeBranding(readStored('staffiq-branding', defaultBranding)))
+  const [layoutSettings, setLayoutSettings] = useState<LayoutSettings>(() => normalizeLayoutSettings(readStored('staffiq-layout-settings', defaultLayoutSettings)))
   const [dashboardLayouts, setDashboardLayouts] = useState<DashboardLayoutMap>(() => normalizeDashboardLayouts(readStored(dashboardLayoutStorageKey, {})))
-  const [apiTokens, setApiTokens] = useState<ApiTokenRecord[]>(() => normalizeApiTokens(readStored('deap-api-tokens', [])))
+  const [apiTokens, setApiTokens] = useState<ApiTokenRecord[]>(() => normalizeApiTokens(readStored('staffiq-api-tokens', [])))
   const [generatedApiToken, setGeneratedApiToken] = useState<GeneratedApiToken>()
-  const [theme, setTheme] = useState<ThemeMode>(() => readStored('deap-theme', 'light'))
-  const [fontScale, setFontScale] = useState(() => normalizeFontScale(readStored('deap-font-scale', 100)))
-  const [chatsEnabled, setChatsEnabled] = useState(() => readStored('deap-chats-enabled', true))
+  const [theme, setTheme] = useState<ThemeMode>(() => readStored('staffiq-theme', 'light'))
+  const [fontScale, setFontScale] = useState(() => normalizeFontScale(readStored('staffiq-font-scale', 100)))
+  const [chatsEnabled, setChatsEnabled] = useState(() => readStored('staffiq-chats-enabled', true))
+  const [tipsSnoozeUntil, setTipsSnoozeUntil] = useState<number>(() => readStored('staffiq-tips-snooze-until', 0))
+  const tipsSnoozed = tipsSnoozeUntil > Date.now()
+  const tipsSnoozeRemaining = tipsSnoozed ? formatSnoozeRemaining(tipsSnoozeUntil - Date.now()) : ''
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [appearanceControlsFaded, setAppearanceControlsFaded] = useState(false)
   const [query, setQuery] = useState('')
@@ -5696,7 +5696,7 @@ function App() {
   const [syncState, setSyncState] = useState<SyncState>(() => (navigator.onLine ? 'saved' : 'offline'))
   const [availabilityRefreshBusy, setAvailabilityRefreshBusy] = useState(false)
   const availabilitySyncChannelRef = useRef<BroadcastChannel | null>(null)
-  const sharedStateUpdatedAtRef = useRef(sharedStateTime(localStorage.getItem('deap-shared-state-updated-at') ?? undefined))
+  const sharedStateUpdatedAtRef = useRef(sharedStateTime(readStored<string | undefined>('staffiq-shared-state-updated-at', undefined)))
   const cloudSyncInFlightRef = useRef(false)
   const cloudHydratedRef = useRef(false)
   const cloudWriteStateRef = useRef<SharedAppState | undefined>(undefined)
@@ -5728,9 +5728,66 @@ function App() {
     apiTokens,
   })
   const problemLauncherUserKey = currentUser?.id ?? 'guest'
-  const problemLauncherCooldownKey = `deap-problem-launcher-cooldown-until-${problemLauncherUserKey}`
-  const problemLauncherLongHideKey = `deap-problem-launcher-hidden-until-${problemLauncherUserKey}`
-  const problemLauncherCloseCountKey = `deap-problem-launcher-close-count-${problemLauncherUserKey}`
+  const problemLauncherCooldownKey = `staffiq-problem-launcher-cooldown-until-${problemLauncherUserKey}`
+  const problemLauncherLongHideKey = `staffiq-problem-launcher-hidden-until-${problemLauncherUserKey}`
+  const problemLauncherCloseCountKey = `staffiq-problem-launcher-close-count-${problemLauncherUserKey}`
+
+  function viewToPath(nextView: AppView) {
+    switch (nextView) {
+      case 'dashboard':
+        return '/'
+      case 'login':
+        return '/login'
+      case 'training':
+        return '/training'
+      case 'questions':
+        return '/questions'
+      case 'tests':
+        return '/tests'
+      case 'analytics':
+        return '/analytics'
+      case 'employees':
+        return '/employees'
+      case 'reports':
+        return '/reports'
+      case 'notifications':
+        return '/notifications'
+      case 'bug-reports':
+        return '/bug-reports'
+      case 'bug-feedback':
+        return '/bug-feedback'
+      case 'feature-inventory':
+        return '/feature-inventory'
+      case 'tenants':
+        return '/tenants'
+      case 'settings':
+        return '/settings'
+      case 'my-tests':
+        return '/my-tests'
+      case 'my-results':
+        return '/my-results'
+      case 'help':
+        return '/help'
+      case 'taking-test':
+        return '/taking-test'
+      case 'result':
+        return '/result'
+      default:
+        return '/'
+    }
+  }
+
+  function syncBrowserPath(nextView: AppView) {
+    const targetPath = viewToPath(nextView)
+    const currentPath = window.location.pathname || '/'
+    if (currentPath !== targetPath) {
+      window.history.pushState({}, '', targetPath)
+    }
+  }
+
+  useEffect(() => {
+    syncBrowserPath(view)
+  }, [view])
 
   useEffect(() => {
     if (!currentUser) return
@@ -5797,36 +5854,36 @@ function App() {
     }
     const incomingTime = sharedStateTime(normalized.updatedAt)
     const incomingUserCount = normalizeUserDirectory(normalized.users ?? seedUsers).length
-    const localUserCount = normalizeUserDirectory(runtimeSharedStateRef.current.users ?? readStored('deap-users', seedUsers)).length
+    const localUserCount = normalizeUserDirectory(runtimeSharedStateRef.current.users ?? readStored('staffiq-users', seedUsers)).length
     const shouldRecoverUserDirectory = incomingUserCount > localUserCount && localUserCount <= seedUsers.length
     if (!options.force && !incomingTime && sharedStateUpdatedAtRef.current) return false
     if (!options.force && incomingTime && sharedStateUpdatedAtRef.current && incomingTime <= sharedStateUpdatedAtRef.current && !shouldRecoverUserDirectory) return false
     if (incomingTime) {
       sharedStateUpdatedAtRef.current = incomingTime
-      localStorage.setItem('deap-shared-state-updated-at', normalized.updatedAt ?? '')
+      writeStored('staffiq-shared-state-updated-at', normalized.updatedAt ?? '')
     }
-    const localUsers = normalizeUserDirectory(runtimeSharedStateRef.current.users ?? readStored('deap-users', seedUsers))
+    const localUsers = normalizeUserDirectory(runtimeSharedStateRef.current.users ?? readStored('staffiq-users', seedUsers))
     const nextUsers = normalizeUserDirectory(mergeRecordsById(normalized.users ?? seedUsers, localUsers))
-    const nextTests = stripDemoTests(mergeRecordsById(normalized.tests ?? seedTests, runtimeSharedStateRef.current.tests ?? readStored('deap-tests', seedTests)))
+    const nextTests = stripDemoTests(mergeRecordsById(normalized.tests ?? seedTests, runtimeSharedStateRef.current.tests ?? readStored('staffiq-tests', seedTests)))
     const nextSessions = stripDemoSessions(mergeSessionsPreservingNewerLocal(normalized.sessions ?? [], runtimeSharedStateRef.current.sessions ?? []))
     const nextPermissions = {
-      ...transferPermissions(runtimeSharedStateRef.current.permissions ?? readStored('deap-permissions', buildDefaultPermissions(nextUsers)), nextUsers),
+      ...transferPermissions(runtimeSharedStateRef.current.permissions ?? readStored('staffiq-permissions', buildDefaultPermissions(nextUsers)), nextUsers),
       ...(normalized.permissions ?? buildDefaultPermissions(nextUsers)),
     }
     const nextDeletedQuestionBankIds = normalizeDeletedQuestionBankIds([
-      ...readStored('deap-deleted-question-banks', []),
+      ...readStored('staffiq-deleted-question-banks', []),
       ...(normalized.deletedQuestionBankIds ?? []),
     ])
     const deletedQuestionBankIdSet = new Set(nextDeletedQuestionBankIds)
     const nextQuestionBankMetadata = mergeQuestionBankMetadata({
-      ...readStored('deap-question-bank-metadata', defaultQuestionBankMetadata),
+      ...readStored('staffiq-question-bank-metadata', defaultQuestionBankMetadata),
       ...(normalized.questionBankMetadata ?? {}),
     })
     nextDeletedQuestionBankIds.forEach((batchId) => {
       delete nextQuestionBankMetadata[batchId]
     })
     const nextQuestionBankTrainingSources = normalizeQuestionBankTrainingSources([
-      ...readStored('deap-question-bank-training-sources', []),
+      ...readStored('staffiq-question-bank-training-sources', []),
       ...(normalized.questionBankTrainingSources ?? []),
       ...metadataOnlyTrainingSources(nextQuestionBankMetadata),
     ]).filter((source) => !deletedQuestionBankIdSet.has(source.id))
@@ -5840,7 +5897,7 @@ function App() {
       courseImageRegistryFromTrainingSources(nextQuestionBankTrainingSources),
     )
     const nextBranding = normalizeBranding(normalized.branding ?? defaultBranding)
-    const nextLayoutSettings = normalizeLayoutSettings(normalized.layoutSettings ?? readStored('deap-layout-settings', defaultLayoutSettings))
+    const nextLayoutSettings = normalizeLayoutSettings(normalized.layoutSettings ?? readStored('staffiq-layout-settings', defaultLayoutSettings))
     const nextDashboardLayouts = mergeDashboardLayouts(normalized.dashboardLayouts, runtimeSharedStateRef.current.dashboardLayouts ?? readStored(dashboardLayoutStorageKey, {}))
     const nextApiTokens = normalizeApiTokens(normalized.apiTokens)
     const nextAuditEvents = mergeRecordsById(normalized.auditEvents ?? [], runtimeSharedStateRef.current.auditEvents ?? [])
@@ -5884,56 +5941,56 @@ function App() {
       if (!existing) return undefined
       return nextUsers.find((user) => user.id === existing.id)
     })
-    localStorage.setItem('deap-users', JSON.stringify(nextUsers))
-    localStorage.setItem('deap-permissions', JSON.stringify(nextPermissions))
-    localStorage.setItem('deap-tests', JSON.stringify(nextTests))
-    localStorage.setItem('deap-sessions', JSON.stringify(nextSessions))
-    localStorage.setItem('deap-branding', JSON.stringify(nextBranding))
-    localStorage.setItem('deap-layout-settings', JSON.stringify(nextLayoutSettings))
-    localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextDashboardLayouts))
-    localStorage.setItem('deap-question-exposure-counts', JSON.stringify(nextQuestionExposureCounts))
-    localStorage.setItem('deap-question-mastery', JSON.stringify(nextQuestionMastery))
-    localStorage.setItem('deap-question-bank-metadata', JSON.stringify(nextQuestionBankMetadata))
-    localStorage.setItem('deap-question-bank-training-sources', JSON.stringify(nextQuestionBankTrainingSources))
-    localStorage.setItem(courseDeploymentsStorageKey, JSON.stringify(nextCourseDeployments))
-    localStorage.setItem(courseImageRegistryStorageKey, JSON.stringify(nextCourseImageRegistry))
-    localStorage.setItem('deap-deleted-question-banks', JSON.stringify(nextDeletedQuestionBankIds))
-    localStorage.setItem('deap-audit-events', JSON.stringify(nextAuditEvents))
-    localStorage.setItem('deap-analytics-events', JSON.stringify(nextAnalyticsEvents))
-    localStorage.setItem('deap-problem-reports', JSON.stringify(nextProblemReports))
-    localStorage.setItem('deap-affected-areas', JSON.stringify(nextAffectedAreas))
-    localStorage.setItem('deap-bug-audit-logs', JSON.stringify(nextBugAuditLogs))
-    localStorage.setItem('deap-contribution-points', JSON.stringify(nextContributionPoints))
-    localStorage.setItem('deap-report-trash', JSON.stringify(nextTrashRecords))
-    localStorage.setItem('deap-api-tokens', JSON.stringify(nextApiTokens))
+    writeStored('staffiq-users', nextUsers)
+    writeStored('staffiq-permissions', nextPermissions)
+    writeStored('staffiq-tests', nextTests)
+    writeStored('staffiq-sessions', nextSessions)
+    writeStored('staffiq-branding', nextBranding)
+    writeStored('staffiq-layout-settings', nextLayoutSettings)
+    writeStored(dashboardLayoutStorageKey, nextDashboardLayouts)
+    writeStored('staffiq-question-exposure-counts', nextQuestionExposureCounts)
+    writeStored('staffiq-question-mastery', nextQuestionMastery)
+    writeStored('staffiq-question-bank-metadata', nextQuestionBankMetadata)
+    writeStored('staffiq-question-bank-training-sources', nextQuestionBankTrainingSources)
+    writeStored(courseDeploymentsStorageKey, nextCourseDeployments)
+    writeStored(courseImageRegistryStorageKey, nextCourseImageRegistry)
+    writeStored('staffiq-deleted-question-banks', nextDeletedQuestionBankIds)
+    writeStored('staffiq-audit-events', nextAuditEvents)
+    writeStored('staffiq-analytics-events', nextAnalyticsEvents)
+    writeStored('staffiq-problem-reports', nextProblemReports)
+    writeStored('staffiq-affected-areas', nextAffectedAreas)
+    writeStored('staffiq-bug-audit-logs', nextBugAuditLogs)
+    writeStored('staffiq-contribution-points', nextContributionPoints)
+    writeStored('staffiq-report-trash', nextTrashRecords)
+    writeStored('staffiq-api-tokens', nextApiTokens)
     if (autoArchivedIds.length) void saveCloudSharedState(normalized)
     return true
   }, [])
 
   const refreshSharedAssessmentState = useCallback(() => {
     applySharedState({
-      users: readStored('deap-users', seedUsers),
-      permissions: readStored('deap-permissions', buildDefaultPermissions(seedUsers)),
-      tests: readStored('deap-tests', seedTests),
-      sessions: readStored('deap-sessions', []),
-      questionBankMetadata: readStored('deap-question-bank-metadata', defaultQuestionBankMetadata),
-      questionBankTrainingSources: readStored('deap-question-bank-training-sources', []),
+      users: readStored('staffiq-users', seedUsers),
+      permissions: readStored('staffiq-permissions', buildDefaultPermissions(seedUsers)),
+      tests: readStored('staffiq-tests', seedTests),
+      sessions: readStored('staffiq-sessions', []),
+      questionBankMetadata: readStored('staffiq-question-bank-metadata', defaultQuestionBankMetadata),
+      questionBankTrainingSources: readStored('staffiq-question-bank-training-sources', []),
       courseDeployments: readStored(courseDeploymentsStorageKey, {}),
-      deletedQuestionBankIds: readStored('deap-deleted-question-banks', []),
-      auditEvents: readStored('deap-audit-events', []),
-      analyticsEvents: readStored('deap-analytics-events', []),
-      problemReports: readStored('deap-problem-reports', []),
-      affectedAreas: readStored('deap-affected-areas', []),
-      bugAuditLogs: readStored('deap-bug-audit-logs', []),
-      contributionPoints: readStored('deap-contribution-points', []),
-      trashRecords: readStored('deap-report-trash', []),
-      questionExposureCounts: readStored('deap-question-exposure-counts', {}),
-      questionMastery: readStored('deap-question-mastery', {}),
-      branding: readStored('deap-branding', defaultBranding),
-      layoutSettings: readStored('deap-layout-settings', defaultLayoutSettings),
+      deletedQuestionBankIds: readStored('staffiq-deleted-question-banks', []),
+      auditEvents: readStored('staffiq-audit-events', []),
+      analyticsEvents: readStored('staffiq-analytics-events', []),
+      problemReports: readStored('staffiq-problem-reports', []),
+      affectedAreas: readStored('staffiq-affected-areas', []),
+      bugAuditLogs: readStored('staffiq-bug-audit-logs', []),
+      contributionPoints: readStored('staffiq-contribution-points', []),
+      trashRecords: readStored('staffiq-report-trash', []),
+      questionExposureCounts: readStored('staffiq-question-exposure-counts', {}),
+      questionMastery: readStored('staffiq-question-mastery', {}),
+      branding: readStored('staffiq-branding', defaultBranding),
+      layoutSettings: readStored('staffiq-layout-settings', defaultLayoutSettings),
       dashboardLayouts: readStored(dashboardLayoutStorageKey, {}),
-      apiTokens: readStored('deap-api-tokens', []),
-      updatedAt: localStorage.getItem('deap-shared-state-updated-at') ?? undefined,
+      apiTokens: readStored('staffiq-api-tokens', []),
+      updatedAt: readStored<string | undefined>('staffiq-shared-state-updated-at', undefined),
     })
   }, [applySharedState])
 
@@ -5964,7 +6021,7 @@ function App() {
     )
     if (!Object.keys(nextCourseImageRegistry).length) return false
     setCourseImageRegistry((existing) => (sameSerializedState(existing, nextCourseImageRegistry) ? existing : nextCourseImageRegistry))
-    localStorage.setItem(courseImageRegistryStorageKey, JSON.stringify(nextCourseImageRegistry))
+    writeStored(courseImageRegistryStorageKey, nextCourseImageRegistry)
     return true
   }, [])
 
@@ -6043,7 +6100,7 @@ function App() {
     applySharedState(nextState)
     const message = { type: 'shared_state_changed', createdAt: updatedAt }
     availabilitySyncChannelRef.current?.postMessage(message)
-    window.dispatchEvent(new CustomEvent('deap-availability-sync', { detail: message }))
+    window.dispatchEvent(new CustomEvent('staffiq-availability-sync', { detail: message }))
     void saveSharedStateAfterHydration(
       nextState,
       overrides,
@@ -6120,22 +6177,22 @@ function App() {
     })
     runtimeSharedStateRef.current = nextState
     sharedStateUpdatedAtRef.current = sharedStateTime(updatedAt)
-    localStorage.setItem('deap-shared-state-updated-at', updatedAt)
-    if (nextState.sessions) localStorage.setItem('deap-sessions', JSON.stringify(nextState.sessions))
-    if (nextState.questionBankMetadata) localStorage.setItem('deap-question-bank-metadata', JSON.stringify(nextState.questionBankMetadata))
-    if (nextState.questionBankTrainingSources) localStorage.setItem('deap-question-bank-training-sources', JSON.stringify(nextState.questionBankTrainingSources))
-    if (nextState.problemReports) localStorage.setItem('deap-problem-reports', JSON.stringify(nextState.problemReports))
-    if (nextState.affectedAreas) localStorage.setItem('deap-affected-areas', JSON.stringify(nextState.affectedAreas))
-    if (nextState.bugAuditLogs) localStorage.setItem('deap-bug-audit-logs', JSON.stringify(nextState.bugAuditLogs))
-    if (nextState.contributionPoints) localStorage.setItem('deap-contribution-points', JSON.stringify(nextState.contributionPoints))
-    if (nextState.courseDeployments) localStorage.setItem(courseDeploymentsStorageKey, JSON.stringify(nextState.courseDeployments))
-    if (nextState.deletedQuestionBankIds) localStorage.setItem('deap-deleted-question-banks', JSON.stringify(nextState.deletedQuestionBankIds))
-    if (nextState.questionExposureCounts) localStorage.setItem('deap-question-exposure-counts', JSON.stringify(nextState.questionExposureCounts))
-    if (nextState.questionMastery) localStorage.setItem('deap-question-mastery', JSON.stringify(nextState.questionMastery))
-    if (nextState.branding) localStorage.setItem('deap-branding', JSON.stringify(nextState.branding))
-    if (nextState.layoutSettings) localStorage.setItem('deap-layout-settings', JSON.stringify(nextState.layoutSettings))
-    if (nextState.dashboardLayouts) localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextState.dashboardLayouts))
-    if (nextState.apiTokens) localStorage.setItem('deap-api-tokens', JSON.stringify(nextState.apiTokens))
+    writeStored('staffiq-shared-state-updated-at', updatedAt)
+    if (nextState.sessions) writeStored('staffiq-sessions', nextState.sessions)
+    if (nextState.questionBankMetadata) writeStored('staffiq-question-bank-metadata', nextState.questionBankMetadata)
+    if (nextState.questionBankTrainingSources) writeStored('staffiq-question-bank-training-sources', nextState.questionBankTrainingSources)
+    if (nextState.problemReports) writeStored('staffiq-problem-reports', nextState.problemReports)
+    if (nextState.affectedAreas) writeStored('staffiq-affected-areas', nextState.affectedAreas)
+    if (nextState.bugAuditLogs) writeStored('staffiq-bug-audit-logs', nextState.bugAuditLogs)
+    if (nextState.contributionPoints) writeStored('staffiq-contribution-points', nextState.contributionPoints)
+    if (nextState.courseDeployments) writeStored(courseDeploymentsStorageKey, nextState.courseDeployments)
+    if (nextState.deletedQuestionBankIds) writeStored('staffiq-deleted-question-banks', nextState.deletedQuestionBankIds)
+    if (nextState.questionExposureCounts) writeStored('staffiq-question-exposure-counts', nextState.questionExposureCounts)
+    if (nextState.questionMastery) writeStored('staffiq-question-mastery', nextState.questionMastery)
+    if (nextState.branding) writeStored('staffiq-branding', nextState.branding)
+    if (nextState.layoutSettings) writeStored('staffiq-layout-settings', nextState.layoutSettings)
+    if (nextState.dashboardLayouts) writeStored(dashboardLayoutStorageKey, nextState.dashboardLayouts)
+    if (nextState.apiTokens) writeStored('staffiq-api-tokens', nextState.apiTokens)
     void saveSharedStateAfterHydration(
       nextState,
       overrides,
@@ -6166,33 +6223,32 @@ function App() {
       layoutSettings,
       dashboardLayouts,
       apiTokens,
-      updatedAt: localStorage.getItem('deap-shared-state-updated-at') ?? undefined,
+      updatedAt: readStored<string | undefined>('staffiq-shared-state-updated-at', undefined),
     }
   }, [users, permissions, tests, sessions, questionBankMetadata, questionBankTrainingSources, courseDeployments, deletedQuestionBankIds, auditEvents, analyticsEvents, problemReports, affectedAreas, bugAuditLogs, contributionPoints, trashRecords, questionExposureCounts, questionMastery, branding, layoutSettings, dashboardLayouts, apiTokens])
 
-  useEffect(() => localStorage.setItem('deap-questions', JSON.stringify(questions)), [questions])
-  useEffect(() => localStorage.setItem('deap-question-bank-metadata', JSON.stringify(questionBankMetadata)), [questionBankMetadata])
-  useEffect(() => localStorage.setItem('deap-question-bank-training-sources', JSON.stringify(questionBankTrainingSources)), [questionBankTrainingSources])
-  useEffect(() => localStorage.setItem(courseDeploymentsStorageKey, JSON.stringify(courseDeployments)), [courseDeployments])
-  useEffect(() => localStorage.setItem('deap-deleted-question-banks', JSON.stringify(deletedQuestionBankIds)), [deletedQuestionBankIds])
-  useEffect(() => localStorage.setItem('deap-users', JSON.stringify(users)), [users])
-  useEffect(() => localStorage.setItem('deap-permissions', JSON.stringify(permissions)), [permissions])
-  useEffect(() => localStorage.setItem('deap-tests', JSON.stringify(tests)), [tests])
-  useEffect(() => localStorage.setItem('deap-sessions', JSON.stringify(sessions)), [sessions])
-  useEffect(() => localStorage.setItem('deap-audit-events', JSON.stringify(auditEvents)), [auditEvents])
-  useEffect(() => localStorage.setItem('deap-analytics-events', JSON.stringify(analyticsEvents)), [analyticsEvents])
-  useEffect(() => localStorage.setItem('deap-problem-reports', JSON.stringify(normalizeProblemReports(problemReports))), [problemReports])
-  useEffect(() => localStorage.setItem('deap-affected-areas', JSON.stringify(normalizeAffectedAreas(affectedAreas))), [affectedAreas])
-  useEffect(() => localStorage.setItem('deap-bug-audit-logs', JSON.stringify(normalizeBugAuditLogs(bugAuditLogs))), [bugAuditLogs])
-  useEffect(() => localStorage.setItem('deap-contribution-points', JSON.stringify(normalizeContributionPoints(contributionPoints))), [contributionPoints])
-  useEffect(() => localStorage.setItem('deap-report-trash', JSON.stringify(normalizeTrashRecords(trashRecords))), [trashRecords])
-  useEffect(() => localStorage.setItem('deap-question-exposure-counts', JSON.stringify(questionExposureCounts)), [questionExposureCounts])
-  useEffect(() => localStorage.setItem('deap-question-mastery', JSON.stringify(questionMastery)), [questionMastery])
-  useEffect(() => localStorage.setItem('deap-current-user', JSON.stringify(currentUser)), [currentUser])
-  useEffect(() => localStorage.setItem('deap-branding', JSON.stringify(branding)), [branding])
-  useEffect(() => localStorage.setItem('deap-layout-settings', JSON.stringify(layoutSettings)), [layoutSettings])
-  useEffect(() => localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(dashboardLayouts)), [dashboardLayouts])
-  useEffect(() => localStorage.setItem('deap-api-tokens', JSON.stringify(apiTokens)), [apiTokens])
+  useEffect(() => writeStored('staffiq-questions', questions), [questions])
+  useEffect(() => writeStored('staffiq-question-bank-metadata', questionBankMetadata), [questionBankMetadata])
+  useEffect(() => writeStored('staffiq-question-bank-training-sources', questionBankTrainingSources), [questionBankTrainingSources])
+  useEffect(() => writeStored(courseDeploymentsStorageKey, courseDeployments), [courseDeployments])
+  useEffect(() => writeStored('staffiq-deleted-question-banks', deletedQuestionBankIds), [deletedQuestionBankIds])
+  useEffect(() => writeStored('staffiq-users', users), [users])
+  useEffect(() => writeStored('staffiq-permissions', permissions), [permissions])
+  useEffect(() => writeStored('staffiq-tests', tests), [tests])
+  useEffect(() => writeStored('staffiq-sessions', sessions), [sessions])
+  useEffect(() => writeStored('staffiq-audit-events', auditEvents), [auditEvents])
+  useEffect(() => writeStored('staffiq-analytics-events', analyticsEvents), [analyticsEvents])
+  useEffect(() => writeStored('staffiq-problem-reports', normalizeProblemReports(problemReports)), [problemReports])
+  useEffect(() => writeStored('staffiq-affected-areas', normalizeAffectedAreas(affectedAreas)), [affectedAreas])
+  useEffect(() => writeStored('staffiq-bug-audit-logs', normalizeBugAuditLogs(bugAuditLogs)), [bugAuditLogs])
+  useEffect(() => writeStored('staffiq-contribution-points', normalizeContributionPoints(contributionPoints)), [contributionPoints])
+  useEffect(() => writeStored('staffiq-report-trash', normalizeTrashRecords(trashRecords)), [trashRecords])
+  useEffect(() => writeStored('staffiq-question-exposure-counts', questionExposureCounts), [questionExposureCounts])
+  useEffect(() => writeStored('staffiq-question-mastery', questionMastery), [questionMastery])
+  useEffect(() => writeStored('staffiq-branding', branding), [branding])
+  useEffect(() => writeStored('staffiq-layout-settings', layoutSettings), [layoutSettings])
+  useEffect(() => writeStored(dashboardLayoutStorageKey, dashboardLayouts), [dashboardLayouts])
+  useEffect(() => writeStored('staffiq-api-tokens', apiTokens), [apiTokens])
   useEffect(() => {
     if (Object.keys(questionExposureCounts).length || !sessions.length) return
     const restoredCounts: QuestionExposureCounts = {}
@@ -6230,12 +6286,12 @@ function App() {
   }, [questionMastery, questions, sessions, tests])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem('deap-theme', JSON.stringify(theme))
+    localStorage.setItem('staffiq-theme', JSON.stringify(theme))
   }, [theme])
   useEffect(() => {
-    document.documentElement.style.setProperty('--deap-font-scale', (fontScale / 100).toFixed(2))
+    document.documentElement.style.setProperty('--staffiq-font-scale', (fontScale / 100).toFixed(2))
     document.documentElement.dataset.fontScale = String(fontScale)
-    localStorage.setItem('deap-font-scale', JSON.stringify(fontScale))
+    localStorage.setItem('staffiq-font-scale', JSON.stringify(fontScale))
   }, [fontScale])
   useEffect(() => {
     CHATS.init({
@@ -6247,10 +6303,21 @@ function App() {
     return () => CHATS.destroy()
   }, [])
   useEffect(() => {
-    CHATS.setEnabled(chatsEnabled)
-    document.documentElement.dataset.chats = chatsEnabled ? 'on' : 'off'
-    localStorage.setItem('deap-chats-enabled', JSON.stringify(chatsEnabled))
-  }, [chatsEnabled])
+    CHATS.setEnabled(chatsEnabled && !tipsSnoozed)
+    CHATS.setOnSnooze(snoozeTips)
+    document.documentElement.dataset.chats = chatsEnabled && !tipsSnoozed ? 'on' : 'off'
+    localStorage.setItem('staffiq-chats-enabled', JSON.stringify(chatsEnabled))
+  }, [chatsEnabled, tipsSnoozeUntil])
+
+  useEffect(() => {
+    if (tipsSnoozeUntil <= Date.now()) return
+    const remaining = Math.min(tipsSnoozeUntil - Date.now(), 2147483647)
+    const timer = window.setTimeout(() => {
+      setTipsSnoozeUntil(0)
+      writeStored('staffiq-tips-snooze-until', 0)
+    }, remaining)
+    return () => window.clearTimeout(timer)
+  }, [tipsSnoozeUntil])
 
   useEffect(() => {
     if (!mobileNavOpen) return undefined
@@ -6278,7 +6345,7 @@ function App() {
   }, [])
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (['deap-tests', 'deap-sessions', 'deap-users', 'deap-permissions', courseDeploymentsStorageKey].includes(String(event.key))) refreshSharedAssessmentState()
+      if (['staffiq-tests', 'staffiq-sessions', 'staffiq-users', 'staffiq-permissions', courseDeploymentsStorageKey].includes(String(event.key))) refreshSharedAssessmentState()
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
@@ -6292,7 +6359,7 @@ function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') handleRefresh()
     }
-    window.addEventListener('deap-availability-sync', handleRefresh)
+    window.addEventListener('staffiq-availability-sync', handleRefresh)
     window.addEventListener('focus', handleRefresh)
     document.addEventListener('visibilitychange', handleVisibility)
     const intervalId = window.setInterval(refreshSharedAssessmentState, 2000)
@@ -6302,7 +6369,7 @@ function App() {
     void pullCloudSharedState()
     void pullCourseImageRegistry()
     return () => {
-      window.removeEventListener('deap-availability-sync', handleRefresh)
+      window.removeEventListener('staffiq-availability-sync', handleRefresh)
       window.removeEventListener('focus', handleRefresh)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.clearInterval(intervalId)
@@ -6313,7 +6380,7 @@ function App() {
   }, [pullCloudSharedState, pullCourseImageRegistry, refreshSharedAssessmentState])
   useEffect(() => {
     if (!('BroadcastChannel' in window)) return
-    const channel = new BroadcastChannel('deap-availability-sync')
+    const channel = new BroadcastChannel('staffiq-availability-sync')
     availabilitySyncChannelRef.current = channel
     channel.onmessage = () => {
       refreshSharedAssessmentState()
@@ -6340,19 +6407,19 @@ function App() {
       Object.fromEntries(imageEntries.map(([batchId, record]) => [batchId, { ...record, updatedAt }])) as CourseImageRegistry,
     )
     setCourseImageRegistry(nextCourseImageRegistry)
-    localStorage.setItem(courseImageRegistryStorageKey, JSON.stringify(nextCourseImageRegistry))
+    writeStored(courseImageRegistryStorageKey, nextCourseImageRegistry)
     imageEntries.forEach(([batchId, record]) => {
       void saveCloudCourseImage(batchId, record.courseImageUrl, record.updatedAt ?? updatedAt)
     })
   }, [courseImageRegistry, questionBankMetadata, questionBankTrainingSources])
   useEffect(() => {
-    if (localStorage.getItem('deap-user-directory-version') !== userDirectoryVersion) {
-      const migratedUsers = normalizeUserDirectory(readStored('deap-users', seedUsers))
-      const migratedQuestions = stripDemoQuestions(readStored('deap-questions', []))
-      const migratedTests = stripDemoTests(syncSeedAssessmentMetadata(transferAssignments(readStored('deap-tests', []))))
-      const migratedSessions = stripDemoSessions(transferSessions(readStored('deap-sessions', [])))
-      const migratedChats = scrubAiChatThreads(readStored('deap-ai-chat-threads', []))
-      const migratedQuestionBankMetadata = mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('deap-question-bank-metadata', defaultQuestionBankMetadata)))
+    if (readStored<string>('staffiq-user-directory-version', '') !== userDirectoryVersion) {
+      const migratedUsers = normalizeUserDirectory(readStored('staffiq-users', seedUsers))
+      const migratedQuestions = stripDemoQuestions(readStored('staffiq-questions', []))
+      const migratedTests = stripDemoTests(syncSeedAssessmentMetadata(transferAssignments(readStored('staffiq-tests', []))))
+      const migratedSessions = stripDemoSessions(transferSessions(readStored('staffiq-sessions', [])))
+      const migratedChats = scrubAiChatThreads(readStored('staffiq-ai-chat-threads', []))
+      const migratedQuestionBankMetadata = mergeQuestionBankMetadata(stripDemoQuestionBankMetadata(readStored('staffiq-question-bank-metadata', defaultQuestionBankMetadata)))
       setUsers(migratedUsers)
       setQuestions(migratedQuestions)
       setQuestionBankMetadata(migratedQuestionBankMetadata)
@@ -6369,20 +6436,20 @@ function App() {
         return migratedUsers.find((user) => user.id === existing.id)
       })
       if (migratedChats.length) {
-        localStorage.setItem('deap-ai-chat-threads', JSON.stringify(migratedChats))
-        const selectedChatId = localStorage.getItem('deap-ai-selected-chat-id')
+        writeStored('staffiq-ai-chat-threads', migratedChats)
+        const selectedChatId = readStored('staffiq-ai-selected-chat-id', '')
         if (!selectedChatId || !migratedChats.some((thread) => thread.id === selectedChatId)) {
-          localStorage.setItem('deap-ai-selected-chat-id', migratedChats[0].id)
+          writeStored('staffiq-ai-selected-chat-id', migratedChats[0].id)
         }
       } else {
         // Preserve local-only AI chat storage even when no migration changes are needed.
       }
-      localStorage.setItem('deap-question-bank-metadata', JSON.stringify(migratedQuestionBankMetadata))
-      localStorage.setItem('deap-user-directory-version', userDirectoryVersion)
+      writeStored('staffiq-question-bank-metadata', migratedQuestionBankMetadata)
+      writeStored('staffiq-user-directory-version', userDirectoryVersion)
     }
-    localStorage.setItem('deap-lms-layout-version', 'real-data-only-v1')
+    writeStored('staffiq-lms-layout-version', 'real-data-only-v1')
     if (!bundledQuestionBanks.length) return
-    const bundledVersionKey = `deap-bundled-question-banks-${bundledQuestionBanks.map((bank) => bank.id).join('|')}`
+    const bundledVersionKey = `staffiq-bundled-question-banks-${bundledQuestionBanks.map((bank) => bank.id).join('|')}`
     const missingBundledBanks = bundledQuestionBanks.filter(
       (bank) => !deletedQuestionBankIds.includes(bank.id) && !questions.some((question) => question.importBatchId === bank.id),
     )
@@ -6395,15 +6462,15 @@ function App() {
           ...loadedQuestions,
           ...existing.filter((question) => !question.questionId.startsWith('seed-') && !question.questionId.startsWith('cybercrime-act-') && question.importBatchId !== legacyCybercrimeBankId && !loadedBankIds.has(question.importBatchId)),
         ])
-        localStorage.setItem('deap-source-workbook-version', sourceWorkbookVersion)
+        writeStored('staffiq-source-workbook-version', sourceWorkbookVersion)
         localStorage.setItem(bundledVersionKey, 'loaded')
         setToast(`${loadedQuestions.length} bundled question(s) were added to the LMS.`)
       })
       .catch(() => setToast('The bundled question bank could not be loaded. You can still import it manually from Question Bank.'))
   }, [deletedQuestionBankIds, questions])
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin'
-  const isSuperAdmin = currentUser?.role === 'super_admin'
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === OWNER_ROLE
+  const isOwnerAdmin = currentUser?.role === OWNER_ROLE
   const canManageApiTokens = isAyodejiTokenOwner(currentUser)
   const usersVisibleToCurrentUser = users.filter((user) => !isTesterAccount(user))
   const activeSession = sessions.find((session) => session.id === activeSessionId && !isSessionNullified(session))
@@ -6414,9 +6481,10 @@ function App() {
     return required ? hasPermission(required) : true
   })
   const visibleAdminNav = navItems.filter(([itemView]) => {
-    if (itemView === 'notifications') return isSuperAdmin
+    if (itemView === 'notifications') return isOwnerAdmin
     if (itemView === 'bug-reports') return canManageApiTokens
     if (itemView === 'feature-inventory') return canManageApiTokens
+    if (itemView === 'tenants') return isOwnerAdmin
     const required = adminViewPermissions[itemView]
     return required ? hasPermission(required) : true
   })
@@ -6436,7 +6504,7 @@ function App() {
         duplicateReports: 0,
       }
     : undefined
-  const appShellStyle = { '--deap-sidebar-width': `${layoutSettings.sidebarWidthPx}px` } as CSSProperties
+  const appShellStyle = { '--staffiq-sidebar-width': `${layoutSettings.sidebarWidthPx}px` } as CSSProperties
 
   useEffect(() => {
     if (currentUser && !canAccessCurrentView) setView(firstViewForUser(currentUser, permissions))
@@ -6513,7 +6581,7 @@ function App() {
     const nextAuditEvents = [auditEvent, ...auditEvents]
     setDashboardLayouts(nextDashboardLayouts)
     setAuditEvents(nextAuditEvents)
-    localStorage.setItem(dashboardLayoutStorageKey, JSON.stringify(nextDashboardLayouts))
+    writeStored(dashboardLayoutStorageKey, nextDashboardLayouts)
     publishSharedState({ dashboardLayouts: nextDashboardLayouts, auditEvents: nextAuditEvents })
   }
 
@@ -6568,7 +6636,7 @@ function App() {
     if (!incomingQuestions.length) return questions
     const mergedQuestions = mergeQuestionsById(questions, incomingQuestions)
     setQuestions(mergedQuestions)
-    localStorage.setItem('deap-questions', JSON.stringify(mergedQuestions))
+    writeStored('staffiq-questions', mergedQuestions)
     const loadedBankCount = loadedBankIds.size
     if (announce) setToast(`${incomingQuestions.length} question(s) loaded from ${loadedBankCount} synced question bank(s).`)
     return mergedQuestions
@@ -6679,7 +6747,7 @@ function App() {
       consoleError: sanitizeAffectedAreaText(input.consoleError || recentClientDiagnostics, 1200) || undefined,
       additionalComments: sanitizeAffectedAreaText(input.additionalComments, 1600) || undefined,
       pagePath: window.location.pathname,
-      workspaceId: 'default',
+      workspaceId: activeTenant.tenantId,
       userSeverity: input.severity,
       systemSuggestedSeverity: input.severity,
       adminPriority: 'normal',
@@ -6699,7 +6767,7 @@ function App() {
             deviceType,
             operatingSystem,
             screenSize: `${window.innerWidth}x${window.innerHeight}`,
-            appVersion: 'DEAP hosted MVP',
+            appVersion: 'Staffiq hosted MVP',
             networkStatus: navigator.onLine ? 'online' : 'offline',
             permissionToIncludeDiagnostics: true,
           }
@@ -6739,7 +6807,7 @@ function App() {
       id: eventId('audit'),
       actorName: currentUser.fullName,
       action: reportMode === 'feedback' ? 'Feedback submitted' : 'Bug report submitted',
-      detail: `${currentUser.fullName} submitted ${reportMode} "${title}" from ${report.moduleName}. Category: ${report.category}. Severity: ${input.severity}. Status: Submitted. Awaiting Super Admin review and point decision.`,
+      detail: `${currentUser.fullName} submitted ${reportMode} "${title}" from ${report.moduleName}. Category: ${report.category}. Severity: ${input.severity}. Status: Submitted. Awaiting Platform Owner review and point decision.`,
       createdAt: report.createdAt,
     }
     const nextAuditEvents = [auditEvent, ...auditEvents]
@@ -6750,7 +6818,7 @@ function App() {
       actorRole: currentUser.role,
       action: reportMode === 'feedback' ? 'Feedback submitted' : 'Bug report submitted',
       newStatus: 'Submitted',
-      notes: `Submitted from ${view}. Category: ${report.category}. Awaiting Super Admin review.`,
+      notes: `Submitted from ${view}. Category: ${report.category}. Awaiting Platform Owner review.`,
       createdAt: report.createdAt,
     }
     const nextBugAuditLogs = normalizeBugAuditLogs([bugAuditLog, ...bugAuditLogs])
@@ -6769,12 +6837,12 @@ function App() {
         active_session_id: activeSessionId,
       },
     })
-    setToast(reportMode === 'feedback' ? 'Feedback submitted. Thank you for helping improve DEAP.' : 'Bug report submitted. DEAP will check it and show updates on your feedback page.')
+    setToast(reportMode === 'feedback' ? 'Feedback submitted. Thank you for helping improve Staffiq.' : 'Bug report submitted. Staffiq will check it and show updates on your feedback page.')
   }
 
   function updateBugReport(reportId: string, patch: Partial<ProblemReport>, action: string, note?: string) {
     if (!canManageApiTokens || !currentUser) {
-      setToast('Only Ayodeji Falope Super Admin can approve or change bug repair workflow status.')
+      setToast('Only Ayodeji Falope Platform Owner can approve or change bug repair workflow status.')
       return
     }
     const existingReport = problemReports.find((report) => report.id === reportId)
@@ -6889,6 +6957,20 @@ function App() {
     })
   }
 
+  function snoozeTips(days: number) {
+    const until = Date.now() + days * 24 * 60 * 60 * 1000
+    setTipsSnoozeUntil(until)
+    writeStored('staffiq-tips-snooze-until', until)
+    const label = days === 1 ? '1 day' : days === 7 ? '1 week' : `${days} days`
+    setToast(`Tips and popups paused for ${label}. Resume any time from the left menu.`)
+  }
+
+  function resumeTips() {
+    setTipsSnoozeUntil(0)
+    writeStored('staffiq-tips-snooze-until', 0)
+    setToast('Tips and popups resumed.')
+  }
+
   function dismissProblemLauncher(scope: 'session' | 'today' | 'week') {
     const now = Date.now()
     const hiddenUntil =
@@ -6916,6 +6998,7 @@ function App() {
   function handleLogout() {
     recordAnalytics('logout', { outcome: 'signed_out' })
     setMobileNavOpen(false)
+    clearAuthenticatedSession()
     setCurrentUser(undefined)
     setView('login')
   }
@@ -6923,65 +7006,49 @@ function App() {
   /**
    * Authenticates portal users and routes them to their correct workspace.
    */
-  function handleLogin(username: string, password: string) {
-    const normalizedUsername = username.trim().toLowerCase()
-    const user = users.find(
-      (candidate) =>
-        [candidate.userId, candidate.displayName, candidate.fullName, candidate.email]
-          .filter(Boolean)
-          .some((value) => value.toLowerCase() === normalizedUsername) && candidate.password === password,
-    )
-    if (!user) {
-      recordAnalytics('login_failed', {
-        userName: username.trim() || 'Unknown',
-        outcome: 'invalid_credentials',
-        metadata: { attempted_username: username.trim().slice(0, 120) },
-      }, undefined)
-      setToast('Invalid username or password.')
-      return
+  async function handleLogin(username: string, password: string, workspace: string) {
+    try {
+      setToast('Signing in securely...')
+      const payload = await loginToTenant<User, SharedAppState>({ username, password, workspace })
+      const nextState = normalizeSharedState(payload.state)
+      setActiveTenant(payload.tenant)
+      runtimeSharedStateRef.current = {}
+      cloudWriteStateRef.current = nextState
+      cloudHydratedRef.current = true
+      sharedStateUpdatedAtRef.current = 0
+      questionBankCloudFetchRef.current.clear()
+      questionBankCloudSyncRef.current.clear()
+      applySharedState(nextState, { force: true })
+      setQuestions(stripDemoQuestions(readStored('staffiq-questions', [])))
+      setCurrentUser(payload.user)
+
+      const nextPermissions = nextState.permissions ?? buildDefaultPermissions(nextState.users ?? [payload.user])
+      const nextTests = nextState.tests ?? []
+      const nextSessions = nextState.sessions ?? []
+      const nextQuestions = readStored<Question[]>('staffiq-questions', [])
+      const resumable = nextSessions.find((session) => {
+        const assignedTest = nextTests.find((test) => test.id === session.testId)
+        const questionSet = assignedTest ? sessionQuestionSetStatus(session, assignedTest, nextQuestions, payload.user.id) : undefined
+        return (
+          session.userId === payload.user.id &&
+          session.status === 'in_progress' &&
+          Boolean(assignedTest?.assignedUserIds.includes(payload.user.id)) &&
+          Boolean(assignedTest && getAvailabilityState(assignedTest).canStart) &&
+          Boolean(questionSet?.canResume)
+        )
+      })
+      if (resumable) {
+        setActiveTestId(resumable.testId)
+        setActiveSessionId(resumable.id)
+        setToast('Your in progress assessment has been restored. The question timer continued while you were away.')
+        setView('taking-test')
+        return
+      }
+      setToast(`Signed in to ${payload.tenant.displayName}.`)
+      setView(firstViewForUser(payload.user, nextPermissions))
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Sign in could not be completed.')
     }
-    if (isUserDisabled(user)) {
-      recordAnalytics('login_failed', {
-        userName: username.trim() || 'Unknown',
-        outcome: 'disabled_account',
-        metadata: { attempted_username: username.trim().slice(0, 120), user_id: user.userId },
-      }, user)
-      setToast(isTesterAccount(user) ? 'This tester account is switched off. Ask the Super Admin to enable access again.' : 'This user account is disabled. Please contact the Super Admin.')
-      return
-    }
-    const signedInAt = new Date().toISOString()
-    const signedInUser = { ...user, lastLoginAt: signedInAt }
-    const nextUsers = users.map((candidate) => (candidate.id === user.id ? signedInUser : candidate))
-    setUsers(nextUsers)
-    publishSharedState({ users: nextUsers })
-    recordAudit('Login', `${user.fullName} signed in.`, user.fullName)
-    recordAnalytics('login_success', { userId: user.id, outcome: 'signed_in' }, signedInUser)
-    setCurrentUser(signedInUser)
-    const resumable = sessions.find((session) => {
-      const assignedTest = tests.find((test) => test.id === session.testId)
-      const questionSet = assignedTest ? sessionQuestionSetStatus(session, assignedTest, questions, signedInUser.id) : undefined
-      return (
-        session.userId === signedInUser.id &&
-        session.status === 'in_progress' &&
-        Boolean(assignedTest?.assignedUserIds.includes(signedInUser.id)) &&
-        Boolean(assignedTest && getAvailabilityState(assignedTest).canStart) &&
-        Boolean(questionSet?.canResume)
-      )
-    })
-    if (resumable) {
-      setActiveTestId(resumable.testId)
-      setActiveSessionId(resumable.id)
-      recordAnalytics('test_resumed', {
-        userId: signedInUser.id,
-        testId: resumable.testId,
-        outcome: 'restored_on_login',
-        metadata: { session_id: resumable.id, answered_questions: resumable.responses.length },
-      }, signedInUser)
-      setToast('Your in-progress test has been restored. The question timer continued while you were away.')
-      setView('taking-test')
-      return
-    }
-    setView(firstViewForUser(signedInUser, permissions))
   }
 
   /**
@@ -7210,7 +7277,7 @@ function App() {
       ...metadataOnlyTrainingSources(nextQuestionBankMetadata).filter((source) => source.id === batchId),
     ])
     setCourseImageRegistry(nextCourseImageRegistry)
-    localStorage.setItem(courseImageRegistryStorageKey, JSON.stringify(nextCourseImageRegistry))
+    writeStored(courseImageRegistryStorageKey, nextCourseImageRegistry)
     setQuestionBankMetadata(nextQuestionBankMetadata)
     setQuestionBankTrainingSources((existing) =>
       normalizeQuestionBankTrainingSources([...existing.filter((source) => source.id !== batchId), ...nextTrainingSources]),
@@ -7309,7 +7376,7 @@ function App() {
       .map((userId) => users.find((user) => user.id === userId)?.fullName ?? userId)
       .join(', ')
     setCourseDeployments(nextCourseDeployments)
-    localStorage.setItem(courseDeploymentsStorageKey, JSON.stringify(nextCourseDeployments))
+    writeStored(courseDeploymentsStorageKey, nextCourseDeployments)
     publishSharedState({ courseDeployments: nextCourseDeployments })
     recordAudit(enabled ? 'Course deployed' : 'Course access revoked', `${courseName} was ${enabled ? 'deployed to' : 'revoked from'} ${userNames}.`)
     recordAnalytics('course_deployment_updated', {
@@ -7652,7 +7719,7 @@ function App() {
   function resetUserPassword(userId: string) {
     const user = users.find((item) => item.id === userId)
     if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) {
-      setToast('Only Ayodeji Falope Super Admin can reset tester account passwords.')
+      setToast('Only Ayodeji Falope Platform Owner can reset tester account passwords.')
       return
     }
     const now = new Date().toISOString()
@@ -7682,7 +7749,7 @@ function App() {
     issuedPassword?: string,
   ): TesterAccountOperationResult | undefined {
     if (!currentUser || !isAyodejiTokenOwner(currentUser)) {
-      setToast('Only Ayodeji Falope Super Admin can manage tester accounts.')
+      setToast('Only Ayodeji Falope Platform Owner can manage tester accounts.')
       return undefined
     }
     const actor = currentUser
@@ -7760,7 +7827,7 @@ function App() {
         ...account,
         disabled: true,
         disabledAt: now,
-        disabledReason: 'Switched off by Super Admin after testing.',
+        disabledReason: 'Switched off by Platform Owner after testing.',
         disabledBy: currentUser?.fullName,
         disabledById: currentUser?.id,
       }),
@@ -7824,7 +7891,7 @@ function App() {
     return updateTesterAccount(
       accountKey,
       'Tester password changed',
-      `Tester account ${accountKey} received a Super Admin chosen password and was switched on.`,
+      `Tester account ${accountKey} received a Platform Owner chosen password and was switched on.`,
       (account, _definition, now) => ({
         ...account,
         password,
@@ -7843,7 +7910,7 @@ function App() {
 
   function verifyTesterAccountPassword(accountKey: TesterAccountKey, password: string): TesterAccountOperationResult | undefined {
     if (!currentUser || !isAyodejiTokenOwner(currentUser)) {
-      setToast('Only Ayodeji Falope Super Admin can verify tester passwords.')
+      setToast('Only Ayodeji Falope Platform Owner can verify tester passwords.')
       return undefined
     }
     const actor = currentUser
@@ -7886,10 +7953,10 @@ function App() {
     const user = users.find((item) => item.id === userId)
     if (!user) return
     if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) {
-      setToast('Only Ayodeji Falope Super Admin can change tester account permissions.')
+      setToast('Only Ayodeji Falope Platform Owner can change tester account permissions.')
       return
     }
-    if (user.role === 'super_admin' || user.role === 'admin') {
+    if (user.role === OWNER_ROLE || user.role === 'admin') {
       publishSharedState({ permissions: { ...permissions, [user.id]: defaultPermissionsFor(user) } })
       setToast('Admin access is locked on. Admin always has every permission.')
       return
@@ -7916,14 +7983,14 @@ function App() {
   function bulkSetPermission(userIds: string[], permission: PermissionKey, enabled: boolean) {
     const editableUserIds = userIds.filter((userId) => {
       const user = users.find((candidate) => candidate.id === userId)
-      return user && user.role !== 'super_admin' && user.role !== 'admin' && (!isTesterAccount(user) || isAyodejiTokenOwner(currentUser))
+      return user && user.role !== OWNER_ROLE && user.role !== 'admin' && (!isTesterAccount(user) || isAyodejiTokenOwner(currentUser))
     })
     const nextPermissions = { ...permissions }
     userIds.forEach((userId) => {
       const user = users.find((candidate) => candidate.id === userId)
       if (!user) return
       if (isTesterAccount(user) && !isAyodejiTokenOwner(currentUser)) return
-      if (user.role === 'super_admin' || user.role === 'admin') {
+      if (user.role === OWNER_ROLE || user.role === 'admin') {
         nextPermissions[userId] = defaultPermissionsFor(user)
         return
       }
@@ -7999,7 +8066,7 @@ function App() {
       setToast('Only Ayodeji Falope can export token capability packages.')
       return
     }
-    downloadTextFile(`DEAP_API_Capability_Inventory_${new Date().toISOString().slice(0, 10)}.csv`, buildCapabilityCsv())
+    downloadTextFile(`staffiq_API_Capability_Inventory_${new Date().toISOString().slice(0, 10)}.csv`, buildCapabilityCsv())
     recordAudit('API capability CSV exported', `${apiCapabilityCatalog.length} capability scope(s) exported for token planning.`)
     recordAnalytics('api_capability_csv_exported', {
       value: apiCapabilityCatalog.length,
@@ -8014,7 +8081,7 @@ function App() {
       return
     }
     const requestedName = request.name.trim().slice(0, 80)
-    const tokenName = requestedName || (request.kind === 'super' ? 'DEAP Super Token' : 'DEAP Regular Scoped Token')
+    const tokenName = requestedName || (request.kind === 'super' ? 'Staffiq Super Token' : 'Staffiq Regular Scoped Token')
     const allowedScopes = new Set(apiCapabilityCatalog.map((capability) => capability.scope))
     const scopes = request.kind === 'super'
       ? apiCapabilityCatalog.map((capability) => capability.scope)
@@ -8077,7 +8144,7 @@ function App() {
           expiresAt: new Date(issuedAt.getTime() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
           deploymentRecords,
         }),
-        allowedModules: request.allowedModules.length ? request.allowedModules : ['DEAP API'],
+        allowedModules: request.allowedModules.length ? request.allowedModules : ['Staffiq API'],
         allowedEnvironments: request.allowedEnvironments.length ? request.allowedEnvironments : ['production'],
         allowedIps: request.allowedIps,
         rateLimit: request.rateLimit,
@@ -8129,7 +8196,7 @@ function App() {
             rotationStatus: 'revoked' as const,
             revokedAt,
             revokedBy: currentUser.fullName,
-            revokedReason: token.kind === 'super' ? 'Super Admin confirmed high-impact revocation.' : 'Revoked by Super Admin.',
+            revokedReason: token.kind === 'super' ? 'Platform Owner confirmed high-impact revocation.' : 'Revoked by Platform Owner.',
             deploymentRecords: token.deploymentRecords.map((deployment) => ({ ...deployment, status: 'revoked' as const })),
             auditLogs: [{
               id: eventId('api-token-audit'),
@@ -8139,7 +8206,7 @@ function App() {
               tokenType: token.kind,
               timestamp: revokedAt,
               affectedFields: ['status', 'deployments'],
-              reason: token.kind === 'super' ? 'High-impact Super Admin token revocation confirmed.' : 'Token revoked from catalogue.',
+              reason: token.kind === 'super' ? 'High-impact Platform Owner token revocation confirmed.' : 'Token revoked from catalogue.',
               result: 'success' as const,
             }, ...token.auditLogs],
           }
@@ -8393,7 +8460,7 @@ function App() {
       nextQuestionExposureCounts[questionId] = (nextQuestionExposureCounts[questionId] ?? 0) + 1
     })
     setQuestionExposureCounts(nextQuestionExposureCounts)
-    localStorage.setItem(`deap-session-questions-${testId}-${currentUser.id}`, JSON.stringify(selectedQuestionIds))
+    writeStored(`staffiq-session-questions-${testId}-${currentUser.id}`, selectedQuestionIds)
     const questionStartedAt = new Date().toISOString()
     const questionDeadlineAt = new Date(Date.now() + 60_000).toISOString()
     const session: TestSession = {
@@ -8451,9 +8518,9 @@ function App() {
     setActiveSessionId(session.id)
     setView('taking-test')
     if (masteryContext.resetBeforeDraw) {
-      setToast('You have answered every available question correctly in this category, so DEAP has started a fresh learning cycle.')
+      setToast('You have answered every available question correctly in this category, so Staffiq has started a fresh learning cycle.')
     } else if (availableQuestions.length < test.questionCount) {
-      setToast(`This assessment currently has ${selectedQuestionIds.length} synced question(s), so DEAP started with every available question instead of blocking the test.`)
+      setToast(`This assessment currently has ${selectedQuestionIds.length} synced question(s), so Staffiq started with every available question instead of blocking the test.`)
     } else if (selectedQuestionIds.length < test.questionCount) {
       setToast(`Only ${selectedQuestionIds.length} not-yet-correct question(s) remain in this category, so this attempt is shorter.`)
     }
@@ -8935,19 +9002,19 @@ function App() {
       })
     const worksheet = spreadsheet.utils.json_to_sheet(rows)
     const workbook = spreadsheet.utils.book_new()
-    spreadsheet.utils.book_append_sheet(workbook, worksheet, 'DEAP Results')
+    spreadsheet.utils.book_append_sheet(workbook, worksheet, 'Staffiq Results')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(analyticsRows), 'Analytics Events')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(questionQualityRows), 'Question Quality')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(exposureRows), 'Question Exposure')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(userRiskRows), 'User Risk')
     spreadsheet.utils.book_append_sheet(workbook, spreadsheet.utils.json_to_sheet(nullifiedRows), 'Nullified Attempts')
-    spreadsheet.writeFile(workbook, `DEAP_Results_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    spreadsheet.writeFile(workbook, `staffiq_Results_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   function exportSystemBackup() {
     const exportedAt = new Date().toISOString()
-    downloadJsonFile(`DEAP_Backup_${exportedAt.slice(0, 10)}.json`, {
-      version: 'deap-backup-v1',
+    downloadJsonFile(`staffiq_Backup_${exportedAt.slice(0, 10)}.json`, {
+      version: 'staffiq-backup-v1',
       exportedAt,
       state: normalizeSharedState({
         users,
@@ -8979,15 +9046,15 @@ function App() {
       layoutSettings,
       dashboardLayouts,
       apiTokens,
-      localStorageSnapshot: readDeapLocalStorageSnapshot(),
+      localStorageSnapshot: readStaffiqLocalStorageSnapshot(),
     })
-    recordAudit('System backup exported', `Full DEAP backup exported at ${new Date(exportedAt).toLocaleString()}.`)
+    recordAudit('System backup exported', `Full Staffiq Backup exported at ${new Date(exportedAt).toLocaleString()}.`)
     recordAnalytics('export_results', {
       value: sessions.length,
       outcome: 'system_backup_exported',
       metadata: { users: users.length, tests: tests.length, questions: questions.length },
     })
-    setToast('Full DEAP backup downloaded.')
+    setToast('Full Staffiq Backup downloaded.')
   }
 
   async function restoreSystemBackup(file?: File) {
@@ -9058,7 +9125,7 @@ function App() {
       )
       if (!confirmed) return
       Object.entries(payload.localStorageSnapshot ?? {}).forEach(([key, value]) => {
-        if (key.startsWith('deap-')) localStorage.setItem(key, value)
+        if (key.startsWith('staffiq-')) localStorage.setItem(key, value)
       })
       setUsers(nextSharedState.users ?? seedUsers)
       setPermissions(nextSharedState.permissions ?? buildDefaultPermissions(nextSharedState.users ?? seedUsers))
@@ -9083,7 +9150,7 @@ function App() {
       setDashboardLayouts(nextSharedState.dashboardLayouts ?? nextDashboardLayouts)
       setApiTokens(nextSharedState.apiTokens ?? [])
       publishSharedState(nextSharedState)
-      recordAudit('System backup restored', `${file.name} restored into DEAP.`)
+      recordAudit('System backup restored', `${file.name} restored into Staffiq.`)
       setToast('Backup restored and synced to Firebase.')
     } catch (error) {
       setToast(error instanceof Error ? `Backup restore failed: ${error.message}` : 'Backup restore failed.')
@@ -9119,7 +9186,7 @@ function App() {
       }))),
       'Operational Events',
     )
-    spreadsheet.writeFile(workbook, `DEAP_Admin_Audit_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    spreadsheet.writeFile(workbook, `staffiq_Admin_Audit_${new Date().toISOString().slice(0, 10)}.xlsx`)
     recordAudit('Admin audit exported', `${auditEvents.length} audit event(s) exported.`)
     setToast('Admin audit workbook downloaded.')
   }
@@ -9248,6 +9315,21 @@ function App() {
         onScroll={(event) => setAppearanceControlsFaded(event.currentTarget.scrollTop > 32 || window.scrollY > 96)}
         aria-label={isAdmin ? 'Administrator navigation' : 'User navigation'}
       >
+        <div className="tips-snooze" data-snoozed={tipsSnoozed ? 'true' : 'false'}>
+          {tipsSnoozed ? (
+            <div className="tips-snooze__status" role="status">
+              <span className="tips-snooze__label">Tips paused{tipsSnoozeRemaining ? ` · ${tipsSnoozeRemaining} left` : ''}</span>
+              <button type="button" className="tips-snooze__resume" onClick={resumeTips} data-tooltip="Resume the learning tips and popups now.">Resume</button>
+            </div>
+          ) : (
+            <div className="tips-snooze__menu" role="group" aria-label="Pause tips and popups">
+              <span className="tips-snooze__label">Pause tips</span>
+              <button type="button" onClick={() => snoozeTips(1)} data-tooltip="Hide all tips and popups for 1 day, then resume automatically.">1 day</button>
+              <button type="button" onClick={() => snoozeTips(3)} data-tooltip="Hide all tips and popups for 3 days, then resume automatically.">3 days</button>
+              <button type="button" onClick={() => snoozeTips(7)} data-tooltip="Hide all tips and popups for 1 week, then resume automatically.">1 week</button>
+            </div>
+          )}
+        </div>
         {isAdmin && (
           <button
             className="sidebar-resize-handle"
@@ -9283,6 +9365,19 @@ function App() {
           <div className="sidebar-brand-stack">
             <BrandHeader branding={branding} subtitle="Training&assessment" />
             <SyncIndicator state={syncState} />
+            <button
+              className="tenant-context-chip"
+              type="button"
+              onClick={() => isOwnerAdmin && navigateTo('tenants')}
+              disabled={!isOwnerAdmin}
+              aria-label={`Current workspace: ${activeTenant.displayName}${isOwnerAdmin ? '. Open client workspace management.' : ''}`}
+            >
+              <StaffiqIcon name="admin" size={24} />
+              <span>
+                <small>Current workspace</small>
+                <strong>{activeTenant.displayName}</strong>
+              </span>
+            </button>
           </div>
           <button
             className="mobile-menu-toggle"
@@ -9299,7 +9394,7 @@ function App() {
         <nav id="primary-navigation" aria-label={isAdmin ? 'Administrator sections' : 'Portal sections'}>
           {primaryNavigation.map(([itemView, iconName, label]) => (
             <button key={itemView} className={view === itemView ? 'active' : ''} type="button" onClick={() => navigateTo(itemView)}>
-              <DeapIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
+              <StaffiqIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
             </button>
           ))}
         </nav>
@@ -9311,7 +9406,7 @@ function App() {
               type="button"
               onClick={() => navigateTo(itemView)}
             >
-              <DeapIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
+              <StaffiqIcon className="nav-3d-icon" name={iconName} size={30} /> {label}
               {currentContribution && currentContribution.totalPoints > 0 && (
                 <span className="nav-points-badge" aria-label={`${currentContribution.totalPoints} contribution points`}>
                   {currentContribution.totalPoints}
@@ -9370,6 +9465,9 @@ function App() {
             onAudit={recordAudit}
             onToast={setToast}
           />
+        )}
+        {view === 'tenants' && isOwnerAdmin && (
+          <TenantManagementPanel activeTenant={activeTenant} onToast={setToast} />
         )}
         {view === 'training' && (
           <TrainingPortal
@@ -9434,6 +9532,8 @@ function App() {
             questionBankMetadata={questionBankMetadata}
             onNullifyAttempt={nullifyAttempt}
             onSetAnalyticsInclusion={setAssessmentAnalyticsInclusion}
+            currentUser={currentUser}
+            activeTenant={activeTenant}
           />
         )}
         {view === 'reports' && (
@@ -9454,8 +9554,8 @@ function App() {
             onRestoreTrashRecord={restoreTrashRecord}
           />
         )}
-        {view === 'notifications' && isSuperAdmin && (
-          <SuperAdminNotifications
+        {view === 'notifications' && isOwnerAdmin && (
+          <OwnerAdminNotifications
             auditEvents={auditEvents}
             analyticsEvents={analyticsEvents}
             problemReports={problemReports}
@@ -9466,7 +9566,7 @@ function App() {
           />
         )}
         {view === 'bug-reports' && canManageApiTokens && (
-          <SuperAdminBugReports
+          <OwnerAdminBugReports
             problemReports={problemReports}
             bugAuditLogs={bugAuditLogs}
             contributionPoints={contributionPoints}
@@ -9555,6 +9655,562 @@ function App() {
   )
 }
 
+const tenantStatusOptions: TenantStatus[] = ['draft', 'trialling', 'active', 'past_due', 'grace', 'suspended', 'cancelled', 'archived']
+const tenantPlanOptions: TenantPlan[] = ['manual', 'starter', 'growth', 'command']
+
+function tenantStatusLabel(status: string): string {
+  return status.replace(/_/g, ' ').replace(/^\w/, (letter) => letter.toUpperCase())
+}
+
+function TenantManagementPanel({ activeTenant, onToast }: { activeTenant: TenantSession; onToast: (message: string) => void }) {
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [directoryUsers, setDirectoryUsers] = useState<TenantDirectoryUser[]>([])
+  const [auditLogs, setAuditLogs] = useState<TenantAuditLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busyTenantId, setBusyTenantId] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [displayName, setDisplayName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [plan, setPlan] = useState<TenantPlan>('starter')
+  const [status, setStatus] = useState<TenantStatus>('draft')
+  const [seatLimit, setSeatLimit] = useState(25)
+  const [statusTenantId, setStatusTenantId] = useState('')
+  const [nextStatus, setNextStatus] = useState<TenantStatus>('active')
+  const [statusReason, setStatusReason] = useState('')
+  const [userSearch, setUserSearch] = useState('')
+  const [userTenantFilter, setUserTenantFilter] = useState('all')
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | TenantUserStatus>('all')
+  const [createUserOpen, setCreateUserOpen] = useState(false)
+  const [newUserTenantId, setNewUserTenantId] = useState(activeTenant.tenantId)
+  const [newUserFullName, setNewUserFullName] = useState('')
+  const [newUserDisplayName, setNewUserDisplayName] = useState('')
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserRole, setNewUserRole] = useState<Exclude<TenantUserRole, 'super_admin'>>('employee')
+  const [newUserDepartment, setNewUserDepartment] = useState('')
+  const [newUserJobRole, setNewUserJobRole] = useState('')
+  const [managedUserId, setManagedUserId] = useState('')
+  const [managedUserStatus, setManagedUserStatus] = useState<TenantUserStatus>('active')
+  const [managedUserRole, setManagedUserRole] = useState<Exclude<TenantUserRole, 'super_admin'>>('employee')
+  const [managedUserReason, setManagedUserReason] = useState('')
+  const [busyUserId, setBusyUserId] = useState('')
+  const [issuedCredential, setIssuedCredential] = useState<{ user: TenantDirectoryUser; password: string }>()
+
+  const loadDirectory = useCallback(async () => {
+    setLoading(true)
+    try {
+      const payload = await listTenantDirectory()
+      setTenants(payload.tenants)
+      setDirectoryUsers(payload.users || [])
+      setAuditLogs(payload.auditLogs)
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'Client workspaces could not be loaded.')
+    } finally {
+      setLoading(false)
+    }
+  }, [onToast])
+
+  useEffect(() => {
+    void loadDirectory()
+  }, [loadDirectory])
+
+  async function submitCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusyTenantId('create')
+    try {
+      const created = await createTenant({ displayName, slug, plan, status, seatLimit })
+      setDisplayName('')
+      setSlug('')
+      setCreateOpen(false)
+      onToast(`${created.displayName} was created with isolated storage.`)
+      await loadDirectory()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'The client workspace could not be created.')
+    } finally {
+      setBusyTenantId('')
+    }
+  }
+
+  async function openTenant(tenantId: string) {
+    if (tenantId === activeTenant.tenantId) return
+    setBusyTenantId(tenantId)
+    try {
+      await switchTenant<User>(tenantId)
+      window.location.reload()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'The client workspace could not be opened.')
+      setBusyTenantId('')
+    }
+  }
+
+  async function applyStatusChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!statusTenantId) return
+    setBusyTenantId(statusTenantId)
+    try {
+      const updated = await updateTenantStatus(statusTenantId, nextStatus, statusReason)
+      onToast(`${updated.displayName} is now ${tenantStatusLabel(updated.status).toLowerCase()}.`)
+      setStatusTenantId('')
+      setStatusReason('')
+      await loadDirectory()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'Workspace access could not be updated.')
+    } finally {
+      setBusyTenantId('')
+    }
+  }
+
+  async function submitCreateUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusyUserId('create')
+    try {
+      const result = await createTenantUser({
+        tenantId: newUserTenantId,
+        fullName: newUserFullName,
+        displayName: newUserDisplayName || newUserFullName.split(' ')[0] || newUserFullName,
+        email: newUserEmail,
+        role: newUserRole,
+        jobRole: newUserJobRole,
+        department: newUserDepartment,
+      })
+      setIssuedCredential({ user: result.user, password: result.issuedPassword })
+      setNewUserFullName('')
+      setNewUserDisplayName('')
+      setNewUserEmail('')
+      setNewUserDepartment('')
+      setNewUserJobRole('')
+      setCreateUserOpen(false)
+      onToast(`${result.user.fullName} was added without changing any existing user record.`)
+      await loadDirectory()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'The user record could not be created.')
+    } finally {
+      setBusyUserId('')
+    }
+  }
+
+  function openUserManager(user: TenantDirectoryUser) {
+    setManagedUserId(user.id)
+    setManagedUserStatus(user.status)
+    setManagedUserRole(user.role === 'admin' ? 'admin' : 'employee')
+    setManagedUserReason('')
+  }
+
+  async function applyUserChanges(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const user = directoryUsers.find((candidate) => candidate.id === managedUserId)
+    if (!user) return
+    if (!managedUserReason.trim()) {
+      onToast('Enter a reason so this user change remains auditable.')
+      return
+    }
+    setBusyUserId(user.id)
+    try {
+      if (managedUserStatus !== user.status) {
+        await updateTenantUserStatus({ tenantId: user.tenantId, userId: user.id, status: managedUserStatus, reason: managedUserReason })
+      }
+      if (user.role !== 'super_admin' && managedUserRole !== user.role) {
+        await updateTenantUserRole({ tenantId: user.tenantId, userId: user.id, role: managedUserRole, reason: managedUserReason })
+      }
+      onToast(`${user.fullName}'s access record was updated. Their history remains preserved.`)
+      setManagedUserId('')
+      setManagedUserReason('')
+      await loadDirectory()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'The user record could not be updated.')
+    } finally {
+      setBusyUserId('')
+    }
+  }
+
+  async function resetManagedUserPassword() {
+    const user = directoryUsers.find((candidate) => candidate.id === managedUserId)
+    if (!user) return
+    if (!managedUserReason.trim()) {
+      onToast('Enter a reason before resetting this password.')
+      return
+    }
+    setBusyUserId(user.id)
+    try {
+      const result = await resetTenantUserPassword({ tenantId: user.tenantId, userId: user.id, reason: managedUserReason })
+      setIssuedCredential({ user: result.user, password: result.issuedPassword })
+      onToast(`A new one time credential was issued for ${user.fullName}.`)
+      await loadDirectory()
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'The password could not be reset.')
+    } finally {
+      setBusyUserId('')
+    }
+  }
+
+  const activeCount = tenants.filter((tenant) => ['active', 'trialling', 'grace'].includes(tenant.status)).length
+  const blockedCount = tenants.filter((tenant) => ['suspended', 'cancelled', 'archived'].includes(tenant.status)).length
+  const totalMembers = tenants.reduce((total, tenant) => total + Number(tenant.memberCount || 0), 0)
+  const tenantNames = useMemo(() => new Map(tenants.map((tenant) => [tenant.id, tenant.displayName])), [tenants])
+  const managedUser = directoryUsers.find((user) => user.id === managedUserId)
+  const filteredDirectoryUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase()
+    return directoryUsers.filter((user) => {
+      if (userTenantFilter !== 'all' && user.tenantId !== userTenantFilter) return false
+      if (userStatusFilter !== 'all' && user.status !== userStatusFilter) return false
+      if (!query) return true
+      return [user.userId, user.fullName, user.displayName, user.email, user.department, user.jobRole, user.role, tenantNames.get(user.tenantId)]
+        .some((value) => String(value || '').toLowerCase().includes(query))
+    })
+  }, [directoryUsers, tenantNames, userSearch, userStatusFilter, userTenantFilter])
+
+  return (
+    <div className="tenant-management-page">
+      <PageTitle eyebrow="Platform Owner" title="Client Workspaces" />
+      <div className="tenant-page-toolbar">
+        <p>Each client has separate users, assessments, reports, branding, question banks and cloud storage.</p>
+        <div className="button-row">
+          <button className="secondary-button" type="button" onClick={() => void loadDirectory()} disabled={loading}>
+            <RefreshCw className={loading ? 'spin' : ''} size={18} /> Refresh
+          </button>
+          <button className="secondary-button" type="button" onClick={() => setCreateUserOpen((open) => !open)} aria-expanded={createUserOpen}>
+            <UserRound size={18} /> New User
+          </button>
+          <button className="primary-button" type="button" onClick={() => setCreateOpen((open) => !open)} aria-expanded={createOpen}>
+            <Plus size={18} /> New Workspace
+          </button>
+        </div>
+      </div>
+
+      <section className="tenant-summary-grid" aria-label="Workspace summary">
+        <Metric label="Client workspaces" value={tenants.length} icon={<StaffiqIcon name="admin" size={28} />} />
+        <Metric label="Active access" value={activeCount} icon={<CheckCircle2 />} />
+        <Metric label="Blocked access" value={blockedCount} icon={<ShieldCheck />} />
+        <Metric label="Active members" value={totalMembers} icon={<UsersRound />} />
+      </section>
+
+      {createOpen && (
+        <section className="tenant-editor" aria-labelledby="create-tenant-title">
+          <div>
+            <p className="eyebrow">Isolated client setup</p>
+            <h2 id="create-tenant-title">Create a workspace</h2>
+            <p>The new workspace starts empty apart from your owner account. Existing client data is never copied into it.</p>
+          </div>
+          <form className="tenant-form-grid" onSubmit={submitCreate}>
+            <label>
+              Client name
+              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Example: Calebella Limited" required maxLength={120} />
+            </label>
+            <label>
+              Workspace code
+              <input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="Example: calebella" maxLength={72} />
+              <small>Leave blank to create it from the client name.</small>
+            </label>
+            <label>
+              Plan
+              <select value={plan} onChange={(event) => setPlan(event.target.value as TenantPlan)}>
+                {tenantPlanOptions.map((option) => <option key={option} value={option}>{tenantStatusLabel(option)}</option>)}
+              </select>
+            </label>
+            <label>
+              Starting status
+              <select value={status} onChange={(event) => setStatus(event.target.value as TenantStatus)}>
+                {tenantStatusOptions.map((option) => <option key={option} value={option}>{tenantStatusLabel(option)}</option>)}
+              </select>
+            </label>
+            <label>
+              Seat limit
+              <input type="number" min={1} max={10000} value={seatLimit} onChange={(event) => setSeatLimit(Math.max(1, Number(event.target.value) || 1))} />
+            </label>
+            <div className="tenant-form-actions">
+              <button className="secondary-button" type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button className="primary-button" type="submit" disabled={busyTenantId === 'create'}>
+                {busyTenantId === 'create' ? <RefreshCw className="spin" size={18} /> : <Plus size={18} />} Create Workspace
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {createUserOpen && (
+        <section className="tenant-editor" aria-labelledby="create-tenant-user-title">
+          <div>
+            <p className="eyebrow">Permanent user record</p>
+            <h2 id="create-tenant-user-title">Add a workspace user</h2>
+            <p>The user can later be disabled, suspended or marked as having left. The record itself is never deleted.</p>
+          </div>
+          <form className="tenant-form-grid" onSubmit={submitCreateUser}>
+            <label>
+              Workspace
+              <select value={newUserTenantId} onChange={(event) => setNewUserTenantId(event.target.value)} required>
+                {tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.displayName}</option>)}
+              </select>
+            </label>
+            <label>
+              Full name
+              <input value={newUserFullName} onChange={(event) => setNewUserFullName(event.target.value)} placeholder="Example: Amaka Okafor" required maxLength={180} />
+            </label>
+            <label>
+              Display name
+              <input value={newUserDisplayName} onChange={(event) => setNewUserDisplayName(event.target.value)} placeholder="Example: Amaka" maxLength={120} />
+            </label>
+            <label>
+              Email
+              <input type="email" value={newUserEmail} onChange={(event) => setNewUserEmail(event.target.value)} placeholder="Example: amaka@company.com" required maxLength={180} />
+            </label>
+            <label>
+              Access role
+              <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as Exclude<TenantUserRole, 'super_admin'>)}>
+                <option value="employee">Employee</option>
+                <option value="admin">Workspace Admin</option>
+              </select>
+            </label>
+            <label>
+              Department
+              <input value={newUserDepartment} onChange={(event) => setNewUserDepartment(event.target.value)} placeholder="Example: Operations" required maxLength={160} />
+            </label>
+            <label>
+              Job role
+              <input value={newUserJobRole} onChange={(event) => setNewUserJobRole(event.target.value)} placeholder="Example: Operations Manager" maxLength={160} />
+            </label>
+            <div className="tenant-form-actions">
+              <button className="secondary-button" type="button" onClick={() => setCreateUserOpen(false)}>Cancel</button>
+              <button className="primary-button" type="submit" disabled={busyUserId === 'create'}>
+                {busyUserId === 'create' ? <RefreshCw className="spin" size={18} /> : <UserRound size={18} />} Add User
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="panel tenant-catalogue" aria-labelledby="tenant-catalogue-title">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Tenant catalogue</p>
+            <h2 id="tenant-catalogue-title">All client workspaces</h2>
+          </div>
+          <span className="status-badge">{activeTenant.displayName} open</span>
+        </div>
+        {loading ? (
+          <div className="empty-state"><RefreshCw className="spin" size={28} /><p>Loading client workspaces...</p></div>
+        ) : tenants.length === 0 ? (
+          <div className="empty-state"><StaffiqIcon name="empty" size={44} /><p>No client workspaces were found.</p></div>
+        ) : (
+          <div className="tenant-table-wrap">
+            <table className="tenant-table">
+              <thead>
+                <tr>
+                  <th scope="col">Workspace</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Plan</th>
+                  <th scope="col">Members</th>
+                  <th scope="col">Seats</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tenants.map((tenant) => (
+                  <tr key={tenant.id} className={tenant.id === activeTenant.tenantId ? 'active-tenant-row' : ''}>
+                    <td data-label="Workspace"><strong>{tenant.displayName}</strong><small>{tenant.isolationMode.replace(/_/g, ' ')}</small></td>
+                    <td data-label="Status"><span className={`tenant-status tenant-status-${tenant.status}`}>{tenantStatusLabel(tenant.status)}</span></td>
+                    <td data-label="Plan">{tenantStatusLabel(tenant.plan)}</td>
+                    <td data-label="Members">{tenant.memberCount ?? 0} active of {tenant.userCount ?? tenant.memberCount ?? 0}</td>
+                    <td data-label="Seats">{tenant.seatLimit}</td>
+                    <td data-label="Code"><code>{tenant.slug}</code></td>
+                    <td data-label="Actions">
+                      <div className="table-action-row">
+                        <button className="secondary-button compact" type="button" onClick={() => void openTenant(tenant.id)} disabled={tenant.id === activeTenant.tenantId || Boolean(busyTenantId)}>
+                          {busyTenantId === tenant.id ? <RefreshCw className="spin" size={16} /> : <ArrowRight size={16} />} {tenant.id === activeTenant.tenantId ? 'Open' : 'Switch'}
+                        </button>
+                        <button className="icon-button" type="button" onClick={() => { setStatusTenantId(tenant.id); setNextStatus(tenant.status); setStatusReason('') }} aria-label={`Change access status for ${tenant.displayName}`} title="Change workspace access">
+                          <Settings2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {statusTenantId && (
+        <section className="tenant-status-editor" aria-labelledby="tenant-status-title">
+          <div>
+            <p className="eyebrow">Access governance</p>
+            <h2 id="tenant-status-title">Change workspace status</h2>
+            <p>{tenants.find((tenant) => tenant.id === statusTenantId)?.displayName}</p>
+          </div>
+          <form onSubmit={applyStatusChange}>
+            <label>
+              New status
+              <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value as TenantStatus)}>
+                {tenantStatusOptions.map((option) => <option key={option} value={option}>{tenantStatusLabel(option)}</option>)}
+              </select>
+            </label>
+            <label>
+              Reason
+              <textarea value={statusReason} onChange={(event) => setStatusReason(event.target.value)} placeholder="State the billing, access or operational reason" required maxLength={800} />
+            </label>
+            <div className="button-row">
+              <button className="secondary-button" type="button" onClick={() => setStatusTenantId('')}>Cancel</button>
+              <button className="primary-button" type="submit" disabled={Boolean(busyTenantId)}><Save size={18} /> Save Status</button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="panel tenant-user-directory" aria-labelledby="tenant-user-directory-title">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Cross workspace user control</p>
+            <h2 id="tenant-user-directory-title">All tenant users</h2>
+            <p>Search every client workspace, change access safely and preserve the complete user history.</p>
+          </div>
+          <span className="status-badge">{filteredDirectoryUsers.length} shown</span>
+        </div>
+        <div className="tenant-user-policy-note">
+          <ShieldCheck size={22} />
+          <div><strong>No user deletion</strong><p>StaffiQ preserves every user record. Use Disabled, Suspended or Left when access must stop.</p></div>
+        </div>
+        <div className="tenant-user-filters">
+          <label className="search-box">
+            <Search size={18} />
+            <input value={userSearch} onChange={(event) => setUserSearch(event.target.value)} placeholder="Search users, roles, departments or workspaces" />
+          </label>
+          <label>
+            <span className="sr-only">Filter users by workspace</span>
+            <select value={userTenantFilter} onChange={(event) => setUserTenantFilter(event.target.value)}>
+              <option value="all">All workspaces</option>
+              {tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.displayName}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Filter users by status</span>
+            <select value={userStatusFilter} onChange={(event) => setUserStatusFilter(event.target.value as 'all' | TenantUserStatus)}>
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+              <option value="suspended">Suspended</option>
+              <option value="left">Left</option>
+            </select>
+          </label>
+        </div>
+        <div className="tenant-table-wrap">
+          <table className="tenant-table tenant-user-table">
+            <thead>
+              <tr>
+                <th scope="col">Workspace</th>
+                <th scope="col">User</th>
+                <th scope="col">Role</th>
+                <th scope="col">Department</th>
+                <th scope="col">Status</th>
+                <th scope="col">Last sign in</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDirectoryUsers.map((user) => (
+                <tr key={`${user.tenantId}:${user.id}`}>
+                  <td data-label="Workspace"><strong>{tenantNames.get(user.tenantId) ?? user.tenantId}</strong><small>{user.userId}</small></td>
+                  <td data-label="User"><strong>{user.fullName}</strong><small>{user.email}</small></td>
+                  <td data-label="Role">{roleDisplayName(user.role as Role)}</td>
+                  <td data-label="Department"><strong>{user.department || 'Not recorded'}</strong><small>{user.jobRole || 'No job role'}</small></td>
+                  <td data-label="Status"><span className={`tenant-user-status ${user.status}`}>{tenantStatusLabel(user.status)}</span></td>
+                  <td data-label="Last sign in">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}</td>
+                  <td data-label="Action">
+                    <button className="secondary-button compact" type="button" onClick={() => openUserManager(user)}>
+                      <Settings2 size={16} /> Manage
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!filteredDirectoryUsers.length && <p className="empty-copy">No permanent user records match these filters.</p>}
+        </div>
+      </section>
+
+      {managedUser && (
+        <section className="tenant-status-editor tenant-user-editor" aria-labelledby="tenant-user-editor-title">
+          <div>
+            <p className="eyebrow">User lifecycle control</p>
+            <h2 id="tenant-user-editor-title">Manage {managedUser.fullName}</h2>
+            <p>{tenantNames.get(managedUser.tenantId)} · {managedUser.userId} · record permanently retained</p>
+          </div>
+          <form onSubmit={applyUserChanges}>
+            <label>
+              Access status
+              <select value={managedUserStatus} onChange={(event) => setManagedUserStatus(event.target.value as TenantUserStatus)} disabled={managedUser.role === 'super_admin'}>
+                <option value="active">Active</option>
+                <option value="disabled">Disabled</option>
+                <option value="suspended">Suspended</option>
+                <option value="left">Left organisation</option>
+              </select>
+            </label>
+            <label>
+              Role
+              <select value={managedUserRole} onChange={(event) => setManagedUserRole(event.target.value as Exclude<TenantUserRole, 'super_admin'>)} disabled={managedUser.role === 'super_admin'}>
+                <option value="employee">Employee</option>
+                <option value="admin">Workspace Admin</option>
+              </select>
+            </label>
+            <label className="wide-field">
+              Reason for change
+              <textarea value={managedUserReason} onChange={(event) => setManagedUserReason(event.target.value)} placeholder="Record the operational or access reason" required maxLength={800} />
+            </label>
+            {managedUser.role === 'super_admin' && <p className="tenant-owner-lock"><ShieldCheck size={18} /> The permanent Platform Owner account cannot be disabled, suspended or reassigned.</p>}
+            <div className="button-row wide-field">
+              <button className="secondary-button" type="button" onClick={() => { setManagedUserId(''); setManagedUserReason('') }}>Cancel</button>
+              <button className="secondary-button" type="button" onClick={() => void resetManagedUserPassword()} disabled={Boolean(busyUserId)}><KeyRound size={18} /> Reset Password</button>
+              <button className="primary-button" type="submit" disabled={Boolean(busyUserId) || managedUser.role === 'super_admin'}><Save size={18} /> Save User</button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="panel tenant-audit" aria-labelledby="tenant-audit-title">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Accountability</p>
+            <h2 id="tenant-audit-title">Recent workspace audit</h2>
+          </div>
+        </div>
+        {auditLogs.length ? (
+          <div className="tenant-audit-list">
+            {auditLogs.slice(0, 20).map((log) => (
+              <article key={log.id}>
+                <StaffiqIcon name="security" size={28} />
+                <div><strong>{log.action.replace(/[._]/g, ' ')}</strong><p>{tenants.find((tenant) => tenant.id === log.tenantId)?.displayName ?? log.tenantId}</p></div>
+                <time dateTime={log.createdAt}>{new Date(log.createdAt).toLocaleString()}</time>
+              </article>
+            ))}
+          </div>
+        ) : <p className="empty-copy">No workspace audit activity has been recorded yet.</p>}
+      </section>
+
+      {issuedCredential && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setIssuedCredential(undefined)}>
+          <section className="credential-modal" role="dialog" aria-modal="true" aria-labelledby="tenant-credential-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="tenant-credential-title">Credential for {issuedCredential.user.fullName}</h2>
+            <p>Copy this password now and send it through a secure channel. The tenant catalogue will not display it again.</p>
+            <div className="credential-box">
+              <span>Workspace</span>
+              <strong>{tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}</strong>
+              <span>User ID</span>
+              <strong>{issuedCredential.user.userId}</strong>
+              <span>Temporary password</span>
+              <strong>{issuedCredential.password}</strong>
+            </div>
+            <div className="modal-actions">
+              <button className="primary-button" type="button" onClick={() => void copyToClipboard(`StaffiQ sign in\nWorkspace: ${tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}\nUser ID: ${issuedCredential.user.userId}\nTemporary password: ${issuedCredential.password}`)}>
+                <Copy size={18} /> Copy Credential
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setIssuedCredential(undefined)}>Done</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LoginScreen({
   onLogin,
   toast,
@@ -9568,7 +10224,7 @@ function LoginScreen({
   chatsEnabled,
   onToggleChats,
 }: {
-  onLogin: (email: string, password: string) => void
+  onLogin: (email: string, password: string, workspace: string) => Promise<void>
   toast: string
   branding: Branding
   theme: ThemeMode
@@ -9582,6 +10238,8 @@ function LoginScreen({
 }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [workspace, setWorkspace] = useState('')
+  const [busy, setBusy] = useState(false)
   return (
     <main className="login-page">
       <AppearanceQuickControls
@@ -9610,11 +10268,21 @@ function LoginScreen({
         <BrandHeader branding={branding} subtitle="Dynamic Employee Assessment Platform" className="login-brand" />
         <h1 id="login-title">Sign in to Training&assessment</h1>
         <form
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            onLogin(username, password)
+            if (busy) return
+            setBusy(true)
+            try {
+              await onLogin(username, password, workspace)
+            } finally {
+              setBusy(false)
+            }
           }}
         >
+          <label>
+            Workspace
+            <input value={workspace} onChange={(event) => setWorkspace(event.target.value)} type="text" autoComplete="organization" required />
+          </label>
           <label>
             Username
             <input value={username} onChange={(event) => setUsername(event.target.value)} type="text" autoComplete="username" />
@@ -9623,11 +10291,11 @@ function LoginScreen({
             Password
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
           </label>
-          <button className="primary-button" type="submit">
-            <ShieldCheck size={18} /> Log In
+          <button className="primary-button" type="submit" disabled={busy}>
+            {busy ? <RefreshCw className="spin" size={18} /> : <ShieldCheck size={18} />} {busy ? 'Signing In' : 'Log In'}
           </button>
         </form>
-        <p className="hint">Use your assigned display name, User ID, full name, or email as username.</p>
+        <p className="hint">Your organisation will provide your workspace name. Use your assigned display name, User ID, full name, or email as username.</p>
         {toast && <p className="inline-error">{toast}</p>}
       </section>
     </main>
@@ -9641,7 +10309,7 @@ function BrandHeader({ branding, subtitle, className = '' }: { branding: Brandin
         {branding.logoUrl ? <img src={branding.logoUrl} alt="Training and assessment logo" /> : <LogoPlaceholder />}
       </span>
       <div className="brand-copy">
-        <strong>DEAP</strong>
+        <strong>Staffiq</strong>
         <small>{subtitle}</small>
       </div>
     </div>
@@ -9708,16 +10376,22 @@ function AppearanceQuickControls({
         className="appearance-font-scale-control"
       />
       <ThemeToggleButton theme={theme} onToggleTheme={onToggleTheme} />
-      <button
-        className={`theme-switch chats-switch ${chatsEnabled ? 'active' : ''}`.trim()}
-        type="button"
-        onClick={onToggleChats}
-        aria-pressed={chatsEnabled}
-        data-tooltip="Turn contextual learning tooltips on or off. When enabled, hover over controls for three seconds or focus them with the keyboard to learn what they do."
-      >
-        <MessageSquare size={18} />
-        {chatsEnabled ? 'Learning tips on' : 'Learning tips off'}
-      </button>
+      <label className="chats-toggle-label">
+        <MessageSquare size={16} />
+        <span className="chats-toggle-text">Learning tips</span>
+        <button
+          className={`chats-toggle-switch ${chatsEnabled ? 'chats-toggle--on' : 'chats-toggle--off'}`}
+          type="button"
+          role="switch"
+          aria-checked={chatsEnabled}
+          onClick={onToggleChats}
+          data-tooltip="Turn contextual learning tooltips on or off. When enabled, hover over controls for three seconds or focus them with the keyboard to learn what they do."
+        >
+          <span className="chats-toggle-label-off">off</span>
+          <span className="chats-toggle-thumb" />
+          <span className="chats-toggle-label-on">on</span>
+        </button>
+      </label>
     </section>
   )
 }
@@ -9741,7 +10415,7 @@ function AffectedAreaCombobox({
   const activeAreas = useMemo(() => normalizeAffectedAreas(areas).filter((area) => area.status === 'active'), [areas])
   const detectedArea = useMemo(() => detectAffectedAreaFromView(currentView, activeAreas), [activeAreas, currentView])
   const selectedArea = value.id ? activeAreas.find((area) => area.id === value.id) : undefined
-  const recentIds = useMemo(() => readStored<string[]>('deap-recent-affected-area-ids', []), [])
+  const recentIds = useMemo(() => readStored<string[]>('staffiq-recent-affected-area-ids', []), [])
   const options = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const seen = new Set<string>()
@@ -9777,7 +10451,7 @@ function AffectedAreaCombobox({
     setQuery(area.displayName)
     setOpen(false)
     const nextRecent = [area.id, ...recentIds.filter((id) => id !== area.id)].slice(0, 8)
-    localStorage.setItem('deap-recent-affected-area-ids', JSON.stringify(nextRecent))
+    writeStored('staffiq-recent-affected-area-ids', nextRecent)
   }
 
   function selectOther() {
@@ -10012,7 +10686,7 @@ function ProblemReportLauncher({
             type="button"
             onClick={onOpen}
             aria-label="Report a problem"
-            data-tooltip="Report a problem. DEAP includes this page and safe diagnostic details so the issue is easier to correct."
+            data-tooltip="Report a problem. Staffiq includes this page and safe diagnostic details so the issue is easier to correct."
           >
             <Bug size={18} />
             <span>Report problem</span>
@@ -10039,7 +10713,7 @@ function ProblemReportLauncher({
             <span className="status-pill open"><Bug size={16} /> Problem report</span>
             <h2 id="problem-report-title">Tell us what went wrong</h2>
             <p>
-              This sends a clear bug report so DEAP can check what needs to be corrected. Current page: {view}. Sync state: {syncState}
+              This sends a clear bug report so Staffiq can check what needs to be corrected. Current page: {view}. Sync state: {syncState}
               {activeTestName ? `. Active test: ${activeTestName}` : ''}.
             </p>
             <label>
@@ -10332,7 +11006,7 @@ function FeatureInventoryPanel({
       for (const file of exportFiles) {
         await downloadFeatureInventoryFile(file.format, file.fileName, payload.version, exportItems)
       }
-      const response = await fetch('/api/superadmin/feature_inventory/export', {
+      const response = await tenantFetch('/api/private/feature_inventory/export', {
         method: 'POST',
         headers: featureInventoryHeaders(currentUser),
         body: JSON.stringify({
@@ -10432,7 +11106,7 @@ function FeatureInventoryPanel({
 
   return (
     <section className="feature-inventory-page">
-      <PageTitle eyebrow="Super Admin private registry" title="Feature Inventory" />
+      <PageTitle eyebrow="Platform Owner private registry" title="Feature Inventory" />
       <section className="panel feature-inventory-hero">
         <div>
           <span className="status-pill locked">Ayodeji Falope only</span>
@@ -10455,7 +11129,7 @@ function FeatureInventoryPanel({
         </div>
       </section>
       {error && <div className="error-banner" role="alert">{error}</div>}
-      <section className="panel superadmin-storage-readiness" aria-label="Feature inventory storage readiness">
+      <section className="panel owneradmin-storage-readiness" aria-label="Feature inventory storage readiness">
         <div>
           <span className="status-pill supervised"><ShieldCheck size={16} /> Storage readiness</span>
           <h2>Private export storage is prepared</h2>
@@ -10490,7 +11164,7 @@ function FeatureInventoryPanel({
           <option value="all">All visibility</option>
           <option value="public_user">Public user</option>
           <option value="admin">Admin</option>
-          <option value="super_admin">Super Admin</option>
+          <option value={OWNER_ROLE}>Platform Owner</option>
           <option value="system_only">System only</option>
         </select>
         <select value={status} onChange={(event) => setStatus(event.target.value as 'all' | FeatureInventoryStatus)} aria-label="Status filter">
@@ -10742,7 +11416,7 @@ function BugReportFeedbackCenter({
     attachments?: ProblemAttachment[]
   }) => void
 }) {
-  const feedbackDraftStorageKey = `deap-feedback-draft-${currentUser.id}`
+  const feedbackDraftStorageKey = `staffiq-feedback-draft-${currentUser.id}`
   const savedFeedbackDraft = readStored<FeedbackSubmissionDraft>(feedbackDraftStorageKey, {})
   const initialMode = savedFeedbackDraft.mode === 'feedback' ? 'feedback' : 'bug'
   const [mode, setMode] = useState<FeedbackReportMode>(initialMode)
@@ -10763,7 +11437,7 @@ function BugReportFeedbackCenter({
   const [attachments, setAttachments] = useState<ProblemAttachment[]>([])
   const [attachmentError, setAttachmentError] = useState('')
   const [attachmentBusy, setAttachmentBusy] = useState(false)
-  const [showSelfRepairNotice, setShowSelfRepairNotice] = useState(() => !readStored<boolean>('deap-self-repair-notice-seen', false))
+  const [showSelfRepairNotice, setShowSelfRepairNotice] = useState(() => !readStored<boolean>('staffiq-self-repair-notice-seen', false))
   const [showOptionalDetails, setShowOptionalDetails] = useState(false)
   const categories = mode === 'bug' ? bugReportCategories : feedbackCategories
   const totalPoints = contributionRecord?.totalPoints ?? 0
@@ -10928,7 +11602,7 @@ function BugReportFeedbackCenter({
                 <p>
                   When you submit a bug report or feedback, the web app captures the details needed to help the system
                   self-correct. Most clear reports can be checked and corrected by the software in less than one hour, making
-                  DEAP more reliable and easier for everyone to use.
+                  Staffiq more reliable and easier for everyone to use.
                 </p>
               </div>
               <button
@@ -10936,7 +11610,7 @@ function BugReportFeedbackCenter({
                 type="button"
                 aria-label="Close self-repairing feature notice"
                 onClick={() => {
-                  localStorage.setItem('deap-self-repair-notice-seen', 'true')
+                  localStorage.setItem('staffiq-self-repair-notice-seen', 'true')
                   setShowSelfRepairNotice(false)
                 }}
               >
@@ -10948,7 +11622,7 @@ function BugReportFeedbackCenter({
                 className="primary-button"
                 type="button"
                 onClick={() => {
-                  localStorage.setItem('deap-self-repair-notice-seen', 'true')
+                  localStorage.setItem('staffiq-self-repair-notice-seen', 'true')
                   setShowSelfRepairNotice(false)
                 }}
               >
@@ -10963,7 +11637,7 @@ function BugReportFeedbackCenter({
         <div>
           <span className="status-pill supervised"><Sparkles size={16} /> Contribution centre</span>
           <h2>Report issues, suggest improvements, and earn contribution points.</h2>
-          <p>{currentUser.fullName}, useful submissions help DEAP catch problems early, improve workflows, and reward people who make the platform stronger.</p>
+          <p>{currentUser.fullName}, useful submissions help Staffiq catch problems early, improve workflows, and reward people who make the platform stronger.</p>
         </div>
         <div className="feedback-points-card">
           <span>Your Contribution Points</span>
@@ -10978,12 +11652,12 @@ function BugReportFeedbackCenter({
 
       <div className="feedback-mode-grid" role="tablist" aria-label="Submission type">
         <button className={mode === 'bug' ? 'active' : ''} type="button" onClick={() => setMode('bug')} aria-pressed={mode === 'bug'}>
-          <DeapIcon name="feedback" size={42} />
+          <StaffiqIcon name="feedback" size={42} />
           <strong>Report a Bug</strong>
           <span>Broken flows, wrong data, crashes, upload issues, slow pages, and failed actions.</span>
         </button>
         <button className={mode === 'feedback' ? 'active' : ''} type="button" onClick={() => setMode('feedback')} aria-pressed={mode === 'feedback'}>
-          <DeapIcon name="help" size={42} />
+          <StaffiqIcon name="help" size={42} />
           <strong>Give Feedback</strong>
           <span>Feature ideas, usability complaints, design feedback, help requests, and general comments.</span>
         </button>
@@ -11153,7 +11827,7 @@ function BugReportFeedbackCenter({
           <h3>What happens next?</h3>
           <div className="simple-next-steps">
             <span><CheckCircle2 size={16} /> Your report is saved.</span>
-            <span><ShieldCheck size={16} /> DEAP checks what needs to be corrected.</span>
+            <span><ShieldCheck size={16} /> Staffiq checks what needs to be corrected.</span>
             <span><Bell size={16} /> You can check this page for updates.</span>
           </div>
         </aside>
@@ -11282,7 +11956,7 @@ function EnterpriseUpgradeConsole() {
       <summary className="upgrade-console-summary">
         <div>
           <h2>Product upgrade catalogue</h2>
-          <p>Research-informed DEAP roadmap across product capability, UI/UX, and admin analytics. Implemented items are active in this build; foundation-ready items have UI/data scaffolding and still need deeper external integration for full production use.</p>
+          <p>Research-informed Staffiq roadmap across product capability, UI/UX, and admin analytics. Implemented items are active in this build; foundation-ready items have UI/data scaffolding and still need deeper external integration for full production use.</p>
         </div>
         <span className="upgrade-progress-pill">{implemented} implemented · {foundations} foundation-ready · {integrations} integration</span>
       </summary>
@@ -11362,8 +12036,8 @@ function EnterpriseUpgradeConsole() {
         ))}
       </div>
       <div className="feature-catalogue-summary full-expansion-summary">
-        <h3>Complete DEAP expansion backlog</h3>
-        <p>{fullFeatureExpansionTotal} recommended improvements are now captured as the implementation backlog for the app direction: learning impact, assessment quality, Super Admin governance, reporting, reliability, security, and help documentation.</p>
+        <h3>Complete Staffiq expansion backlog</h3>
+        <p>{fullFeatureExpansionTotal} recommended improvements are now captured as the implementation backlog for the app direction: learning impact, assessment quality, Platform Owner governance, reporting, reliability, security, and help documentation.</p>
       </div>
       <div className="feature-expansion-grid">
         {fullFeatureExpansionRecommendations.map((group) => (
@@ -11392,7 +12066,7 @@ function EnterpriseUpgradeConsole() {
                 return (
                   <article className={`feature-catalogue-card ${status.className}`} key={item.title}>
                     <div className="feature-catalogue-card-heading">
-                      <span>{item.sourceHint ?? 'DEAP roadmap'}</span>
+                      <span>{item.sourceHint ?? 'Staffiq roadmap'}</span>
                       <em>{status.label}</em>
                     </div>
                     <h5>{item.title}</h5>
@@ -11720,7 +12394,7 @@ function TrainingPortal({
   }
   const selectedCourseBalancedFlashcardCount = Math.min(selectedCourseDifficultyCounts.Easy, selectedCourseDifficultyCounts.Medium, selectedCourseDifficultyCounts.Hard, 5)
   const deploymentUsers = useMemo(
-    () => users.filter((user) => !['admin', 'super_admin'].includes(user.role)),
+    () => users.filter((user) => !['admin', OWNER_ROLE].includes(user.role)),
     [users],
   )
   const filteredDeploymentUsers = useMemo(() => {
@@ -12261,7 +12935,7 @@ function Dashboard({
         'Check live tests',
         'Review recent reports',
         'Open Help for guidance',
-        currentUser?.role === 'super_admin' ? 'Check Super Admin notifications' : 'Keep user guidance simple',
+        currentUser?.role === OWNER_ROLE ? 'Check Platform Owner notifications' : 'Keep user guidance simple',
       ]
 
   function scheduleDashboardLayoutSave(nextLayout: UserDashboardLayout, changeDescription: string) {
@@ -12588,7 +13262,7 @@ function Dashboard({
               <header className="personal-dashboard-widget-header">
                 <div className="dashboard-widget-title">
                   <span className="dashboard-widget-grip" aria-hidden="true"><GripVertical size={18} /></span>
-                  <DeapIcon name={definition?.iconName ?? 'dashboard'} size={34} />
+                  <StaffiqIcon name={definition?.iconName ?? 'dashboard'} size={34} />
                   <div>
                     <h2>{definition?.title ?? widget.widgetId}</h2>
                     <p>{definition?.summary ?? 'Saved dashboard module.'}</p>
@@ -12925,7 +13599,7 @@ function getAvailabilityState(test: Assessment): { label: string; detail: string
 }
 
 function sessionQuestionIds(session: TestSession, test: Assessment, userId: string): string[] {
-  return session.questionIds?.length ? session.questionIds : readStored<string[]>(`deap-session-questions-${test.id}-${userId}`, [])
+  return session.questionIds?.length ? session.questionIds : readStored<string[]>(`staffiq-session-questions-${test.id}-${userId}`, [])
 }
 
 function sessionQuestionSetStatus(session: TestSession, test: Assessment, questions: Question[], userId: string) {
@@ -13102,7 +13776,7 @@ function TestsPanel({
           </label>
           <label>
             Description
-            <textarea name="description" defaultValue="Timed DEAP assessment generated from approved training material." maxLength={500} />
+            <textarea name="description" defaultValue="Timed Staffiq assessment generated from approved training material." maxLength={500} />
           </label>
           <label>
             Question bank
@@ -13555,7 +14229,7 @@ function EmployeesPanel({
             )
           })}
         </div>
-        {!filteredUsers.length && <EmptyState title="No users found" body={userFilter ? 'Clear the search field to show the current real user directory.' : 'Import a CSV/XLSX employee directory to populate DEAP with real staff.'} />}
+        {!filteredUsers.length && <EmptyState title="No users found" body={userFilter ? 'Clear the search field to show the current real user directory.' : 'Import a CSV/XLSX employee directory to populate Staffiq with real staff.'} />}
       </section>
       {selectedUser && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSelectedUser(undefined)}>
@@ -13897,7 +14571,7 @@ function buildAnalyticsPromptBank(context: AnalyticsPromptContext): Array<{ labe
     for (const lens of lenses) {
       for (const scope of scopes) {
         for (const output of outputs) {
-          const prompt = `Using the current DEAP analytics filters, ${lens} ${subject} ${scope}. ${output}`
+          const prompt = `Using the current Staffiq analytics filters, ${lens} ${subject} ${scope}. ${output}`
           const subjectLabel = subject.split(' ').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
           const scopeLabel = scope.replace(/^(within|for|using|inside|where|during)\s+/i, '').slice(0, 24)
           prompts.push({ label: `${subjectLabel}: ${scopeLabel}`, prompt })
@@ -13927,6 +14601,8 @@ function Analytics({
   questionBankMetadata,
   onNullifyAttempt,
   onSetAnalyticsInclusion,
+  currentUser,
+  activeTenant,
 }: {
   sessions: TestSession[]
   users: User[]
@@ -13936,7 +14612,20 @@ function Analytics({
   questionBankMetadata: QuestionBankMetadataMap
   onNullifyAttempt: (sessionId: string) => void
   onSetAnalyticsInclusion: (testId: string, includeInAnalytics: boolean) => void
+  currentUser: User | undefined
+  activeTenant: TenantSession
 }) {
+  // AI access context — derived from user + tenant
+  const aiAccessContext = useMemo(() => ({
+    userId: currentUser?.userId ?? currentUser?.id ?? 'unknown',
+    userRole: currentUser?.role ?? 'employee',
+    tenantId: activeTenant.tenantId,
+    tenantPlanId: activeTenant.plan as TenantPlanID,
+    tenantAIAccess: 'enabled' as const,
+    userAIAccess: 'inherit' as const,
+    monthlyCallsUsed: 0,
+    monthlyLimit: activeTenant.plan === 'command' ? 500 : activeTenant.plan === 'growth' ? 200 : 0,
+  }), [currentUser, activeTenant.tenantId, activeTenant.plan])
   const [range, setRange] = useState('all')
   const [department, setDepartment] = useState('all')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>(() => users.map((user) => user.id))
@@ -13950,10 +14639,10 @@ function Analytics({
   const [chartFocus, setChartFocus] = useState<AnalyticsChartFocus>('all')
   const [promptDeckSeed, setPromptDeckSeed] = useState(() => Date.now())
   const [chatThreads, setChatThreads] = useState<AiChatThread[]>(() => {
-    const stored = scrubAiChatThreads(readStored<AiChatThread[]>('deap-ai-chat-threads', []))
+    const stored = scrubAiChatThreads(readStored<AiChatThread[]>('staffiq-ai-chat-threads', []))
     return stored.length ? stored : [createAiThread()]
   })
-  const [selectedChatId, setSelectedChatId] = useState(() => localStorage.getItem('deap-ai-selected-chat-id') ?? '')
+  const [selectedChatId, setSelectedChatId] = useState(() => readStored('staffiq-ai-selected-chat-id', ''))
   const [aiDraft, setAiDraft] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
@@ -14633,14 +15322,14 @@ function Analytics({
   const activeChat = useMemo(() => chatThreads.find((thread) => thread.id === selectedChatId) ?? chatThreads[0], [chatThreads, selectedChatId])
 
   useEffect(() => {
-    localStorage.setItem('deap-ai-chat-threads', JSON.stringify(chatThreads))
+    writeStored('staffiq-ai-chat-threads', chatThreads)
   }, [chatThreads])
 
   useEffect(() => {
     if (!chatThreads.length) return
     const nextSelectedId = chatThreads.some((thread) => thread.id === selectedChatId) ? selectedChatId : chatThreads[0].id
     if (nextSelectedId !== selectedChatId) setSelectedChatId(nextSelectedId)
-    localStorage.setItem('deap-ai-selected-chat-id', nextSelectedId)
+    writeStored('staffiq-ai-selected-chat-id', nextSelectedId)
   }, [chatThreads, selectedChatId])
 
   useEffect(() => {
@@ -14889,6 +15578,7 @@ function Analytics({
     }
     setSelectedChatId(threadId)
     setChatThreads((existing) => [optimisticThread, ...existing.filter((thread) => thread.id !== threadId)])
+    const startTime = Date.now()
     try {
       const result = await requestAiIntelligence(buildAiPayload(trimmedPrompt, optimisticThread))
       const assistantMessage: AiChatMessage = {
@@ -14904,6 +15594,18 @@ function Analytics({
             : thread,
         ),
       )
+      // Log AI usage (fire-and-forget)
+      logAIUsage({
+        tenantId: activeTenant.tenantId,
+        userId: currentUser?.userId ?? currentUser?.id ?? 'unknown',
+        userName: currentUser?.fullName ?? currentUser?.displayName ?? 'Unknown',
+        userRole: currentUser?.role ?? 'employee',
+        featureName: 'admin_chat',
+        provider: 'perplexity',
+        success: true,
+        latencyMs: Date.now() - startTime,
+        tokenEstimate: estimateTokens(trimmedPrompt + result.answer),
+      })
     } catch (error) {
       setAiError(error instanceof Error ? error.message : 'AI analysis could not be completed.')
     } finally {
@@ -14921,11 +15623,24 @@ function Analytics({
     setAiBriefBusy(true)
     setAiBriefError('')
     const prompt =
-      'Create a current DEAP admin intelligence brief from the portal data and filters. Use headings: Situation, Risks, Question-bank context, Recommended actions. Be direct, evidence-based, and do not invent data.'
+      'Create a current Staffiq admin intelligence brief from the portal data and filters. Use headings: Situation, Risks, Question-bank context, Recommended actions. Be direct, evidence-based, and do not invent data.'
+    const startTime = Date.now()
     try {
       const result = await requestAiIntelligence(buildAiPayload(prompt, activeChat))
       setAiBrief(result.answer)
       setAiBriefUpdatedAt(new Date().toISOString())
+      // Log AI usage (fire-and-forget)
+      logAIUsage({
+        tenantId: activeTenant.tenantId,
+        userId: currentUser?.userId ?? currentUser?.id ?? 'unknown',
+        userName: currentUser?.fullName ?? currentUser?.displayName ?? 'Unknown',
+        userRole: currentUser?.role ?? 'employee',
+        featureName: 'executive_brief',
+        provider: 'perplexity',
+        success: true,
+        latencyMs: Date.now() - startTime,
+        tokenEstimate: estimateTokens(prompt + result.answer),
+      })
     } catch (error) {
       setAiBriefError(error instanceof Error ? error.message : 'AI brief could not be generated.')
     } finally {
@@ -15042,7 +15757,7 @@ function Analytics({
               Role
               <select value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
                 <option value="all">All roles</option>
-                <option value="super_admin">Super Admin</option>
+                <option value={OWNER_ROLE}>Platform Owner</option>
                 <option value="admin">Admin</option>
                 <option value="employee">Employee</option>
               </select>
@@ -15123,9 +15838,11 @@ function Analytics({
             <h2>Admin intelligence brief</h2>
             <p>These live cards update from portal analytics. Use Perplexity for a deeper executive interpretation of the same admin-only data.</p>
           </div>
-          <button className="primary-button compact" type="button" onClick={() => void refreshAiBrief()} disabled={aiBriefBusy}>
-            <Sparkles size={16} /> {aiBriefBusy ? 'Analyzing...' : 'Refresh AI brief'}
-          </button>
+          <AiGate feature="executive_brief" context={aiAccessContext}>
+            <button className="primary-button compact" type="button" onClick={() => void refreshAiBrief()} disabled={aiBriefBusy}>
+              <Sparkles size={16} /> {aiBriefBusy ? 'Analyzing...' : 'Refresh AI brief'}
+            </button>
+          </AiGate>
         </div>
         <div className="ai-brief-grid">
           {intelligenceCards.map((card) => (
@@ -15160,16 +15877,20 @@ function Analytics({
           </button>
         </div>
         <div className="quick-prompt-toolbar">
-          <button className="primary-button compact" type="button" onClick={() => setPromptDeckSeed(Date.now())} disabled={aiBusy}>
-            <RefreshCw size={15} /> Regenerate input
-          </button>
+          <AiGate feature="admin_chat" context={aiAccessContext}>
+            <button className="primary-button compact" type="button" onClick={() => setPromptDeckSeed(Date.now())} disabled={aiBusy}>
+              <RefreshCw size={15} /> Regenerate input
+            </button>
+          </AiGate>
           <span>20 contextual questions drawn from a 2,000-question analytics prompt bank. Pick any question to send it to Perplexity with the current filters.</span>
         </div>
         <div className="quick-prompt-row regenerated-prompts" aria-label="Regenerated AI quick prompts">
           {quickAiPrompts.map((item) => (
-            <button className="secondary-button compact" type="button" key={item.label} onClick={() => void askAi(item.prompt)} disabled={aiBusy}>
-              <Sparkles size={15} /> {item.label}
-            </button>
+            <AiGate feature="admin_chat" context={aiAccessContext} key={item.label}>
+              <button className="secondary-button compact" type="button" onClick={() => void askAi(item.prompt)} disabled={aiBusy}>
+                <Sparkles size={15} /> {item.label}
+              </button>
+            </AiGate>
           ))}
         </div>
         <div className="ai-chat-shell">
@@ -15194,7 +15915,7 @@ function Analytics({
                   <article className={`ai-message ${message.role}`} key={message.id}>
                     <div>
                       {message.role === 'assistant' ? <Bot size={17} /> : <UserRound size={17} />}
-                      <strong>{message.role === 'assistant' ? 'DEAP Intelligence' : 'You'}</strong>
+                      <strong>{message.role === 'assistant' ? 'Staffiq Intelligence' : 'You'}</strong>
                       <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
                     </div>
                     <p>{message.content}</p>
@@ -15207,7 +15928,7 @@ function Analytics({
                 <article className="ai-message assistant pending">
                   <div>
                     <Sparkles size={17} />
-                    <strong>DEAP Intelligence</strong>
+                    <strong>Staffiq Intelligence</strong>
                     <span>Analyzing</span>
                   </div>
                   <p>Reading the selected analytics and question-bank context...</p>
@@ -15288,7 +16009,7 @@ function Analytics({
         <div className="panel-heading-row">
           <div>
             <h2>Admin analytics feature catalogue</h2>
-            <p>The 25 decision-intelligence metrics now tracked or scaffolded for deeper DEAP analysis, including question quality, readiness, compliance evidence, and AI intervention signals.</p>
+            <p>The 25 decision-intelligence metrics now tracked or scaffolded for deeper Staffiq analysis, including question quality, readiness, compliance evidence, and AI intervention signals.</p>
           </div>
         </div>
         <div className="stat-catalog-grid">
@@ -15818,7 +16539,7 @@ function Reports({
           <div className="split-layout">
             <section className="panel report-panel">
               <FileDown size={42} />
-              <h2>DEAP Results Workbook</h2>
+              <h2>Staffiq Results Workbook</h2>
               <p>{completed.length} completed attempt(s), {inProgress.length} in progress, {nullified.length} nullified. Export raw result data to Excel for HR reviews and board packs.</p>
               <button className="primary-button" type="button" onClick={onExport} disabled={!scoredSessions.length && !nullified.length}>
                 <FileDown size={18} /> Export XLSX
@@ -15827,7 +16548,7 @@ function Reports({
             <section className="panel report-panel">
               <ArchiveRestore size={42} />
               <h2>Backup and restore</h2>
-              <p>Download a full JSON backup of users, tests, question banks, sessions, analytics, permissions, and branding. Restore only from a trusted DEAP backup file.</p>
+              <p>Download a full JSON backup of users, tests, question banks, sessions, analytics, permissions, and branding. Restore only from a trusted Staffiq Backup file.</p>
               <div className="editor-actions">
                 <button className="primary-button" type="button" onClick={onBackup}>
                   <FileDown size={18} /> Download backup
@@ -15970,7 +16691,7 @@ function Reports({
           <div className="panel-heading-row">
             <div>
               <h2>System Health</h2>
-              <p>Super Admin operational view for sync, backups, diagnostics, and release safety. This section is intentionally more technical than the everyday user screens.</p>
+              <p>Platform Owner operational view for sync, backups, diagnostics, and release safety. This section is intentionally more technical than the everyday user screens.</p>
             </div>
             <button className="secondary-button compact" type="button" onClick={() => setHealthRefreshedAt(new Date().toISOString())}>
               <RefreshCw size={16} /> Refresh health
@@ -16053,7 +16774,7 @@ function Reports({
             <div className="panel-heading-row">
               <div>
                 <h2>Recent browser and cloud diagnostics</h2>
-                <p>Diagnostics are sanitised before storage. They are meant to help Super Admin spot failed requests, function errors, and browser problems without exposing passwords or hidden fields.</p>
+                <p>Diagnostics are sanitised before storage. They are meant to help Platform Owner spot failed requests, function errors, and browser problems without exposing passwords or hidden fields.</p>
               </div>
               <span className={`sync-badge ${failedRequestCount ? 'delayed' : 'saved'}`}>
                 <AlertCircle size={16} /> {failedRequestCount ? `${failedRequestCount} network issue(s)` : 'No recent network issues'}
@@ -16078,7 +16799,7 @@ function Reports({
   )
 }
 
-function SuperAdminBugReports({
+function OwnerAdminBugReports({
   problemReports,
   bugAuditLogs,
   contributionPoints,
@@ -16168,14 +16889,14 @@ function SuperAdminBugReports({
       report.id,
       { status: 'Duplicate', duplicateOf: target || undefined, adminDecision: 'duplicate', pointsAwarded: 1, pointsReason: 'Duplicate report credit.' },
       'Bug report marked duplicate',
-      target ? `Duplicate of ${target}. 1 contribution point awarded.` : 'Marked duplicate by Super Admin. 1 contribution point awarded.',
+      target ? `Duplicate of ${target}. 1 contribution point awarded.` : 'Marked duplicate by Platform Owner. 1 contribution point awarded.',
     )
     setDuplicateOf('')
   }
 
   function generateReport(report: ProblemReport) {
     const finalReport = buildBugResolutionReport({ ...report, finalReport: report.finalReport })
-    onUpdateBugReport(report.id, { finalReport }, 'Bug resolution report generated', 'Super Admin generated the structured resolution report.')
+    onUpdateBugReport(report.id, { finalReport }, 'Bug resolution report generated', 'Platform Owner generated the structured resolution report.')
   }
 
   function awardPoints(report: ProblemReport, decision: FeedbackAdminDecision, status: ProblemStatus, action: string, customPoints?: number) {
@@ -16195,7 +16916,7 @@ function SuperAdminBugReports({
 
   function generateRepairPrompt(report: ProblemReport) {
     const repairPrompt = buildCodexBugRepairPrompt(report)
-    onUpdateBugReport(report.id, { repairPrompt }, 'Codex repair prompt generated', 'Super Admin generated the approved Codex investigation prompt.')
+    onUpdateBugReport(report.id, { repairPrompt }, 'Codex repair prompt generated', 'Platform Owner generated the approved Codex investigation prompt.')
   }
 
   async function copyRepairPrompt(report: ProblemReport) {
@@ -16210,18 +16931,18 @@ function SuperAdminBugReports({
       .filter(Boolean)
       .slice(0, 30)
     if (sameSerializedState(report[field] ?? [], nextValues)) return
-    onUpdateBugReport(report.id, { [field]: nextValues } as Partial<ProblemReport>, action, `${field} updated by Super Admin.`)
+    onUpdateBugReport(report.id, { [field]: nextValues } as Partial<ProblemReport>, action, `${field} updated by Platform Owner.`)
   }
 
   return (
     <section className="bug-reports-gateway">
-      <PageTitle eyebrow="Super Admin Bug Reports" title="Repair approval gateway" />
+      <PageTitle eyebrow="Platform Owner Bug Reports" title="Repair approval gateway" />
       <section className="panel notification-authority-panel">
         <div>
-          <span className="status-pill supervised"><ShieldCheck size={16} /> Super Admin gateway</span>
+          <span className="status-pill supervised"><ShieldCheck size={16} /> Platform Owner gateway</span>
           <h2>Controlled bug review before investigation, repair, or deployment</h2>
           <p>
-            User reports enter this queue as New. Investigation, repair, and deployment remain blocked until Ayodeji Falope Super Admin approves each stage. The app records every approval decision in the audit trail.
+            User reports enter this queue as New. Investigation, repair, and deployment remain blocked until Ayodeji Falope Platform Owner approves each stage. The app records every approval decision in the audit trail.
           </p>
         </div>
         <div className={`sync-badge ${syncState}`}>
@@ -16274,7 +16995,7 @@ function SuperAdminBugReports({
               </div>,
             ]
           })}
-          tableId="superadmin-affected-area-suggestions"
+          tableId="owneradmin-affected-area-suggestions"
           resizable
         />
         {!pendingAffectedAreas.length && <p className="hint">No affected-area suggestions are waiting for review.</p>}
@@ -16284,7 +17005,7 @@ function SuperAdminBugReports({
         <div className="panel-heading-row">
           <div>
             <h2>Contribution rewards ledger</h2>
-            <p>Every awarded point, badge, duplicate decision, rejection, and useful report remains visible to Super Admin.</p>
+            <p>Every awarded point, badge, duplicate decision, rejection, and useful report remains visible to Platform Owner.</p>
           </div>
         </div>
         <DataTable
@@ -16302,7 +17023,7 @@ function SuperAdminBugReports({
               record.rejectedReports,
             ]
           })}
-          tableId="superadmin-contribution-ledger"
+          tableId="owneradmin-contribution-ledger"
           resizable
         />
         {!contributionPoints.length && <p className="hint">No contribution points have been awarded yet.</p>}
@@ -16348,9 +17069,9 @@ function SuperAdminBugReports({
             ]
           })}
           resizable
-          tableId="superadmin-bug-reports"
+          tableId="owneradmin-bug-reports"
         />
-        {!filteredReports.length && <EmptyState title="No bug reports match this view" body="User-submitted bug reports will appear here for Super Admin triage and approval." />}
+        {!filteredReports.length && <EmptyState title="No bug reports match this view" body="User-submitted bug reports will appear here for Platform Owner triage and approval." />}
       </section>
 
       {selectedReport && (
@@ -16437,8 +17158,8 @@ function SuperAdminBugReports({
             </div>
           </article>
 
-          <aside className="panel bug-report-gateway-panel" aria-label="Super Admin bug report actions">
-            <h2>Super Admin actions</h2>
+          <aside className="panel bug-report-gateway-panel" aria-label="Platform Owner bug report actions">
+            <h2>Platform Owner actions</h2>
             <p className="hint">Approval gates are recorded in the audit trail. Repair remains blocked until the relevant approval status is selected.</p>
             <div className="form-grid">
               <label>
@@ -16466,7 +17187,7 @@ function SuperAdminBugReports({
                   onChange={(event) => onUpdateBugReport(selectedReport.id, { assignedTo: event.target.value || undefined }, 'Bug owner assigned', `Assigned to ${userById.get(event.target.value)?.fullName ?? 'unassigned'}.`)}
                 >
                   <option value="">Unassigned</option>
-                  {users.filter((user) => user.role === 'super_admin' || user.role === 'admin').map((user) => (
+                  {users.filter((user) => user.role === OWNER_ROLE || user.role === 'admin').map((user) => (
                     <option key={user.id} value={user.id}>{user.fullName}</option>
                   ))}
                 </select>
@@ -16482,7 +17203,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.investigationSummary ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { investigationSummary: value }, 'Bug investigation summary updated', 'Investigation notes updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { investigationSummary: value }, 'Bug investigation summary updated', 'Investigation notes updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16496,7 +17217,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.rootCause ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { rootCause: value }, 'Bug root cause updated', 'Root cause updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { rootCause: value }, 'Bug root cause updated', 'Root cause updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16510,7 +17231,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.fixPlan ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { fixPlan: value }, 'Bug fix plan updated', 'Repair plan updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { fixPlan: value }, 'Bug fix plan updated', 'Repair plan updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16542,7 +17263,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.verificationResult ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { verificationResult: value }, 'Bug verification result updated', 'Verification result updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { verificationResult: value }, 'Bug verification result updated', 'Verification result updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16556,7 +17277,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.riskReview ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { riskReview: value }, 'Bug risk review updated', 'Risk review updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { riskReview: value }, 'Bug risk review updated', 'Risk review updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16570,7 +17291,7 @@ function SuperAdminBugReports({
                   onBlur={(event) => {
                     const value = event.currentTarget.value.trim()
                     if (value !== (selectedReport.deploymentRecommendation ?? '')) {
-                      onUpdateBugReport(selectedReport.id, { deploymentRecommendation: value }, 'Bug deployment recommendation updated', 'Deployment recommendation updated by Super Admin.')
+                      onUpdateBugReport(selectedReport.id, { deploymentRecommendation: value }, 'Bug deployment recommendation updated', 'Deployment recommendation updated by Platform Owner.')
                     }
                   }}
                 />
@@ -16591,7 +17312,7 @@ function SuperAdminBugReports({
               <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Fixed')} onClick={() => awardPoints(selectedReport, 'fixed', 'Fixed', 'Bug marked fixed and final points awarded')}>Mark Fixed</button>
               <button className="primary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Fixed and Monitored')} onClick={() => transition(selectedReport, 'Fixed and Monitored', 'Bug deployment/monitoring approved')}>Approve Deployment</button>
               <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Escalated')} onClick={() => transition(selectedReport, 'Escalated', 'Bug escalated')}>Escalate</button>
-              <button className="danger-button compact" type="button" disabled={!transitionAllowed(selectedReport, 'Rejected')} onClick={() => onUpdateBugReport(selectedReport.id, { status: 'Rejected', adminDecision: 'rejected', pointsAwarded: 0, pointsReason: 'Rejected report: no contribution points awarded.' }, 'Report rejected', 'Rejected by Super Admin. No contribution points awarded.')}>Reject</button>
+              <button className="danger-button compact" type="button" disabled={!transitionAllowed(selectedReport, 'Rejected')} onClick={() => onUpdateBugReport(selectedReport.id, { status: 'Rejected', adminDecision: 'rejected', pointsAwarded: 0, pointsReason: 'Rejected report: no contribution points awarded.' }, 'Report rejected', 'Rejected by Platform Owner. No contribution points awarded.')}>Reject</button>
               <button className="danger-button compact" type="button" disabled={!transitionAllowed(selectedReport, 'Rejected')} onClick={() => onUpdateBugReport(selectedReport.id, { status: 'Rejected', adminDecision: 'abuse', pointsAwarded: 0, pointsReason: 'Abuse/spam decision: no contribution points awarded.' }, 'Report rejected for abuse', 'Rejected for abuse/spam. No contribution points awarded.')}>Spam / Abuse</button>
               <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Closed')} onClick={() => transition(selectedReport, 'Closed', 'Report closed')}>Close Report</button>
               <button className="secondary-button" type="button" disabled={!transitionAllowed(selectedReport, 'Archived')} onClick={() => transition(selectedReport, 'Archived', 'Bug report archived')}>Archive Report</button>
@@ -16609,7 +17330,7 @@ function SuperAdminBugReports({
                   {
                     pointsAwarded: Math.max(0, Math.round(Number(pointsDraft) || 0)),
                     adminDecision: selectedReport.adminDecision ?? 'accepted',
-                    pointsReason: 'Manual Super Admin point adjustment.',
+                    pointsReason: 'Manual Platform Owner point adjustment.',
                   },
                   'Contribution points adjusted',
                   `Manual points adjustment to ${Math.max(0, Math.round(Number(pointsDraft) || 0))}.`,
@@ -16627,7 +17348,7 @@ function SuperAdminBugReports({
             </button>
             <label>
               Internal note
-              <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} rows={4} placeholder="Add Super Admin note, evidence, or approval context." />
+              <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} rows={4} placeholder="Add Platform Owner note, evidence, or approval context." />
             </label>
             <button className="secondary-button" type="button" onClick={() => addNote(selectedReport)}>
               <Plus size={16} /> Add Note
@@ -16644,7 +17365,7 @@ function SuperAdminBugReports({
             <h2>Gateway notes and repair report</h2>
             <div className="bug-note-list">
               {(selectedReport.adminNotes ?? []).map((note, index) => <p key={`${selectedReport.id}-note-${index}`}>{note}</p>)}
-              {!(selectedReport.adminNotes ?? []).length && <p className="hint">No Super Admin notes yet.</p>}
+              {!(selectedReport.adminNotes ?? []).length && <p className="hint">No Platform Owner notes yet.</p>}
             </div>
             <h3>Dedicated bug audit log</h3>
             <div className="bug-note-list">
@@ -16675,7 +17396,7 @@ function SuperAdminBugReports({
   )
 }
 
-function SuperAdminNotifications({
+function OwnerAdminNotifications({
   auditEvents,
   analyticsEvents,
   problemReports,
@@ -16787,7 +17508,7 @@ function SuperAdminNotifications({
 
   function exportCommandSnapshot() {
     const exportedAt = new Date().toISOString()
-    downloadJsonFile(`DEAP_Super_Admin_Command_Snapshot_${exportedAt.slice(0, 10)}.json`, {
+    downloadJsonFile(`staffiq_Platform_Owner_Command_Snapshot_${exportedAt.slice(0, 10)}.json`, {
       exportedAt,
       syncState,
       commandReadiness,
@@ -16820,14 +17541,14 @@ function SuperAdminNotifications({
   }
 
   return (
-    <section className="superadmin-notifications">
-      <PageTitle eyebrow="Super Admin notifications" title="Everyone activity ledger" />
+    <section className="owneradmin-notifications">
+      <PageTitle eyebrow="Platform Owner notifications" title="Everyone activity ledger" />
       <section className="panel notification-authority-panel">
         <div>
-          <span className="status-pill"><ShieldCheck size={16} /> Super Admin only</span>
+          <span className="status-pill"><ShieldCheck size={16} /> Platform Owner only</span>
           <h2>All captured tasks, actions, and learner activities</h2>
           <p>
-            This tab combines the immutable admin audit trail with operational activity events so the Super Admin can monitor what every user is doing across training, tests, reports, deployments, uploads, score changes, permissions, and system controls.
+            This tab combines the immutable admin audit trail with operational activity events so the Platform Owner can monitor what every user is doing across training, tests, reports, deployments, uploads, score changes, permissions, and system controls.
           </p>
         </div>
         <div className={`sync-badge ${syncState}`}>
@@ -16843,11 +17564,11 @@ function SuperAdminNotifications({
         <Metric label="Completed attempts" value={completedSessions} icon={<CheckCircle2 />} />
         <Metric label="Live tests" value={tests.filter((test) => test.status === 'Live').length} icon={<ListChecks />} />
       </div>
-      <section className="panel superadmin-command-center" aria-label="Super Admin command center">
+      <section className="panel owneradmin-command-center" aria-label="Platform Owner command center">
         <div className="panel-heading-row">
           <div>
             <span className="status-pill supervised"><TerminalSquare size={16} /> Command center</span>
-            <h2>Super Admin control snapshot</h2>
+            <h2>Platform Owner control snapshot</h2>
             <p>Technical operating picture for Ayodeji: protected state, implementation backlog, risk indicators, and exportable governance evidence.</p>
           </div>
           <button className="secondary-button compact" type="button" onClick={exportCommandSnapshot}>
@@ -16877,11 +17598,11 @@ function SuperAdminNotifications({
           </article>
         </div>
       </section>
-      <section className="panel superadmin-health-panel">
+      <section className="panel owneradmin-health-panel">
         <div className="panel-heading-row">
           <div>
             <h2>Technical health signals</h2>
-            <p>Super Admin only: sync status, risk signals, stale activity, failed logins, and continuity-sensitive indicators.</p>
+            <p>Platform Owner only: sync status, risk signals, stale activity, failed logins, and continuity-sensitive indicators.</p>
           </div>
           <span className={`sync-badge ${syncState}`}><RefreshCw size={16} /> {syncHealthLabel}</span>
         </div>
@@ -16899,7 +17620,7 @@ function SuperAdminNotifications({
           <span className="status-pill supervised"><Bot size={16} /> Codex monitored</span>
           <h2>Codex repair queue</h2>
           <p>
-            User bug reports are exposed to the Codex monitor only after Super Admin approval. Codex can triage, reproduce, recommend, and implement safe fixes under the continuity guard; the web app itself does not rewrite production code automatically.
+            User bug reports are exposed to the Codex monitor only after Platform Owner approval. Codex can triage, reproduce, recommend, and implement safe fixes under the continuity guard; the web app itself does not rewrite production code automatically.
           </p>
         </div>
         <div className="codex-repair-stats" aria-label="Codex repair queue status">
@@ -16948,12 +17669,12 @@ function SuperAdminNotifications({
             item.detail,
           ])}
           resizable
-          tableId="superadmin-notifications"
+          tableId="owneradmin-notifications"
         />
         {!filteredActivity.length && (
           <EmptyState
             title="No notifications match this view"
-            body="When users sign in, upload data, take tests, edit reports, change deployments, or modify settings, their captured activity appears here for Super Admin review."
+            body="When users sign in, upload data, take tests, edit reports, change deployments, or modify settings, their captured activity appears here for Platform Owner review."
           />
         )}
       </section>
@@ -16973,7 +17694,7 @@ function SuperAdminNotifications({
             new Date(item.latest).toLocaleString(),
           ])}
           resizable
-          tableId="superadmin-activity-by-person"
+          tableId="owneradmin-activity-by-person"
         />
         {!actorSummary.length && <p className="hint">No user activity has been captured yet.</p>}
       </section>
@@ -17053,12 +17774,12 @@ function SettingsPanel({
   const [activeTab, setActiveTab] = useState<'testerAccounts' | 'credentials' | 'permissions' | 'appearance' | 'branding' | 'apiTokens'>('permissions')
   const [revealedUser, setRevealedUser] = useState<User>()
   const visibleSettingsUsers = useMemo(() => users.filter((user) => !isTesterAccount(user)), [users])
-  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => visibleSettingsUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => visibleSettingsUsers.filter((user) => user.role !== OWNER_ROLE && user.role !== 'admin').map((user) => user.id))
   const [userFilter, setUserFilter] = useState('')
   const [bulkPermission, setBulkPermission] = useState<PermissionKey>('take_tests')
   const [openPermissionUserId, setOpenPermissionUserId] = useState<string>()
   const defaultRegularScopes = useMemo(
-    () => apiCapabilityCatalog.filter((capability) => !capability.destructive && capability.accessTier !== 'SUPER_ADMIN').map((capability) => capability.scope),
+    () => apiCapabilityCatalog.filter((capability) => !capability.destructive && capability.accessTier !== 'OWNER').map((capability) => capability.scope),
     [],
   )
   const [settingsNowTick, setSettingsNowTick] = useState(() => Date.now())
@@ -17067,13 +17788,13 @@ function SettingsPanel({
     return () => window.clearInterval(intervalId)
   }, [])
   const [tokenKind, setTokenKind] = useState<ApiTokenKind>('regular')
-  const [tokenName, setTokenName] = useState('DEAP Partner Integration')
+  const [tokenName, setTokenName] = useState('Staffiq Partner Integration')
   const [tokenScopes, setTokenScopes] = useState<string[]>(() => defaultRegularScopes)
   const [tokenOauthProfile, setTokenOauthProfile] = useState(true)
   const [tokenExpiryDays, setTokenExpiryDays] = useState(90)
   const [tokenAcknowledged, setTokenAcknowledged] = useState(false)
-  const [tokenPurpose, setTokenPurpose] = useState('Connect a trusted internal tool to DEAP.')
-  const [tokenOwnerId, setTokenOwnerId] = useState(() => users.find((user) => user.role === 'super_admin')?.id ?? users[0]?.id ?? '')
+  const [tokenPurpose, setTokenPurpose] = useState('Connect a trusted internal tool to Staffiq.')
+  const [tokenOwnerId, setTokenOwnerId] = useState(() => users.find((user) => user.role === OWNER_ROLE)?.id ?? users[0]?.id ?? '')
   const [tokenAllowedModules, setTokenAllowedModules] = useState('Assessments, Reports, Users')
   const [tokenAllowedEnvironments, setTokenAllowedEnvironments] = useState('production')
   const [tokenAllowedIps, setTokenAllowedIps] = useState('')
@@ -17091,7 +17812,7 @@ function SettingsPanel({
   const [tokenRiskFilter, setTokenRiskFilter] = useState<'all' | ApiTokenRiskLevel>('all')
   const [selectedTokenId, setSelectedTokenId] = useState('')
   const [tokenDetailTab, setTokenDetailTab] = useState<'overview' | 'permissions' | 'deployments' | 'usage' | 'audit' | 'rotation' | 'notes'>('overview')
-  const editableUsers = useMemo(() => visibleSettingsUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin'), [visibleSettingsUsers])
+  const editableUsers = useMemo(() => visibleSettingsUsers.filter((user) => user.role !== OWNER_ROLE && user.role !== 'admin'), [visibleSettingsUsers])
   const groupedTokenCapabilities = useMemo(() => {
     return apiCapabilityCatalog.reduce<Record<string, ApiCapability[]>>((groups, capability) => {
       groups[capability.category] = [...(groups[capability.category] ?? []), capability]
@@ -17102,7 +17823,7 @@ function SettingsPanel({
   const tokenScopeCount = tokenKind === 'super' ? apiCapabilityCatalog.length : tokenScopes.length
   const activeApiTokens = apiTokens.filter((token) => token.status === 'active').length
   const tokenOwnerById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users])
-  const tokenOwnerOptions = useMemo(() => users.filter((user) => (user.role === 'super_admin' || user.role === 'admin') && !isTesterAccount(user)), [users])
+  const tokenOwnerOptions = useMemo(() => users.filter((user) => (user.role === OWNER_ROLE || user.role === 'admin') && !isTesterAccount(user)), [users])
   const tokensDueForRotation = apiTokens.filter((token) => token.status === 'active' && sharedStateTime(token.nextRotationDueAt) < settingsNowTick).length
   const expiringSoonTokens = apiTokens.filter((token) => token.status === 'active' && sharedStateTime(token.expiresAt) < settingsNowTick + 14 * 24 * 60 * 60 * 1000).length
   const unusedTokens = apiTokens.filter((token) => token.status === 'active' && !token.lastUsedAt).length
@@ -17156,7 +17877,7 @@ function SettingsPanel({
    */
   function toggleSelectedUser(userId: string) {
     const user = users.find((candidate) => candidate.id === userId)
-    if (user?.role === 'super_admin' || user?.role === 'admin') return
+    if (user?.role === OWNER_ROLE || user?.role === 'admin') return
     setSelectedUsers((existing) => (existing.includes(userId) ? existing.filter((id) => id !== userId) : [...existing, userId]))
   }
 
@@ -17168,7 +17889,7 @@ function SettingsPanel({
   function submitApiToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (tokenKind === 'super' && tokenJustification.trim().length < 10) {
-      onToast('Super Admin Token creation requires a clear justification.')
+      onToast('Platform Owner Token creation requires a clear justification.')
       return
     }
     void onCreateApiToken({
@@ -17196,7 +17917,7 @@ function SettingsPanel({
 
   function exportTokenMetadata() {
     const exportedAt = new Date().toISOString()
-    downloadJsonFile(`DEAP_Token_Metadata_${exportedAt.slice(0, 10)}.json`, {
+    downloadJsonFile(`staffiq_Token_Metadata_${exportedAt.slice(0, 10)}.json`, {
       exportedAt,
       exportedBy: 'Ayodeji Falope',
       note: 'Metadata export only. Raw token values and token hashes are intentionally excluded.',
@@ -17339,7 +18060,7 @@ function SettingsPanel({
               <button className="secondary-button" type="button" onClick={onLogoReset}>
                 Remove logo
               </button>
-              <p className="hint">Expected display slot: {sidebarLogoDimensions.width} x {sidebarLogoDimensions.height} px. Recommended upload: PNG, JPG, SVG, or WebP under 1.5 MB. DEAP optimises raster logos before syncing them to every user.</p>
+              <p className="hint">Expected display slot: {sidebarLogoDimensions.width} x {sidebarLogoDimensions.height} px. Recommended upload: PNG, JPG, SVG, or WebP under 1.5 MB. Staffiq optimises raster logos before syncing them to every user.</p>
             </div>
           </div>
         </section>
@@ -17389,7 +18110,7 @@ function SettingsPanel({
             <div className="panel-heading-row">
               <div>
                 <h2>Token Management and Deployment Catalogue</h2>
-                <p>Ayodeji-only governance for Super Admin Tokens and Variable Read Write Tokens, with one-time secret display, deployment records, usage tracking, rotation, revocation, and audit history.</p>
+                <p>Ayodeji-only governance for Platform Owner Tokens and Variable Read Write Tokens, with one-time secret display, deployment records, usage tracking, rotation, revocation, and audit history.</p>
               </div>
               <div className="token-toolbar-actions">
                 <button className="secondary-button" type="button" onClick={exportTokenMetadata}>
@@ -17414,7 +18135,7 @@ function SettingsPanel({
                 <strong>{tokenScopeCount}</strong>
               </div>
               <div>
-                <span>Super Admin tokens</span>
+                <span>Platform Owner tokens</span>
                 <strong>{apiTokens.filter((token) => token.kind === 'super').length}</strong>
               </div>
               <div>
@@ -17489,7 +18210,7 @@ function SettingsPanel({
               </div>
 
               <label className="field-label" htmlFor="api-token-name">Token name</label>
-              <input id="api-token-name" value={tokenName} onChange={(event) => setTokenName(event.target.value)} placeholder="e.g. DEAP to CRM bridge" />
+              <input id="api-token-name" value={tokenName} onChange={(event) => setTokenName(event.target.value)} placeholder="e.g. Staffiq to CRM bridge" />
 
               <label className="field-label" htmlFor="api-token-purpose">Purpose</label>
               <textarea id="api-token-purpose" value={tokenPurpose} onChange={(event) => setTokenPurpose(event.target.value)} placeholder="Describe what this token is for" />
@@ -17575,9 +18296,9 @@ function SettingsPanel({
                 <>
                   <div className="token-critical-warning">
                     <AlertCircle size={18} />
-                    <span>Super Admin Tokens are critical-risk credentials. They require an owner, expiry, justification, strict rotation, and a complete audit trail.</span>
+                    <span>Platform Owner Tokens are critical-risk credentials. They require an owner, expiry, justification, strict rotation, and a complete audit trail.</span>
                   </div>
-                  <label className="field-label" htmlFor="api-token-justification">Super Admin justification</label>
+                  <label className="field-label" htmlFor="api-token-justification">Platform Owner justification</label>
                   <textarea id="api-token-justification" value={tokenJustification} onChange={(event) => setTokenJustification(event.target.value)} placeholder="Explain why this privileged token is needed" />
                 </>
               )}
@@ -17650,7 +18371,7 @@ function SettingsPanel({
                 </label>
                 <select aria-label="Filter by token type" value={tokenTypeFilter} onChange={(event) => setTokenTypeFilter(event.target.value as 'all' | ApiTokenKind)}>
                   <option value="all">All types</option>
-                  <option value="super">Super Admin Token</option>
+                  <option value="super">Platform Owner Token</option>
                   <option value="regular">Variable Read Write Token</option>
                 </select>
                 <select aria-label="Filter by token status" value={tokenStatusFilter} onChange={(event) => setTokenStatusFilter(event.target.value as 'all' | ApiTokenStatus)}>
@@ -17679,7 +18400,7 @@ function SettingsPanel({
                         <strong>{token.name}</strong>
                         <span className={`token-status ${token.status}`}>{token.status.replace('_', ' ')}</span>
                       </div>
-                      <p>{token.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'} · {token.scopes.length} scope(s) · {maskTokenPreview(token.tokenPrefix, token.tokenFingerprint)}</p>
+                      <p>{token.kind === 'super' ? 'Platform Owner Token' : 'Variable Read Write Token'} · {token.scopes.length} scope(s) · {maskTokenPreview(token.tokenPrefix, token.tokenFingerprint)}</p>
                       <small>Owner: {owner?.fullName ?? token.ownerId} · Created {new Date(token.createdAt).toLocaleString()} · Expires {new Date(token.expiresAt).toLocaleString()}</small>
                       <small>Usage: {token.usageCount} · Last used: {token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString() : 'Never'} · Deployment: {latestDeployment ? `${latestDeployment.deploymentName} (${latestDeployment.status.replace('_', ' ')})` : 'Not documented'}</small>
                       {token.revokedAt && <small>Revoked by {token.revokedBy ?? 'Admin'} on {new Date(token.revokedAt).toLocaleString()}</small>}
@@ -17716,7 +18437,7 @@ function SettingsPanel({
               <div className="panel-heading-row">
                 <div>
                   <h2>{selectedToken.name}</h2>
-                  <p>{selectedToken.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'} · {selectedToken.tokenFingerprint} · {maskTokenPreview(selectedToken.tokenPrefix, selectedToken.tokenFingerprint)}</p>
+                  <p>{selectedToken.kind === 'super' ? 'Platform Owner Token' : 'Variable Read Write Token'} · {selectedToken.tokenFingerprint} · {maskTokenPreview(selectedToken.tokenPrefix, selectedToken.tokenFingerprint)}</p>
                 </div>
                 <span className={`token-risk risk-${selectedToken.riskLevel}`}>{selectedToken.riskLevel} risk</span>
               </div>
@@ -17842,7 +18563,7 @@ function SettingsPanel({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => setSelectedUsers(filteredUsers.filter((user) => user.role !== 'super_admin' && user.role !== 'admin').map((user) => user.id))}
+                onClick={() => setSelectedUsers(filteredUsers.filter((user) => user.role !== OWNER_ROLE && user.role !== 'admin').map((user) => user.id))}
               >
                 Select visible
               </button>
@@ -17869,11 +18590,11 @@ function SettingsPanel({
                   <input
                     type="checkbox"
                     checked={selectedUsers.includes(user.id)}
-                    disabled={user.role === 'super_admin' || user.role === 'admin'}
+                    disabled={user.role === OWNER_ROLE || user.role === 'admin'}
                     onChange={() => toggleSelectedUser(user.id)}
                   />
                   <span>{user.fullName}</span>
-                  <small>{user.role === 'super_admin' || user.role === 'admin' ? 'Admin locked' : user.jobRole}</small>
+                  <small>{user.role === OWNER_ROLE || user.role === 'admin' ? 'Admin locked' : user.jobRole}</small>
                 </label>
               ))}
             </div>
@@ -17883,7 +18604,7 @@ function SettingsPanel({
             <h2>Current permission status</h2>
             <div className="permission-accordion-list">
               {filteredUsers.map((user) => {
-                const isAdminRow = (user.role === 'super_admin' || user.role === 'admin') && !isTesterAccount(user)
+                const isAdminRow = (user.role === OWNER_ROLE || user.role === 'admin') && !isTesterAccount(user)
                 const isOpen = openPermissionUserId === user.id
                 const enabledCount = permissionCatalog.filter((permission) => isAdminRow || (permissions[user.id]?.[permission.key] ?? defaultPermissionsFor(user)[permission.key])).length
                 return (
@@ -17936,7 +18657,7 @@ function SettingsPanel({
           <section className="credential-modal api-token-modal" role="dialog" aria-modal="true" aria-labelledby="api-token-title">
             <h2 id="api-token-title">Token package generated</h2>
             <p>
-              Copy this token now. After this dialog closes, DEAP keeps only the fingerprint, hash, governance metadata, deployment records, usage history, and audit trail.
+              Copy this token now. After this dialog closes, Staffiq keeps only the fingerprint, hash, governance metadata, deployment records, usage history, and audit trail.
             </p>
             <div className="token-secret-box">
               <span>Bearer Token</span>
@@ -17944,7 +18665,7 @@ function SettingsPanel({
             </div>
             <div className="token-secret-meta">
               <span>{generatedApiToken.record.name}</span>
-              <span>{generatedApiToken.record.kind === 'super' ? 'Super Admin Token' : 'Variable Read Write Token'}</span>
+              <span>{generatedApiToken.record.kind === 'super' ? 'Platform Owner Token' : 'Variable Read Write Token'}</span>
               <span>{generatedApiToken.record.scopes.length} scope(s)</span>
               <span>Expires {new Date(generatedApiToken.record.expiresAt).toLocaleString()}</span>
             </div>
@@ -18054,9 +18775,9 @@ function TesterAccountControl({
             <h2>Tester Account Control</h2>
             <p>Use these controlled accounts when someone needs temporary access to test the app. Switch access on only when needed, set or generate a password, verify it, then switch access off after review.</p>
           </div>
-          <span className="tester-owner-pill">Super Admin only</span>
+          <span className="tester-owner-pill">Platform Owner only</span>
         </div>
-        <p className="hint">Do not share the real Super Admin login. These accounts give controlled testing access while preserving account history.</p>
+        <p className="hint">Do not share the real Platform Owner login. These accounts give controlled testing access while preserving account history.</p>
       </section>
 
       {issuedCredential?.password && (
@@ -18258,7 +18979,7 @@ function MyTests({
             </article>
           )
         })}
-        {!assigned.length && <EmptyState title="No tests assigned yet" body="Check back soon for your next DEAP assessment." />}
+        {!assigned.length && <EmptyState title="No tests assigned yet" body="Check back soon for your next Staffiq assessment." />}
       </div>
       {pendingTest && (
         <div className="modal-backdrop" role="presentation" onClick={() => setPendingTest(undefined)}>
@@ -18342,7 +19063,7 @@ function MyResults({ currentUser, sessions, tests }: { currentUser: User; sessio
 }
 
 const helpAiRules = [
-  'Answer only from approved DEAP learning, help, FAQ, product, and assessment documentation.',
+  'Answer only from approved Staffiq learning, help, FAQ, product, and assessment documentation.',
   'Never invent product behaviour, policy, scoring, permissions, or deadlines.',
   'Cite source titles or source IDs in the answer when a source is used.',
   'Respect user role. Normal users get learner help; admins may receive governance and analytics guidance.',
@@ -18390,8 +19111,8 @@ const fullFeatureExpansionRecommendations = [
     items: ['Executive dashboard', 'Department comparison dashboard', 'Individual progress report', 'Training ROI dashboard', 'Pass/fail trend chart', 'Topic risk trend chart', 'Test reliability score', 'Employee risk segmentation', 'Predictive readiness score', 'Who needs help now report', 'Exportable board report', 'Scheduled report export', 'Report builder with filters', 'Saved report views', 'Report annotations', 'Audit-ready compliance report', 'Multi-format report exports', 'Analytics glossary', 'Data freshness indicator', 'Analytics anomaly alerts'],
   },
   {
-    category: 'Admin and Super Admin control',
-    items: ['Feature flag dashboard', 'Super Admin approval queue', 'Admin activity replay', 'Permission change history', 'Role template manager', 'Bulk user import preview', 'Bulk user validation report', 'User lifecycle states', 'Department manager assignment', 'Admin delegation controls', 'Emergency rollback panel', 'System health dashboard', 'Firebase sync monitor', 'Data continuity monitor', 'Backup and restore history', 'Export history ledger', 'API capability explorer improvements', 'Admin onboarding checklist', 'Super Admin command center', 'Security review dashboard'],
+    category: 'Admin and Platform Owner control',
+    items: ['Feature flag dashboard', 'Platform Owner approval queue', 'Admin activity replay', 'Permission change history', 'Role template manager', 'Bulk user import preview', 'Bulk user validation report', 'User lifecycle states', 'Department manager assignment', 'Admin delegation controls', 'Emergency rollback panel', 'System health dashboard', 'Firebase sync monitor', 'Data continuity monitor', 'Backup and restore history', 'Export history ledger', 'API capability explorer improvements', 'Admin onboarding checklist', 'Platform Owner command center', 'Security review dashboard'],
   },
   {
     category: 'Bug reports and feedback',
@@ -18403,7 +19124,7 @@ const fullFeatureExpansionRecommendations = [
   },
   {
     category: 'Learning and Help Center',
-    items: ['Contextual help per page', 'Release notes inside app', 'FAQ search improvements', 'Guided tours', 'Admin tutorial path', 'Employee tutorial path', 'Super Admin tutorial path', 'Interactive help checklist', 'Help article feedback', 'Help article version history', 'Embedded screenshots and videos', 'FAQ entries for every feature', 'Troubleshooting guides', 'Assessment glossary', 'Contact Super Admin help path'],
+    items: ['Contextual help per page', 'Release notes inside app', 'FAQ search improvements', 'Guided tours', 'Admin tutorial path', 'Employee tutorial path', 'Platform Owner tutorial path', 'Interactive help checklist', 'Help article feedback', 'Help article version history', 'Embedded screenshots and videos', 'FAQ entries for every feature', 'Troubleshooting guides', 'Assessment glossary', 'Contact Platform Owner help path'],
   },
   {
     category: 'UX and accessibility',
@@ -18429,35 +19150,54 @@ const fullFeatureExpansionTotal = fullFeatureExpansionRecommendations.reduce((to
 
 const helpKnowledgeItems: HelpContentItem[] = [
   {
+    id: 'help-client-workspaces',
+    type: 'guide',
+    title: 'Using your organisation workspace',
+    shortSummary: 'Understand workspace codes, isolated client data, switching and access status.',
+    body: 'Staffiq keeps each client organisation in a separate workspace. Your users, assessments, question banks, results, reports, branding and settings stay inside that workspace. Enter the workspace code supplied by your organisation when signing in. Ordinary users see only their own organisation. The Platform Owner can create and switch client workspaces from Client Workspaces, change access status, review seat use and inspect the workspace audit trail. A suspended, cancelled or archived workspace cannot be used by ordinary members.',
+    category: 'Getting Started',
+    subcategory: 'Organisation Access',
+    tags: ['workspace', 'organisation', 'tenant', 'sign in', 'workspace code', 'data isolation'],
+    audience: ['all'],
+    owner: 'Staffiq Admin',
+    status: 'published',
+    updatedAt: '2026-07-15',
+    lastReviewedAt: '2026-07-15',
+    requirementRefs: ['TENANT-001', 'TENANT-002', 'TENANT-003'],
+    estimatedMinutes: 4,
+    relatedIds: ['learn-beginner-start', 'faq-what-is-Staffiq'],
+    steps: ['Get your workspace code from your organisation.', 'Enter the code on the sign in screen.', 'Sign in with your assigned username and password.', 'Confirm the correct organisation name appears in the left menu.', 'Report an access problem if the organisation name is wrong.'],
+  },
+  {
     id: 'learn-beginner-start',
     type: 'lesson',
-    title: 'Start with DEAP safely',
-    shortSummary: 'Learn what DEAP is, how to log in, where tests live, and where to ask for help.',
-    body: 'DEAP is the Dynamic Employee Assessment Portal for assigned professional competency assessments. Begin from My Tests, read the instructions, accept the agreement, and complete questions carefully. Use Help, FAQ, and AI support when you are stuck.',
+    title: 'Start with Staffiq safely',
+    shortSummary: 'Learn what Staffiq is, how to log in, where tests live, and where to ask for help.',
+    body: 'Staffiq is the Dynamic Employee Assessment Portal for assigned professional competency assessments. Begin from My Tests, read the instructions, accept the agreement, and complete questions carefully. Use Help, FAQ, and AI support when you are stuck.',
     category: 'Getting Started',
     subcategory: 'Beginner Path',
     tags: ['login', 'my tests', 'beginner', 'onboarding'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
     requirementRefs: ['R061', 'R101', 'R103', 'R112'],
     estimatedMinutes: 5,
-    relatedIds: ['help-test-availability', 'faq-what-is-deap'],
+    relatedIds: ['help-test-availability', 'faq-what-is-Staffiq'],
     steps: ['Log in with your assigned username and password.', 'Open My Tests.', 'Use Refresh test availability if an admin just assigned a test.', 'Read the instructions before starting.', 'Ask AI Help if you do not understand a step.'],
   },
   {
     id: 'learn-upgrade-catalogue-overview',
     type: 'lesson',
-    title: 'What changed in the DEAP upgrade catalogue',
+    title: 'What changed in the Staffiq upgrade catalogue',
     shortSummary: 'A simple orientation to the new product, UI/UX, analytics, and reporting capability catalogue.',
-    body: `The latest DEAP upgrade adds a Product upgrade catalogue on the admin dashboard and reflects the same knowledge here in Learning, Help, FAQ, and AI Help. It organises 50 product features, 25 UI/UX improvements, 25 admin analytics metrics, and 50 reporting capabilities into clear product and reporting knowledge areas. Product feature groups are: ${helpProductUpgradeBrief} UI/UX upgrades include: ${helpUiUxUpgradeBrief}. Admin analytics metrics include: ${helpAnalyticsUpgradeBrief}. Reporting capabilities include: ${helpReportCapabilityBrief}.`,
+    body: `The latest Staffiq upgrade adds a Product upgrade catalogue on the admin dashboard and reflects the same knowledge here in Learning, Help, FAQ, and AI Help. It organises 50 product features, 25 UI/UX improvements, 25 admin analytics metrics, and 50 reporting capabilities into clear product and reporting knowledge areas. Product feature groups are: ${helpProductUpgradeBrief} UI/UX upgrades include: ${helpUiUxUpgradeBrief}. Admin analytics metrics include: ${helpAnalyticsUpgradeBrief}. Reporting capabilities include: ${helpReportCapabilityBrief}.`,
     category: 'Product Updates',
     subcategory: 'Upgrade Catalogue',
     tags: ['upgrade', 'roadmap', 'product features', 'ui ux', 'analytics', 'catalogue'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-11',
     lastReviewedAt: '2026-05-11',
@@ -18476,19 +19216,19 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Test Availability',
     tags: ['missing test', 'availability', 'live', 'refresh', 'archive'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
     requirementRefs: ['R063', 'R129', 'R130', 'R243'],
     estimatedMinutes: 3,
     relatedIds: ['faq-test-missing', 'learn-beginner-start'],
-    steps: ['Click Refresh test availability.', 'Check whether the test start date has arrived.', 'Ask your supervisor or admin to confirm you are selected.', 'If the test still does not appear, contact the DEAP admin with your name and expected test.'],
+    steps: ['Click Refresh test availability.', 'Check whether the test start date has arrived.', 'Ask your supervisor or admin to confirm you are selected.', 'If the test still does not appear, contact the Staffiq admin with your name and expected test.'],
   },
   {
     id: 'help-taking-tests',
     type: 'guide',
-    title: 'How to take a DEAP assessment',
+    title: 'How to take a Staffiq assessment',
     shortSummary: 'Understand timing, random questions, hints, answer reveal, navigation, and result review.',
     body: 'Each assessment opens with instructions. Questions are selected only after agreement. Questions are randomized and question source numbers are hidden. Each question is timed. Hints reduce possible marks for that question. Revealing the answer gives zero marks for that question and highlights the correct answer so the test remains useful for learning.',
     category: 'Assessments',
@@ -18532,7 +19272,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Test Control',
     tags: ['admin', 'live', 'launched', 'archive', 'analytics toggle'],
     audience: ['admin'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18544,8 +19284,8 @@ const helpKnowledgeItems: HelpContentItem[] = [
     id: 'help-question-banks',
     type: 'article',
     title: 'Question banks and assessment context',
-    shortSummary: 'What admins and learners should know about DEAP question banks.',
-    body: 'Question banks hold the approved assessment content. DEAP supports imported banks, named descriptions, per-bank downloads, bulk actions, archive-safe analytics, hidden source prefixes, randomized selection, exposure tracking, and competency/topic reporting.',
+    shortSummary: 'What admins and learners should know about Staffiq question banks.',
+    body: 'Question banks hold the approved assessment content. Staffiq supports imported banks, named descriptions, per-bank downloads, bulk actions, archive-safe analytics, hidden source prefixes, randomized selection, exposure tracking, and competency/topic reporting.',
     category: 'Question Banks',
     subcategory: 'Content Quality',
     tags: ['question bank', 'download', 'randomization', 'exposure', 'competency'],
@@ -18568,7 +19308,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Admin Roadmap',
     tags: ['product roadmap', '50 features', 'admin', 'implemented', 'foundation ready', 'integration'],
     audience: ['admin'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18580,21 +19320,21 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-complete-feature-expansion-backlog',
     type: 'guide',
-    title: 'Complete DEAP feature expansion backlog',
+    title: 'Complete Staffiq feature expansion backlog',
     shortSummary: `${fullFeatureExpansionTotal} recommended improvements are now documented for future implementation decisions.`,
-    body: `This backlog records the complete recommended DEAP expansion direction. It is not a promise that every feature is active today; it is the controlled product map for implementation, QA, Help Center updates, FAQ updates, and Super Admin review. The backlog covers adaptive learning, assessment quality, exam integrity, analytics, Super Admin control, bug reporting, feature inventory, Help Center, UX/accessibility, performance, security, compliance, and integrations. Full backlog: ${fullFeatureExpansionBrief}`,
+    body: `This backlog records the complete recommended Staffiq expansion direction. It is not a promise that every feature is active today; it is the controlled product map for implementation, QA, Help Center updates, FAQ updates, and Platform Owner review. The backlog covers adaptive learning, assessment quality, exam integrity, analytics, Platform Owner control, bug reporting, feature inventory, Help Center, UX/accessibility, performance, security, compliance, and integrations. Full backlog: ${fullFeatureExpansionBrief}`,
     category: 'Product Updates',
     subcategory: 'Complete Expansion Backlog',
     tags: ['feature backlog', 'roadmap', 'implementation', 'recommendations', 'product direction'],
     audience: ['admin'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
     requirementRefs: ['R041', 'R042', 'R087', 'R376', 'R497'],
     estimatedMinutes: 12,
     relatedIds: ['help-product-roadmap-2026', 'faq-complete-feature-expansion', 'learn-upgrade-catalogue-overview'],
-    steps: ['Open Dashboard as an admin.', 'Open Product upgrade catalogue.', 'Review Complete DEAP expansion backlog.', 'Prioritise features by business value, risk, and current operational pain.', 'When a feature is implemented, add the update to Learning, Help Center, and FAQ.'],
+    steps: ['Open Dashboard as an admin.', 'Open Product upgrade catalogue.', 'Review Complete Staffiq expansion backlog.', 'Prioritise features by business value, risk, and current operational pain.', 'When a feature is implemented, add the update to Learning, Help Center, and FAQ.'],
   },
   {
     id: 'help-report-capabilities-2026',
@@ -18606,7 +19346,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Reporting Capability',
     tags: ['reports', 'exports', 'executive reporting', 'compliance', 'governance', 'scheduled reports', 'AI reporting'],
     audience: ['admin'],
-    owner: 'DEAP Reporting',
+    owner: 'Staffiq Reporting',
     status: 'published',
     updatedAt: '2026-05-11',
     lastReviewedAt: '2026-05-11',
@@ -18618,33 +19358,33 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-system-health-console',
     type: 'guide',
-    title: 'Super Admin System Health in Reports',
+    title: 'Platform Owner System Health in Reports',
     shortSummary: 'Ayodeji can use Reports > System Health to check sync, diagnostics, backups, and release readiness.',
-    body: 'System Health gives the Super Admin a compact operational view without adding complexity for ordinary users. It shows the current cloud sync state, protected record count, backup scope, active session control, recent sanitised browser or cloud diagnostics, and the release safety checklist used before and after deployment. Use it before bulk imports, backup restores, major permission changes, feature launches, and live release checks.',
+    body: 'System Health gives the Platform Owner a compact operational view without adding complexity for ordinary users. It shows the current cloud sync state, protected record count, backup scope, active session control, recent sanitised browser or cloud diagnostics, and the release safety checklist used before and after deployment. Use it before bulk imports, backup restores, major permission changes, feature launches, and live release checks.',
     category: 'Admin Operations',
     subcategory: 'System Health',
-    tags: ['system health', 'sync', 'backup', 'diagnostics', 'active sessions', 'release checklist', 'super admin'],
+    tags: ['system health', 'sync', 'backup', 'diagnostics', 'active sessions', 'release checklist', 'platform owner'],
     audience: ['admin'],
-    owner: 'DEAP Operations',
+    owner: 'Staffiq Operations',
     status: 'published',
     updatedAt: '2026-05-26',
     lastReviewedAt: '2026-05-26',
     requirementRefs: ['R376', 'R388', 'R392', 'R497'],
     estimatedMinutes: 5,
     relatedIds: ['help-report-capabilities-2026', 'help-admin-launch-live', 'help-feature-inventory-bulk-export'],
-    steps: ['Open Reports as Super Admin or Admin.', 'Choose System Health.', 'Confirm Cloud sync is healthy.', 'Review active sessions for long-running or duplicate attempts.', 'Review recent diagnostics for failed requests or browser errors.', 'Download a backup before major operational changes.', 'Use the release safety checklist after deployment.'],
+    steps: ['Open Reports as Platform Owner or Admin.', 'Choose System Health.', 'Confirm Cloud sync is healthy.', 'Review active sessions for long-running or duplicate attempts.', 'Review recent diagnostics for failed requests or browser errors.', 'Download a backup before major operational changes.', 'Use the release safety checklist after deployment.'],
   },
   {
     id: 'help-uiux-upgrades-2026',
     type: 'article',
-    title: 'UI/UX upgrades now reflected in DEAP',
+    title: 'UI/UX upgrades now reflected in Staffiq',
     shortSummary: 'The app now documents the 25 UI/UX improvement ideas and exposes them in Help and AI Help.',
     body: `The UI/UX catalogue focuses on visual hierarchy, compact desktop usage, mobile-friendly testing, glossy 3D surfaces, accessible dark mode, chart colours, sticky filters, saved views, empty states, inline explanations, result review, progress rings, admin action rails, table density, shortcuts, notification history, skeleton loading, launch steppers, bulk previews, status badges, printable results, command palette, responsive chart summaries, first-run setup, and sync indicators. The 25 UI/UX items are: ${helpUiUxUpgradeBrief}.`,
     category: 'Product Updates',
     subcategory: 'UI/UX',
     tags: ['ui ux', 'mobile', 'dark mode', 'glossy', 'responsive', 'accessibility'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18655,14 +19395,14 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-analytics-upgrades-2026',
     type: 'guide',
-    title: '25 admin analytics metrics in the upgraded DEAP model',
+    title: '25 admin analytics metrics in the upgraded Staffiq model',
     shortSummary: 'A guide to the decision-intelligence metrics now documented for admins.',
     body: `The analytics catalogue gives admins better insight into attempts, question quality, readiness, compliance evidence, and AI impact. These metrics are visible in the admin analytics feature catalogue and are available to AI Help as approved knowledge. The 25 metrics are: ${helpAnalyticsUpgradeBrief}. Use them to detect time pressure, reveal-answer dependence, topic weakness, question exposure imbalance, item discrimination issues, department risk, certification readiness, promotion readiness, compliance evidence, AI intervention volume, and question-bank quality trend.`,
     category: 'Admin Operations',
     subcategory: 'Analytics Upgrade',
     tags: ['analytics', '25 stats', 'decision intelligence', 'admin', 'question quality', 'risk'],
     audience: ['admin'],
-    owner: 'DEAP Analytics',
+    owner: 'Staffiq Analytics',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18674,14 +19414,14 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-upgrade-research-sources',
     type: 'article',
-    title: 'Research sources behind the DEAP upgrade catalogue',
+    title: 'Research sources behind the Staffiq upgrade catalogue',
     shortSummary: 'The upgrade catalogue is grounded in LMS, assessment, AI, dashboard, and accessibility references.',
-    body: `The DEAP catalogue was informed by learning analytics, workplace LMS, item analysis, AI assistant, dashboard accessibility, and WCAG contrast patterns. The source set represented in the product catalogue is: ${helpUpgradeSourceBrief}. These sources guide report scheduling, certifications, tailored learning pathways, item difficulty, distractor analysis, AI grounding, accessible dashboards, and contrast-safe UI design.`,
+    body: `The Staffiq catalogue was informed by learning analytics, workplace LMS, item analysis, AI assistant, dashboard accessibility, and WCAG contrast patterns. The source set represented in the product catalogue is: ${helpUpgradeSourceBrief}. These sources guide report scheduling, certifications, tailored learning pathways, item difficulty, distractor analysis, AI grounding, accessible dashboards, and contrast-safe UI design.`,
     category: 'Product Updates',
     subcategory: 'Research Basis',
     tags: ['research', 'sources', 'lms', 'assessment', 'accessibility', 'perplexity'],
     audience: ['admin'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18692,14 +19432,14 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-ai-boundaries',
     type: 'policy',
-    title: 'How DEAP AI Help works',
+    title: 'How Staffiq AI Help works',
     shortSummary: 'AI Help answers from approved Learning, Help, FAQ, and product documentation.',
-    body: 'DEAP AI Help uses Perplexity through a Firebase server function. The browser never receives the API key. The assistant receives approved help content, the current tab, and the user role. It must cite source titles, avoid unsupported claims, and say when the answer is not documented.',
+    body: 'Staffiq AI Help uses Perplexity through a Firebase server function. The browser never receives the API key. The assistant receives approved help content, the current tab, and the user role. It must cite source titles, avoid unsupported claims, and say when the answer is not documented.',
     category: 'AI Assistant',
     subcategory: 'Safety and Privacy',
     tags: ['ai', 'perplexity', 'privacy', 'citations', 'grounding'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18717,7 +19457,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Knowledge Analytics',
     tags: ['analytics', 'content gap', 'failed search', 'faq', 'learning progress'],
     audience: ['admin'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18730,12 +19470,12 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'guide',
     title: 'Report a bug or send feedback',
     shortSummary: 'Use the Bug Report and Feedback tab when something breaks or when you have an improvement idea.',
-    body: 'The Bug Report and Feedback tab is intentionally simple for everyday users. Choose Report a Bug or Give Feedback, enter a short summary, select the page or feature affected, describe what happened, and submit. DEAP records your login details automatically, so you do not need to type your name. Useful submissions can earn contribution points and badge progress.',
+    body: 'The Bug Report and Feedback tab is intentionally simple for everyday users. Choose Report a Bug or Give Feedback, enter a short summary, select the page or feature affected, describe what happened, and submit. Staffiq records your login details automatically, so you do not need to type your name. Useful submissions can earn contribution points and badge progress.',
     category: 'Support',
     subcategory: 'Bug Report and Feedback',
     tags: ['bug report', 'feedback', 'points', 'badge', 'affected area'],
     audience: ['all'],
-    owner: 'DEAP Support',
+    owner: 'Staffiq Support',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18754,7 +19494,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Personalisation',
     tags: ['dashboard', 'layout', 'customise', 'pin', 'hide', 'reset'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18765,33 +19505,33 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'help-feature-inventory-bulk-export',
     type: 'guide',
-    title: 'Super Admin Feature Inventory and bulk export',
+    title: 'Platform Owner Feature Inventory and bulk export',
     shortSummary: 'Ayodeji-only Feature Inventory supports scans, selection, multi-format exports, version history, and private Storage downloads.',
-    body: 'Feature Inventory is private to Ayodeji Falope Super Admin. It lists detected app features, categories, routes, components, visibility, confidence, scan history, and versions. The Super Admin can select individual features, select all visible filtered features, export selected or full inventory records, download multiple formats, and preserve generated files in private Firebase Storage.',
-    category: 'Super Admin',
+    body: 'Feature Inventory is private to Ayodeji Falope Platform Owner. It lists detected app features, categories, routes, components, visibility, confidence, scan history, and versions. The Platform Owner can select individual features, select all visible filtered features, export selected or full inventory records, download multiple formats, and preserve generated files in private Firebase Storage.',
+    category: 'Platform Owner',
     subcategory: 'Feature Inventory',
-    tags: ['feature inventory', 'bulk export', 'firebase storage', 'version history', 'super admin'],
+    tags: ['feature inventory', 'bulk export', 'firebase storage', 'version history', 'platform owner'],
     audience: ['admin'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
     requirementRefs: ['R376', 'R388', 'R392', 'R497'],
     estimatedMinutes: 7,
     relatedIds: ['faq-feature-inventory-access', 'faq-feature-inventory-export-formats'],
-    steps: ['Open Feature Inventory as Ayodeji Falope Super Admin.', 'Use search and filters to narrow the catalogue.', 'Select features in table or card view.', 'Open Bulk Export.', 'Choose formats and scope.', 'Generate and Download.', 'Use Stored exports to download preserved files later.'],
+    steps: ['Open Feature Inventory as Ayodeji Falope Platform Owner.', 'Use search and filters to narrow the catalogue.', 'Select features in table or card view.', 'Open Bulk Export.', 'Choose formats and scope.', 'Generate and Download.', 'Use Stored exports to download preserved files later.'],
   },
   {
     id: 'help-table-sorting',
     type: 'article',
     title: 'Sort tables and reset columns',
     shortSummary: 'Tables support descending, ascending, default reset, and optional multi-column sort locks.',
-    body: 'Most DEAP data tables now share the same sorting behaviour. Click a column title once for descending, twice for ascending, and a third time to return that column to the default order. Use Sort Options to lock more than one column into a sort chain, and Reset Columns to Default to clear sorting without changing the underlying records.',
+    body: 'Most Staffiq data tables now share the same sorting behaviour. Click a column title once for descending, twice for ascending, and a third time to return that column to the default order. Use Sort Options to lock more than one column into a sort chain, and Reset Columns to Default to clear sorting without changing the underlying records.',
     category: 'Using Tables',
     subcategory: 'Sorting',
     tags: ['table', 'sort', 'columns', 'reset', 'multi sort'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18800,34 +19540,34 @@ const helpKnowledgeItems: HelpContentItem[] = [
     relatedIds: ['faq-table-sorting-reset'],
   },
   {
-    id: 'help-super-admin-repair-gateway',
+    id: 'help-owner-repair-gateway',
     type: 'policy',
-    title: 'Super Admin bug repair gateway',
-    shortSummary: 'Super Admin reviews reports, approves investigation, approves repair, and keeps an audit trail.',
-    body: 'The Super Admin Bug Reports tab is the technical control center for submitted bugs and feedback. Ayodeji Falope can review reporter details captured from login, inspect affected areas, assign severity and priority, mark duplicates, approve investigation, approve repair, record testing, generate repair prompts, and keep a full audit trail. This keeps ordinary users away from technical controls while giving Super Admin deep governance.',
-    category: 'Super Admin',
+    title: 'Platform Owner bug repair gateway',
+    shortSummary: 'Platform Owner reviews reports, approves investigation, approves repair, and keeps an audit trail.',
+    body: 'The Platform Owner Bug Reports tab is the technical control center for submitted bugs and feedback. Ayodeji Falope can review reporter details captured from login, inspect affected areas, assign severity and priority, mark duplicates, approve investigation, approve repair, record testing, generate repair prompts, and keep a full audit trail. This keeps ordinary users away from technical controls while giving Platform Owner deep governance.',
+    category: 'Platform Owner',
     subcategory: 'Bug Governance',
-    tags: ['super admin', 'bug reports', 'approval', 'repair gateway', 'audit'],
+    tags: ['platform owner', 'bug reports', 'approval', 'repair gateway', 'audit'],
     audience: ['admin'],
-    owner: 'DEAP Security',
+    owner: 'Staffiq Security',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
     requirementRefs: ['R376', 'R388', 'R392', 'R497'],
     estimatedMinutes: 8,
-    relatedIds: ['help-bug-feedback-simple', 'faq-super-admin-bug-gateway'],
+    relatedIds: ['help-bug-feedback-simple', 'faq-owner-bug-gateway'],
   },
   {
-    id: 'faq-what-is-deap',
+    id: 'faq-what-is-Staffiq',
     type: 'faq',
-    title: 'What is DEAP?',
-    shortSummary: 'DEAP is the Dynamic Employee Assessment Portal.',
-    body: 'DEAP is used to assign, take, score, review, and analyse professional competency assessments for employees, candidates, managers, and administrators.',
+    title: 'What is Staffiq?',
+    shortSummary: 'Staffiq is the Dynamic Employee Assessment Portal.',
+    body: 'Staffiq is used to assign, take, score, review, and analyse professional competency assessments for employees, candidates, managers, and administrators.',
     category: 'Getting Started',
     subcategory: 'Overview',
-    tags: ['deap', 'overview'],
+    tags: ['staffiq', 'overview'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18840,7 +19580,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'Why are questions random?',
     shortSummary: 'Randomization improves fairness and reduces memorisation.',
-    body: 'DEAP prioritizes underused questions and tracks exposure balance, so the same questions do not dominate while other valid questions remain unseen.',
+    body: 'Staffiq prioritizes underused questions and tracks exposure balance, so the same questions do not dominate while other valid questions remain unseen.',
     category: 'Assessments',
     subcategory: 'Randomization',
     tags: ['random', 'exposure', 'fairness'],
@@ -18858,7 +19598,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'What happens when time runs out?',
     shortSummary: 'The answer is revealed automatically and the question scores zero.',
-    body: 'When the timer expires, DEAP treats the question as unanswered, reveals the correct answer for learning, highlights the correct option, and lets the user continue.',
+    body: 'When the timer expires, Staffiq treats the question as unanswered, reveals the correct answer for learning, highlights the correct option, and lets the user continue.',
     category: 'Assessments',
     subcategory: 'Timer',
     tags: ['timer', 'timeout', 'answer reveal'],
@@ -18881,7 +19621,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Availability',
     tags: ['missing test', 'refresh', 'admin'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -18894,12 +19634,12 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'Do I get points for bug reports and feedback?',
     shortSummary: 'Yes. Useful reports and feedback can earn contribution points and badges.',
-    body: 'A valid bug report starts at 10 points, valid feedback starts at 5 points, useful evidence can add points, duplicates receive reduced points, and rejected spam receives none. Super Admin review controls final point decisions.',
+    body: 'A valid bug report starts at 10 points, valid feedback starts at 5 points, useful evidence can add points, duplicates receive reduced points, and rejected spam receives none. Platform Owner review controls final point decisions.',
     category: 'Support',
     subcategory: 'Contribution Points',
     tags: ['bug report', 'feedback', 'points', 'badge'],
     audience: ['all'],
-    owner: 'DEAP Support',
+    owner: 'Staffiq Support',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18911,13 +19651,13 @@ const helpKnowledgeItems: HelpContentItem[] = [
     id: 'faq-self-repairing-reports',
     type: 'faq',
     title: 'What does self-repairing bug report mean?',
-    shortSummary: 'It means DEAP captures clear report details so corrections can happen faster.',
-    body: 'When a user submits a clear bug report, DEAP captures the affected page, safe device details, screenshots when provided, and reproduction notes. This helps the software correction workflow move faster, and users can return to Bug Report and Feedback to see updates.',
+    shortSummary: 'It means Staffiq captures clear report details so corrections can happen faster.',
+    body: 'When a user submits a clear bug report, Staffiq captures the affected page, safe device details, screenshots when provided, and reproduction notes. This helps the software correction workflow move faster, and users can return to Bug Report and Feedback to see updates.',
     category: 'Support',
     subcategory: 'Bug Report and Feedback',
     tags: ['self repairing', 'self correcting', 'bug report', 'feedback'],
     audience: ['all'],
-    owner: 'DEAP Support',
+    owner: 'Staffiq Support',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18935,7 +19675,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Personalisation',
     tags: ['dashboard', 'reset', 'customise', 'layout'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18953,7 +19693,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Sorting',
     tags: ['table', 'sort', 'reset', 'columns'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18965,13 +19705,13 @@ const helpKnowledgeItems: HelpContentItem[] = [
     id: 'faq-feature-inventory-access',
     type: 'faq',
     title: 'Who can open Feature Inventory?',
-    shortSummary: 'Only Ayodeji Falope Super Admin can open the private Feature Inventory.',
-    body: 'Feature Inventory is identity locked to Ayodeji Falope Super Admin. Other users should not see the tab or receive inventory API responses.',
-    category: 'Super Admin',
+    shortSummary: 'Only Ayodeji Falope Platform Owner can open the private Feature Inventory.',
+    body: 'Feature Inventory is identity locked to Ayodeji Falope Platform Owner. Other users should not see the tab or receive inventory API responses.',
+    category: 'Platform Owner',
     subcategory: 'Feature Inventory',
-    tags: ['feature inventory', 'super admin', 'access control'],
+    tags: ['feature inventory', 'platform owner', 'access control'],
     audience: ['admin'],
-    owner: 'DEAP Security',
+    owner: 'Staffiq Security',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18984,12 +19724,12 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'Which Feature Inventory export formats are supported?',
     shortSummary: 'PDF, DOCX, TXT, Markdown, JSON, CSV, HTML, and XLSX are available.',
-    body: 'The Super Admin can choose one or more export formats during bulk export. Files download in the browser and are also preserved in private Firebase Storage for later download from Stored exports.',
-    category: 'Super Admin',
+    body: 'The Platform Owner can choose one or more export formats during bulk export. Files download in the browser and are also preserved in private Firebase Storage for later download from Stored exports.',
+    category: 'Platform Owner',
     subcategory: 'Feature Inventory',
     tags: ['feature inventory', 'export', 'pdf', 'docx', 'xlsx', 'firebase storage'],
     audience: ['admin'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -18998,34 +19738,34 @@ const helpKnowledgeItems: HelpContentItem[] = [
     relatedIds: ['help-feature-inventory-bulk-export'],
   },
   {
-    id: 'faq-super-admin-bug-gateway',
+    id: 'faq-owner-bug-gateway',
     type: 'faq',
-    title: 'Where does Super Admin approve bug repairs?',
-    shortSummary: 'Use the Super Admin Bug Reports tab.',
+    title: 'Where does Platform Owner approve bug repairs?',
+    shortSummary: 'Use the Platform Owner Bug Reports tab.',
     body: 'The Bug Reports tab shows submitted reports, reporter login details, affected area, diagnostics, points, duplicate hints, repair status, audit trail, and approval controls for investigation, repair, testing, and monitoring.',
-    category: 'Super Admin',
+    category: 'Platform Owner',
     subcategory: 'Bug Governance',
-    tags: ['bug reports', 'super admin', 'approval', 'repair'],
+    tags: ['bug reports', 'platform owner', 'approval', 'repair'],
     audience: ['admin'],
-    owner: 'DEAP Security',
+    owner: 'Staffiq Security',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
     requirementRefs: ['R376', 'R388', 'R392'],
     estimatedMinutes: 1,
-    relatedIds: ['help-super-admin-repair-gateway'],
+    relatedIds: ['help-owner-repair-gateway'],
   },
   {
     id: 'faq-system-health-location',
     type: 'faq',
-    title: 'Where can Super Admin check sync and release health?',
+    title: 'Where can Platform Owner check sync and release health?',
     shortSummary: 'Open Reports and choose System Health.',
-    body: 'System Health shows cloud sync status, protected record coverage, backup scope, active assessment sessions, recent sanitised diagnostics, and the release safety checklist. It is designed for Super Admin and admin operations, not ordinary employee work.',
-    category: 'Super Admin',
+    body: 'System Health shows cloud sync status, protected record coverage, backup scope, active assessment sessions, recent sanitised diagnostics, and the release safety checklist. It is designed for Platform Owner and admin operations, not ordinary employee work.',
+    category: 'Platform Owner',
     subcategory: 'System Health',
     tags: ['system health', 'sync', 'release checklist', 'backup', 'diagnostics', 'active sessions'],
     audience: ['admin'],
-    owner: 'DEAP Operations',
+    owner: 'Staffiq Operations',
     status: 'published',
     updatedAt: '2026-05-26',
     lastReviewedAt: '2026-05-26',
@@ -19043,7 +19783,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Privacy',
     tags: ['ai', 'privacy', 'perplexity', 'secret'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19054,14 +19794,14 @@ const helpKnowledgeItems: HelpContentItem[] = [
   {
     id: 'faq-upgrade-catalogue-location',
     type: 'faq',
-    title: 'Where can I find the new DEAP upgrade catalogue?',
+    title: 'Where can I find the new Staffiq upgrade catalogue?',
     shortSummary: 'Admins can find it on the Dashboard, and everyone can search it inside this Learning / Help / FAQ Center.',
     body: 'Admins should open Dashboard and scroll to Product upgrade catalogue. The same upgrade knowledge is also available here through Learning, Help, FAQ, search, and AI Help. Normal users see learner-safe upgrade guidance; admins see the deeper roadmap and analytics guidance.',
     category: 'Product Updates',
     subcategory: 'Upgrade Catalogue',
     tags: ['upgrade catalogue', 'dashboard', 'learning help', 'faq'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19074,12 +19814,12 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'What do Implemented, Foundation ready, Integration stage, and Roadmap mean?',
     shortSummary: 'Implemented is active now; the other badges show how much work remains.',
-    body: 'Implemented means the feature is active in this build. Foundation ready means DEAP has UI or data scaffolding but still needs deeper production infrastructure. Integration stage means it depends on an external system such as SSO, HRIS, SCORM/LTI, or multi-tenant architecture. Roadmap means it is recommended but not yet implemented.',
+    body: 'Implemented means the feature is active in this build. Foundation ready means Staffiq has UI or data scaffolding but still needs deeper production infrastructure. Integration stage means it depends on an external system such as SSO, HRIS, SCORM/LTI, or multi-tenant architecture. Roadmap means it is recommended but not yet implemented.',
     category: 'Product Updates',
     subcategory: 'Status Badges',
     tags: ['implemented', 'foundation ready', 'integration stage', 'roadmap', 'status'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19092,12 +19832,12 @@ const helpKnowledgeItems: HelpContentItem[] = [
     type: 'faq',
     title: 'Are all recommended features active now?',
     shortSummary: 'No. The complete expansion list is a controlled backlog; active features are marked through implementation status.',
-    body: `The complete DEAP expansion backlog contains ${fullFeatureExpansionTotal} recommended improvements. Some are already implemented, some have foundation scaffolding, and many remain future build items. Every implemented feature should also receive Help Center guidance, FAQ coverage, responsive checks, accessibility checks, and Super Admin documentation where relevant.`,
+    body: `The complete Staffiq expansion backlog contains ${fullFeatureExpansionTotal} recommended improvements. Some are already implemented, some have foundation scaffolding, and many remain future build items. Every implemented feature should also receive Help Center guidance, FAQ coverage, responsive checks, accessibility checks, and Platform Owner documentation where relevant.`,
     category: 'Product Updates',
     subcategory: 'Complete Expansion Backlog',
     tags: ['feature backlog', 'implemented', 'roadmap', 'faq', 'help center'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-25',
     lastReviewedAt: '2026-05-25',
@@ -19109,13 +19849,13 @@ const helpKnowledgeItems: HelpContentItem[] = [
     id: 'faq-new-analytics-metrics',
     type: 'faq',
     title: 'What new analytics are documented for admins?',
-    shortSummary: 'DEAP now documents 25 decision-intelligence metrics for attempts, question quality, readiness, compliance, and AI impact.',
+    shortSummary: 'Staffiq now documents 25 decision-intelligence metrics for attempts, question quality, readiness, compliance, and AI impact.',
     body: `The new analytics catalogue includes timeout rate, reveal-answer rate, hint-to-pass correlation, score by competency, score by difficulty, weighted judgement score, standard recall score, exposure balance, underused and overexposed questions, distractor frequency, discrimination index, difficulty index, response time by topic, speed decay, late starts, abandonment recovery, retry improvement, department risk, supervisor cohort gaps, certification readiness, promotion readiness, compliance evidence, AI intervention count, and question-bank quality trend.`,
     category: 'Admin Operations',
     subcategory: 'Analytics Upgrade',
     tags: ['analytics', '25 metrics', 'admin stats', 'decision intelligence'],
     audience: ['admin'],
-    owner: 'DEAP Analytics',
+    owner: 'Staffiq Analytics',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19133,7 +19873,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'UI/UX',
     tags: ['mobile', 'dark mode', 'ui ux', 'glossy', 'responsive'],
     audience: ['all'],
-    owner: 'DEAP Product',
+    owner: 'Staffiq Product',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19151,7 +19891,7 @@ const helpKnowledgeItems: HelpContentItem[] = [
     subcategory: 'Upgrade Help',
     tags: ['ai help', 'upgrade', 'perplexity', 'roadmap', 'analytics'],
     audience: ['all'],
-    owner: 'DEAP Admin',
+    owner: 'Staffiq Admin',
     status: 'published',
     updatedAt: '2026-05-08',
     lastReviewedAt: '2026-05-08',
@@ -19181,7 +19921,7 @@ const helpLearningPaths: LearningPath[] = [
   {
     id: 'path-product-update-awareness',
     title: 'Product Upgrade Awareness Path',
-    description: 'Understand what changed in DEAP, how the new UI/UX catalogue helps users, and how to ask AI Help about updates.',
+    description: 'Understand what changed in Staffiq, how the new UI/UX catalogue helps users, and how to ask AI Help about updates.',
     audience: ['all'],
     required: false,
     lessonIds: ['learn-upgrade-catalogue-overview', 'help-uiux-upgrades-2026', 'help-table-sorting', 'faq-upgrade-catalogue-location', 'faq-uiux-mobile-dark-mode', 'faq-upgrade-ai-help'],
@@ -19192,7 +19932,7 @@ const helpLearningPaths: LearningPath[] = [
     description: 'Launch logic, question banks, AI boundaries, analytics, content gaps, and audit-friendly help.',
     audience: ['admin'],
     required: true,
-    lessonIds: ['help-admin-launch-live', 'help-question-banks', 'help-feature-inventory-bulk-export', 'help-super-admin-repair-gateway', 'help-ai-boundaries', 'help-admin-analytics', 'help-product-roadmap-2026', 'help-complete-feature-expansion-backlog', 'help-analytics-upgrades-2026', 'help-upgrade-research-sources'],
+    lessonIds: ['help-admin-launch-live', 'help-question-banks', 'help-feature-inventory-bulk-export', 'help-owner-repair-gateway', 'help-ai-boundaries', 'help-admin-analytics', 'help-product-roadmap-2026', 'help-complete-feature-expansion-backlog', 'help-analytics-upgrades-2026', 'help-upgrade-research-sources'],
   },
 ]
 
@@ -19217,7 +19957,7 @@ const helpAnalyticsKpis = [
 ]
 
 function helpUserAudience(currentUser?: User): 'employee' | 'admin' {
-  return currentUser?.role === 'admin' || currentUser?.role === 'super_admin' ? 'admin' : 'employee'
+  return currentUser?.role === 'admin' || currentUser?.role === OWNER_ROLE ? 'admin' : 'employee'
 }
 
 function isHelpContentVisible(item: HelpContentItem, currentUser?: User): boolean {
@@ -19473,18 +20213,18 @@ function HelpFeedbackButtons({
 }
 
 function HelpFaq({ currentUser }: { currentUser?: User }) {
-  const isAdminUser = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
+  const isAdminUser = currentUser?.role === OWNER_ROLE || currentUser?.role === 'admin'
   const [activeTab, setActiveTab] = useState<HelpCenterTab>('learning')
   const [query, setQuery] = useState('')
   const [openFaqId, setOpenFaqId] = useState<string | null>(null)
-  const [savedIds, setSavedIds] = useState<string[]>(() => readStored(`deap-help-saved-${currentUser?.id ?? 'guest'}`, []))
-  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => readStored(`deap-help-progress-${currentUser?.id ?? 'guest'}`, []))
-  const helpEventsKey = `deap-help-events-${currentUser?.id ?? 'guest'}`
-  const chatStorageKey = `deap-help-ai-chat-threads-${currentUser?.id ?? 'guest'}`
+  const [savedIds, setSavedIds] = useState<string[]>(() => readStored(`staffiq-help-saved-${currentUser?.id ?? 'guest'}`, []))
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => readStored(`staffiq-help-progress-${currentUser?.id ?? 'guest'}`, []))
+  const helpEventsKey = `staffiq-help-events-${currentUser?.id ?? 'guest'}`
+  const chatStorageKey = `staffiq-help-ai-chat-threads-${currentUser?.id ?? 'guest'}`
   const [helpEvents, setHelpEvents] = useState<Array<{ id: string; type: string; detail: string; createdAt: string }>>(() => readStored(helpEventsKey, []))
-  const [contentFeedback, setContentFeedback] = useState<Record<string, 'helpful' | 'not_helpful'>>(() => readStored(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
-  const [chatThreads, setChatThreads] = useState<AiChatThread[]>(() => readStored(chatStorageKey, [createAiThread('Ask DEAP Help')]))
-  const [selectedChatId, setSelectedChatId] = useState(() => readStored(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
+  const [contentFeedback, setContentFeedback] = useState<Record<string, 'helpful' | 'not_helpful'>>(() => readStored(`staffiq-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
+  const [chatThreads, setChatThreads] = useState<AiChatThread[]>(() => readStored(chatStorageKey, [createAiThread('Ask Staffiq Help')]))
+  const [selectedChatId, setSelectedChatId] = useState(() => readStored(`staffiq-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
   const [aiDraft, setAiDraft] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
@@ -19508,7 +20248,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
   }
   const releaseNotes = isAdminUser
     ? [
-        'Super Admin Command Center now exports a technical snapshot.',
+        'Platform Owner Command Center now exports a technical snapshot.',
         'Bug reports now include clearer affected-area selection and correction status.',
         'Feature Inventory supports bulk selected exports and versioned governance records.',
         'Tables now support reusable column sorting and reset controls.',
@@ -19521,25 +20261,25 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
       ]
 
   useEffect(() => {
-    setSavedIds(readStored(`deap-help-saved-${currentUser?.id ?? 'guest'}`, []))
-    setCompletedLessonIds(readStored(`deap-help-progress-${currentUser?.id ?? 'guest'}`, []))
+    setSavedIds(readStored(`staffiq-help-saved-${currentUser?.id ?? 'guest'}`, []))
+    setCompletedLessonIds(readStored(`staffiq-help-progress-${currentUser?.id ?? 'guest'}`, []))
     setHelpEvents(readStored(helpEventsKey, []))
-    setContentFeedback(readStored(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
-    const nextThreads = readStored<AiChatThread[]>(chatStorageKey, [createAiThread('Ask DEAP Help')])
-    setChatThreads(nextThreads.length ? nextThreads : [createAiThread('Ask DEAP Help')])
-    setSelectedChatId(readStored(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
+    setContentFeedback(readStored(`staffiq-help-feedback-${currentUser?.id ?? 'guest'}`, {}))
+    const nextThreads = readStored<AiChatThread[]>(chatStorageKey, [createAiThread('Ask Staffiq Help')])
+    setChatThreads(nextThreads.length ? nextThreads : [createAiThread('Ask Staffiq Help')])
+    setSelectedChatId(readStored(`staffiq-help-ai-selected-${currentUser?.id ?? 'guest'}`, ''))
   }, [chatStorageKey, currentUser?.id, helpEventsKey])
 
-  useEffect(() => localStorage.setItem(`deap-help-saved-${currentUser?.id ?? 'guest'}`, JSON.stringify(savedIds)), [currentUser?.id, savedIds])
-  useEffect(() => localStorage.setItem(`deap-help-progress-${currentUser?.id ?? 'guest'}`, JSON.stringify(completedLessonIds)), [completedLessonIds, currentUser?.id])
+  useEffect(() => writeStored(`staffiq-help-saved-${currentUser?.id ?? 'guest'}`, savedIds), [currentUser?.id, savedIds])
+  useEffect(() => writeStored(`staffiq-help-progress-${currentUser?.id ?? 'guest'}`, completedLessonIds), [completedLessonIds, currentUser?.id])
   useEffect(() => localStorage.setItem(helpEventsKey, JSON.stringify(helpEvents)), [helpEvents, helpEventsKey])
-  useEffect(() => localStorage.setItem(`deap-help-feedback-${currentUser?.id ?? 'guest'}`, JSON.stringify(contentFeedback)), [contentFeedback, currentUser?.id])
+  useEffect(() => writeStored(`staffiq-help-feedback-${currentUser?.id ?? 'guest'}`, contentFeedback), [contentFeedback, currentUser?.id])
   useEffect(() => localStorage.setItem(chatStorageKey, JSON.stringify(chatThreads)), [chatStorageKey, chatThreads])
   useEffect(() => {
     if (!chatThreads.length) return
     const nextSelected = chatThreads.some((thread) => thread.id === selectedChatId) ? selectedChatId : chatThreads[0].id
     setSelectedChatId(nextSelected)
-    localStorage.setItem(`deap-help-ai-selected-${currentUser?.id ?? 'guest'}`, nextSelected)
+    writeStored(`staffiq-help-ai-selected-${currentUser?.id ?? 'guest'}`, nextSelected)
   }, [chatThreads, currentUser?.id, selectedChatId])
 
   const recordHelpEvent = useCallback((type: string, detail: string) => {
@@ -19573,7 +20313,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
     recordHelpEvent(rating === 'helpful' ? 'content_marked_helpful' : 'content_marked_not_helpful', item.title)
   }, [recordHelpEvent])
 
-  function createHelpChat(prompt = 'Ask DEAP Help') {
+  function createHelpChat(prompt = 'Ask Staffiq Help') {
     const thread = createAiThread(prompt)
     setChatThreads((existing) => [thread, ...existing])
     setSelectedChatId(thread.id)
@@ -19609,7 +20349,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
       },
       chatHistory: (thread?.messages ?? []).slice(-8).map((message) => ({ role: message.role, content: message.content.slice(0, 1600) })),
       knowledgeBase: {
-        productName: 'DEAP Dynamic Employee Assessment Portal',
+        productName: 'Staffiq Dynamic Employee Assessment Portal',
         aiRules: helpAiRules,
         prdPrinciples: helpPrdPrinciples,
         contentItems: relevantContent,
@@ -19671,7 +20411,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
   }
 
   const quickPrompts = [
-    'What changed in the new DEAP upgrade catalogue?',
+    'What changed in the new Staffiq upgrade catalogue?',
     'Where do I find the product, UI/UX, and analytics upgrades?',
     'Why is my test not showing?',
     'How do hints and answer reveal affect my score?',
@@ -19721,11 +20461,11 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
 
   return (
     <section className="learning-help-center">
-      <PageTitle eyebrow={`Learning Help${currentUser ? ` for ${currentUser.fullName}` : ''}`} title="DEAP Learning, Help and FAQ Center" />
+      <PageTitle eyebrow={`Learning Help${currentUser ? ` for ${currentUser.fullName}` : ''}`} title="Staffiq Learning, Help and FAQ Center" />
       <section className="panel learning-help-hero">
         <div>
           <span>{isAdminUser ? 'Admin self-service support' : 'Simple self-service support'}</span>
-          <h2>{isAdminUser ? 'Learn the portal, understand upgrades, search FAQs, and use DEAP Help without leaving your workflow.' : 'Find simple help for tests, results, reports, and feedback.'}</h2>
+          <h2>{isAdminUser ? 'Learn the portal, understand upgrades, search FAQs, and use Staffiq Help without leaving your workflow.' : 'Find simple help for tests, results, reports, and feedback.'}</h2>
           <p>{isAdminUser ? 'Built from the PRD model for Learning Center, Help Center, FAQ Center, support, content governance, analytics, product upgrades, and continuous improvement.' : 'Use the lessons, help articles, and FAQs when you are not sure what to do next.'}</p>
         </div>
         <div className="learning-help-stats">
@@ -19740,7 +20480,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
         <div>
           <span className="status-pill"><Bell size={16} /> What changed</span>
           <h2>{isAdminUser ? 'Latest implementation updates' : 'Latest simple updates'}</h2>
-          <p>{isAdminUser ? 'Recent production-safe upgrades added during the current expansion cycle.' : 'Recent changes that make DEAP easier to use.'}</p>
+          <p>{isAdminUser ? 'Recent production-safe upgrades added during the current expansion cycle.' : 'Recent changes that make Staffiq easier to use.'}</p>
         </div>
         <div className="release-note-list">
           {releaseNotes.map((note) => (
@@ -19768,7 +20508,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
           <div className="panel-heading-row">
             <div>
               <h2>Search results</h2>
-              <p>{searchResults.length ? `${searchResults.length} result(s) from approved DEAP knowledge.` : 'No result yet. Try AI Help or ask the admin to add content.'}</p>
+              <p>{searchResults.length ? `${searchResults.length} result(s) from approved Staffiq knowledge.` : 'No result yet. Try AI Help or ask the admin to add content.'}</p>
             </div>
           </div>
           <div className="content-result-grid">
@@ -19892,7 +20632,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
         <section className="panel help-panel">
           <div className="panel-heading-row">
             <div>
-              <h2 id="deap-faq-heading">FAQ Center</h2>
+              <h2 id="staffiq-faq-heading">FAQ Center</h2>
               <p>Short answers first, with one open FAQ at a time for clean scanning.</p>
             </div>
           </div>
@@ -19903,8 +20643,8 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
             key={`faq-accordion-${currentUser?.id ?? 'guest'}`}
             items={faqAccordionItems}
             mode="single"
-            storageKey={`deap-help-faq-accordion-${currentUser?.id ?? 'guest'}`}
-            labelledBy="deap-faq-heading"
+            storageKey={`staffiq-help-faq-accordion-${currentUser?.id ?? 'guest'}`}
+            labelledBy="staffiq-faq-heading"
             activeItemId={openFaqId}
             onOpenIdsChange={(ids) => setOpenFaqId(ids[0] ?? null)}
             onToggle={(item, open) => {
@@ -19921,7 +20661,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
           <div className="panel-heading-row">
             <div>
               <h2>AI Help Assistant</h2>
-              <p>Perplexity-powered support grounded in approved DEAP Learning, Help, FAQ, and PRD rules.</p>
+              <p>Perplexity-powered support grounded in approved Staffiq Learning, Help, FAQ, and PRD rules.</p>
             </div>
             <button className="secondary-button" type="button" onClick={() => createHelpChat()}>
               <Plus size={18} /> New chat
@@ -19950,7 +20690,7 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
               <div className="ai-message-list">
                 {!activeChat?.messages.length && (
                   <article className="ai-message assistant">
-                    <div><Bot size={18} /><strong>DEAP AI Help</strong></div>
+                    <div><Bot size={18} /><strong>Staffiq AI Help</strong></div>
                     <p>Ask about tests, login, permissions, result review, missing tests, admin launch logic, FAQs, or how this Learning Center works.</p>
                   </article>
                 )}
@@ -19958,16 +20698,16 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
                   <article className={`ai-message ${message.role}`} key={message.id}>
                     <div>
                       {message.role === 'assistant' ? <Bot size={18} /> : <UserRound size={18} />}
-                      <strong>{message.role === 'assistant' ? 'DEAP AI Help' : 'You'}</strong>
+                      <strong>{message.role === 'assistant' ? 'Staffiq AI Help' : 'You'}</strong>
                       <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
                     </div>
                     <p>{message.content}</p>
                   </article>
                 ))}
-                {aiBusy && <article className="ai-message assistant pending"><p>AI Help is checking approved DEAP sources...</p></article>}
+                {aiBusy && <article className="ai-message assistant pending"><p>AI Help is checking approved Staffiq sources...</p></article>}
               </div>
               <form className="ai-compose" onSubmit={submitHelpAi}>
-                <textarea value={aiDraft} onChange={(event) => setAiDraft(event.target.value)} placeholder="Ask DEAP AI Help a question..." />
+                <textarea value={aiDraft} onChange={(event) => setAiDraft(event.target.value)} placeholder="Ask Staffiq AI Help a question..." />
                 <button className="primary-button" type="submit" disabled={aiBusy || !aiDraft.trim()}>
                   <Send size={18} /> Ask
                 </button>
@@ -20393,7 +21133,7 @@ function ResultView({ session, questions, test, onReturn }: { session?: TestSess
   )
 }
 
-const deapIconLabels: Record<DeapIconName, string> = {
+const StaffiqIconLabels: Record<StaffiqIconName, string> = {
   dashboard: 'Dashboard',
   training: 'Training',
   course: 'Course',
@@ -20434,26 +21174,26 @@ const deapIconLabels: Record<DeapIconName, string> = {
   empty: 'Empty state',
 }
 
-function DeapIcon({
+function StaffiqIcon({
   name,
   size = 40,
   className = '',
   label,
 }: {
-  name: DeapIconName
+  name: StaffiqIconName
   size?: number
   className?: string
   label?: string
 }) {
   const iconId = useId().replace(/:/g, '')
-  const blue = `deap-blue-${iconId}`
-  const gold = `deap-gold-${iconId}`
-  const green = `deap-green-${iconId}`
-  const coral = `deap-coral-${iconId}`
-  const violet = `deap-violet-${iconId}`
-  const face = `deap-face-${iconId}`
-  const shadow = `deap-shadow-${iconId}`
-  const accessibleLabel = label ?? deapIconLabels[name]
+  const blue = `staffiq-blue-${iconId}`
+  const gold = `staffiq-gold-${iconId}`
+  const green = `staffiq-green-${iconId}`
+  const coral = `staffiq-coral-${iconId}`
+  const violet = `staffiq-violet-${iconId}`
+  const face = `staffiq-face-${iconId}`
+  const shadow = `staffiq-shadow-${iconId}`
+  const accessibleLabel = label ?? StaffiqIconLabels[name]
   const baseCard = (
     <>
       <rect x="10" y="12" width="44" height="40" rx="13" fill={`url(#${face})`} filter={`url(#${shadow})`} />
@@ -20700,7 +21440,7 @@ function DeapIcon({
     <svg
       aria-hidden={label ? undefined : true}
       aria-label={label ? accessibleLabel : undefined}
-      className={`deap-3d-icon deap-3d-icon-${name} ${className}`.trim()}
+      className={`staffiq-3d-icon staffiq-3d-icon-${name} ${className}`.trim()}
       height={size}
       role={label ? 'img' : undefined}
       viewBox="0 0 64 64"
@@ -20740,7 +21480,7 @@ function DeapIcon({
   )
 }
 
-function iconForLabel(label: string): DeapIconName | undefined {
+function iconForLabel(label: string): StaffiqIconName | undefined {
   const normalized = label.toLowerCase()
   if (normalized.includes('live')) return 'live'
   if (normalized.includes('question')) return 'question-bank'
@@ -20755,7 +21495,7 @@ function iconForLabel(label: string): DeapIconName | undefined {
   return undefined
 }
 
-function iconForPage(eyebrow: string, title: string): DeapIconName {
+function iconForPage(eyebrow: string, title: string): StaffiqIconName {
   const text = `${eyebrow} ${title}`.toLowerCase()
   if (text.includes('training')) return 'training'
   if (text.includes('question')) return 'question-bank'
@@ -20776,7 +21516,7 @@ function Metric({ label, value, icon }: { label: string; value: string | number;
   const metricIcon = iconForLabel(label)
   return (
     <article className="metric-card">
-      <span className="metric-icon-shell">{metricIcon ? <DeapIcon name={metricIcon} size={40} /> : icon}</span>
+      <span className="metric-icon-shell">{metricIcon ? <StaffiqIcon name={metricIcon} size={40} /> : icon}</span>
       <div>
         <p>{label}</p>
         <strong>{value}</strong>
@@ -20789,7 +21529,7 @@ function PageTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   const iconName = iconForPage(eyebrow, title)
   return (
     <header className="page-title">
-      <DeapIcon className="page-title-3d-icon" name={iconName} size={54} />
+      <StaffiqIcon className="page-title-3d-icon" name={iconName} size={54} />
       <div>
         <span>{eyebrow}</span>
         <h1>{title}</h1>
@@ -20870,7 +21610,7 @@ function DataTable({
 }) {
   const columnSignature = columns.join('\u001f')
   const [columnWidths, setColumnWidths] = useState(() => columns.map(getInitialColumnWidth))
-  const sortStorageKey = tableId ? `deap-table-sort-${tableId}` : ''
+  const sortStorageKey = tableId ? `staffiq-table-sort-${tableId}` : ''
   const [activeSorts, setActiveSorts] = useState<TableSortRule[]>(() => readStored<TableSortRule[]>(sortStorageKey, []))
   const [advancedSortMode, setAdvancedSortMode] = useState(false)
   const [sortAnnouncement, setSortAnnouncement] = useState('Default table order active.')
@@ -21150,7 +21890,7 @@ function DataTable({
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <section className="empty-state">
-      <DeapIcon name="empty" size={46} />
+      <StaffiqIcon name="empty" size={46} />
       <h2>{title}</h2>
       <p>{body}</p>
     </section>

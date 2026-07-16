@@ -1,0 +1,11 @@
+<svg width="230" height="56" viewBox="0 0 230 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="StaffiQ logo">
+  <rect x="8" y="8" width="40" height="40" rx="12" fill="#04352A"/>
+  <rect x="8" y="8" width="40" height="40" rx="12" fill="none" stroke="#0E9F73" stroke-opacity="0.5"/>
+  <rect x="17.2" y="30" width="5.2" height="8" rx="2.6" fill="#EAF7EF"/>
+  <rect x="24.4" y="24.6" width="5.2" height="13.4" rx="2.6" fill="#8FE9C4"/>
+  <rect x="31.6" y="18.4" width="5.2" height="19.6" rx="2.6" fill="#C6F24E"/>
+  <circle cx="34.2" cy="14" r="3" fill="#C6F24E"/>
+  <text x="62" y="37" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.5">
+    <tspan fill="#FBFAF5">Staff</tspan><tspan fill="#C6F24E">iq</tspan>
+  </text>
+</svg>

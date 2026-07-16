@@ -77,7 +77,7 @@ Admins should be able to schedule reports for daily, weekly, monthly, or quarter
 
 ### R13. Role-Based Report Subscriptions
 
-Scheduled reports should respect permissions. A department manager should only receive reports for their department, while a super admin can receive company-wide reports. This avoids exposing private assessment information to the wrong people.
+Scheduled reports should respect permissions. A department manager should only receive reports for their department, while a platform owner can receive company-wide reports. This avoids exposing private assessment information to the wrong people.
 
 ### R14. Report Templates
 

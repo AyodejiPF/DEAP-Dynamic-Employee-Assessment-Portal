@@ -1,0 +1,16 @@
+<svg width="230" height="56" viewBox="0 0 230 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="StaffiQ logo">
+  <defs>
+    <linearGradient id="lgGrad" x1="8" y1="8" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E5C43"/>
+      <stop offset="1" stop-color="#00352A"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="40" height="40" rx="12" fill="url(#lgGrad)"/>
+  <rect x="17.2" y="30" width="5.2" height="8" rx="2.6" fill="#EAF7EF"/>
+  <rect x="24.4" y="24.6" width="5.2" height="13.4" rx="2.6" fill="#8FE9C4"/>
+  <rect x="31.6" y="18.4" width="5.2" height="19.6" rx="2.6" fill="#C6F24E"/>
+  <circle cx="34.2" cy="14" r="3" fill="#C6F24E"/>
+  <text x="62" y="37" font-family="'Space Grotesk','Segoe UI',system-ui,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.5">
+    <tspan fill="#04231B">Staff</tspan><tspan fill="#0E9F73">iq</tspan>
+  </text>
+</svg>

@@ -40,11 +40,11 @@ If a feature is removed, redesigned, deprecated, hidden, or replaced, its existi
 
 If a Trash or Archive workflow does not exist for the affected data type, one must be designed before destructive behavior is implemented.
 
-## Super Admin Authority
+## Platform Owner Authority
 
-Deep recovery and permanent deletion controls are reserved for Ayodeji Falope, Super Admin.
+Deep recovery and permanent deletion controls are reserved for Ayodeji Falope, Platform Owner.
 
-Only Ayodeji Falope, Super Admin, may have:
+Only Ayodeji Falope, Platform Owner, may have:
 
 - Full Trash visibility.
 - Full restore authority.

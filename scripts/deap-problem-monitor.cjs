@@ -4,7 +4,7 @@ const jsonOutput = process.argv.includes('--json')
 const monitorCadenceHours = 24
 const monitorCadenceLabel = 'Daily / every 24 hours'
 process.env.DEAP_PROBLEM_MONITOR_INTERVAL_HOURS = String(monitorCadenceHours)
-const superAdminHeaders = {
+const ownerHeaders = {
   'X-DEAP-User-Id': process.env.DEAP_MONITOR_USER_ID || 'U001',
   'X-DEAP-User-Email': process.env.DEAP_MONITOR_USER_EMAIL || 'admin@iicocece.com',
   'X-DEAP-User-Role': process.env.DEAP_MONITOR_USER_ROLE || 'super_admin',
@@ -44,7 +44,7 @@ function formatReport(report, index) {
 
 async function main() {
   const endpoint = `${targetUrl}/api/deap-problem-reports?status=${encodeURIComponent(statusFilter)}`
-  const response = await fetch(endpoint, { cache: 'no-store', headers: superAdminHeaders })
+  const response = await fetch(endpoint, { cache: 'no-store', headers: ownerHeaders })
   if (!response.ok) {
     throw new Error(`Problem report endpoint failed with HTTP ${response.status}: ${await response.text()}`)
   }
@@ -67,7 +67,7 @@ async function main() {
   console.log('')
 
   if (!reports.length) {
-    console.log('No Super Admin-approved bug reports are currently waiting for Codex investigation.')
+    console.log('No Platform Owner-approved bug reports are currently waiting for Codex investigation.')
     return
   }
 
@@ -75,7 +75,7 @@ async function main() {
   console.log(reports.map(formatReport).join('\n\n'))
   console.log('')
   console.log('Codex triage protocol:')
-  console.log('1. Confirm the report has Super Admin approval before any investigation or repair.')
+  console.log('1. Confirm the report has Platform Owner approval before any investigation or repair.')
   console.log('2. Reproduce the highest severity approved report first using Browser or Playwright.')
   console.log('3. Inspect the smallest relevant code path and preserve all user data, tests, content, reports, and analytics.')
   console.log('4. Implement only a safe, scoped fix. Never hard delete or reset production records.')

@@ -12,7 +12,7 @@ dist
 dist-ssr
 *.local
 .firebase/
-.deap-continuity/
+.staffiq-continuity/
 
 # Editor directories and files
 .vscode/*
@@ -42,3 +42,8 @@ firebase-debug.*.log
 output/*.png
 output/*.log
 output/playwright/
+
+# Deploy credentials (never commit)
+.secrets/
+serviceAccount*.json
+*.serviceaccount.json

@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google tag (gtag.js) - GA4. PLACEHOLDER Measurement ID: replace G-XXXXXXXXXX with the real ID from analytics.google.com once the property exists. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-XXXXXXXXXX');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>StaffiQ — Employee Training & Assessment Platform for African SMEs</title>
+  <meta name="description" content="StaffiQ is the workforce training and assessment platform for African SMEs. Build staff capability, run fair assessments and turn results into practical management decisions." />
+  <meta name="theme-color" content="#004331" />
+  <link rel="icon" type="image/webp" href="assets/img/staffiq-mark-v2.webp" />
+  <link rel="canonical" href="https://www.staffiq.ng/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="StaffiQ — Train your people. Grow your business." />
+  <meta property="og:description" content="Train, assess and understand your team. Practical soft skills courses and workforce analytics, built for African SMEs." />
+  <meta property="og:url" content="https://www.staffiq.ng/" />
+  <meta property="og:image" content="https://www.staffiq.ng/assets/img/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=20260715b" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "StaffiQ",
+    "url": "https://www.staffiq.ng/",
+    "logo": "https://www.staffiq.ng/assets/img/staffiq-mark-v2.webp",
+    "description": "StaffiQ is the workforce training and assessment platform for African SMEs, built by RevenStrat Integrated Services.",
+    "email": "hello@staffiq.ng",
+    "address": { "@type": "PostalAddress", "addressLocality": "Lagos", "addressCountry": "NG" },
+    "sameAs": []
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "StaffiQ",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "url": "https://www.staffiq.ng/",
+    "description": "Employee training and assessment platform for African SMEs. Build staff capability, run fair assessments and turn results into practical management decisions.",
+    "offers": [
+      { "@type": "Offer", "name": "Starter", "price": "7500", "priceCurrency": "NGN", "description": "Per user monthly, minimum 5 users." },
+      { "@type": "Offer", "name": "Growth", "price": "10000", "priceCurrency": "NGN", "description": "Per user monthly, minimum 10 users." },
+      { "@type": "Offer", "name": "Command", "price": "15000", "priceCurrency": "NGN", "description": "Per user monthly, minimum 10 users." }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Does StaffiQ work when the network is poor?", "acceptedAnswer": { "@type": "Answer", "text": "StaffiQ uses focused pages and responsive controls to keep routine actions manageable on common mobile connections. A stable connection is still required for protected account activity and saving results." } },
+      { "@type": "Question", "name": "How long does setup take?", "acceptedAnswer": { "@type": "Answer", "text": "Setup depends on team size, role structure, content and reporting needs. We agree the configuration and activation steps with you before implementation begins." } },
+      { "@type": "Question", "name": "Can I add my own training content?", "acceptedAnswer": { "@type": "Answer", "text": "Alongside the soft skills library you can build custom courses from your own procedures, product knowledge and sales scripts, each ending in a StaffiQ assessment." } },
+      { "@type": "Question", "name": "How does StaffiQ work with TaskPulse?", "acceptedAnswer": { "@type": "Answer", "text": "They are sibling products from RevenStrat. StaffiQ builds capability, TaskPulse tracks day to day productivity. Used together you see whether skill is turning into output." } },
+      { "@type": "Question", "name": "What can administrators report on?", "acceptedAnswer": { "@type": "Answer", "text": "Administrators can review assessment results, user activity, training information and the performance signals available to their role." } },
+      { "@type": "Question", "name": "How is a plan agreed?", "acceptedAnswer": { "@type": "Answer", "text": "We first understand your team size, training needs, reporting depth and implementation support. You then receive a tailored proposal with clear terms." } },
+      { "@type": "Question", "name": "Can we cancel or change plans later?", "acceptedAnswer": { "@type": "Answer", "text": "You can adjust or end your plan with the notice period set out in your proposal." } },
+      { "@type": "Question", "name": "Is there a long contract lock in?", "acceptedAnswer": { "@type": "Answer", "text": "There is no extended lock in beyond the notice period agreed in your proposal. The minimum user count affects monthly cost, not contract length." } },
+      { "@type": "Question", "name": "Can we try StaffiQ before committing?", "acceptedAnswer": { "@type": "Answer", "text": "The best way to try StaffiQ today is a guided demonstration using a sample team and a sample assessment. There is no unsupervised self serve trial at this time." } },
+      { "@type": "Question", "name": "What happens to our data if we leave?", "acceptedAnswer": { "@type": "Answer", "text": "Your training records, assessment results and reports belong to your organisation. We agree a reasonable export and data handling process as part of offboarding." } },
+      { "@type": "Question", "name": "Why price per user instead of one flat fee?", "acceptedAnswer": { "@type": "Answer", "text": "Per user pricing means you only pay for the people actually using StaffiQ, scaling fairly with team size." } }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="container nav">
+      <a href="index.html" class="brand" aria-label="StaffiQ home">
+        <img class="mark" src="assets/img/staffiq-mark-v2.webp" alt="" width="38" height="38" />
+        <span class="brand-copy">
+          <span class="brand-name">Staffi<span class="wm-iq">Q</span></span>
+          <span class="brand-tagline">Train. Assess. Grow.</span>
+        </span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Book a demo</a>
+      </nav>
+      <div class="nav-cta">
+        <a href="https://staffiq.ng/login" class="btn btn-ghost">Client login</a>
+      </div>
+      <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><span></span></button>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Book a demo</a>
+      <a href="https://staffiq.ng/login" class="btn btn-ghost btn-block">Client login</a>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-bg"><span class="blob b1"></span><span class="blob b2"></span></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="pill reveal"><span class="dot"></span> Workforce development for African SMEs</span>
+          <h1 class="reveal d1">StaffiQ training and assessment.<br /><span class="hl">Know who is ready.</span></h1>
+          <p class="lead reveal d2">Give your people practical learning, assess what they understand and see where support is needed. StaffiQ keeps the experience simple for staff while giving leadership the evidence to act with confidence.</p>
+          <div class="hero-actions reveal d3">
+            <a href="contact.html" class="btn btn-primary btn-lg">Book a demo
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+            <a href="#how" class="btn btn-ghost btn-lg">See how it works</a>
+          </div>
+          <div class="hero-proof reveal d4">
+            <span><span class="check">✓</span> Simple for staff</span>
+            <span><span class="check">✓</span> Built for everyday phones</span>
+            <span><span class="check">✓</span> Designed for Nigerian SMEs</span>
+          </div>
+        </div>
+
+        <div class="hero-media reveal d2">
+          <div class="mock">
+            <div class="mock-bar"><i></i><i></i><i></i><span>staffiq.ng / dashboard</span></div>
+            <div class="mock-screen">
+              <div class="mock-row">
+                <div class="mock-card">
+                  <div class="label">Workforce readiness</div>
+                  <div class="mock-kpi">86%<small>▲ 7%</small></div>
+                  <div class="mock-chart">
+                    <span class="bar alt" style="height:40%"></span>
+                    <span class="bar alt" style="height:55%"></span>
+                    <span class="bar" style="height:48%"></span>
+                    <span class="bar" style="height:70%"></span>
+                    <span class="bar" style="height:62%"></span>
+                    <span class="bar" style="height:88%"></span>
+                  </div>
+                  <div class="mock-legend"><span><i style="background:var(--emerald-300)"></i>This quarter</span><span><i style="background:#9DB8AC"></i>Last quarter</span></div>
+                </div>
+                <div class="mock-card">
+                  <div class="label">Top performers</div>
+                  <ul class="mock-list" style="margin-top:12px">
+                    <li class="mock-li"><span class="av">AO</span><span class="meter"><b style="width:94%"></b></span><span class="pct">94</span></li>
+                    <li class="mock-li"><span class="av">FN</span><span class="meter"><b style="width:88%"></b></span><span class="pct">88</span></li>
+                    <li class="mock-li"><span class="av">CE</span><span class="meter"><b style="width:81%"></b></span><span class="pct">81</span></li>
+                    <li class="mock-li"><span class="av">MB</span><span class="meter"><b style="width:73%"></b></span><span class="pct">73</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="mock-card">
+                <div class="label" style="display:flex;justify-content:space-between">Skill mastery by department <span style="color:var(--emerald);font-weight:700">Live</span></div>
+                <div class="mock-chart" style="height:52px">
+                  <span class="bar" style="height:90%"></span><span class="bar" style="height:64%"></span>
+                  <span class="bar" style="height:78%"></span><span class="bar" style="height:52%"></span>
+                  <span class="bar" style="height:84%"></span><span class="bar" style="height:70%"></span>
+                  <span class="bar" style="height:96%"></span><span class="bar" style="height:60%"></span>
+                </div>
+              </div>
+            </div>
+            <div class="mock-float f1">
+              <span class="ic" style="background:rgba(198,242,78,0.3);color:var(--evergreen-800)">
+                <svg viewBox="0 0 24 24" width="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>Compliance 100%
+            </div>
+            <div class="mock-float f2">
+              <span class="ic" style="background:rgba(14,159,115,0.14);color:var(--evergreen-700)">
+                <svg viewBox="0 0 24 24" width="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+              </span>3 people at risk
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST -->
+    <section class="trust" aria-labelledby="sectors-heading">
+      <div class="container trust-inner">
+        <span class="t-label" id="sectors-heading">Purpose built for the workplaces that keep Nigeria moving</span>
+      </div>
+      <div class="sector-marquee" tabindex="0" aria-label="StaffiQ serves organisations across Nigerian industries. Pause the moving list by hovering over it or moving keyboard focus here.">
+        <div class="sector-track">
+          <div class="sector-group">
+            <span class="t-item">Real Estate</span><span class="t-item">Retail</span><span class="t-item">Construction</span><span class="t-item">Manufacturing</span>
+            <span class="t-item">Healthcare</span><span class="t-item">Education</span><span class="t-item">Hospitality</span><span class="t-item">Financial Services</span>
+            <span class="t-item">Fintech</span><span class="t-item">Business Management Consulting</span><span class="t-item">Professional Services</span><span class="t-item">Legal</span><span class="t-item">Logistics</span><span class="t-item">Agriculture</span>
+            <span class="t-item">Food and Beverage</span><span class="t-item">Energy</span><span class="t-item">Oil and Gas</span><span class="t-item">Technology</span>
+            <span class="t-item">Telecommunications</span><span class="t-item">Media</span><span class="t-item">Fashion</span><span class="t-item">Beauty and Wellness</span>
+            <span class="t-item">Transport</span><span class="t-item">Security Services</span><span class="t-item">Nonprofits</span><span class="t-item">Creative Agencies</span>
+          </div>
+          <div class="sector-group" aria-hidden="true">
+            <span class="t-item">Real Estate</span><span class="t-item">Retail</span><span class="t-item">Construction</span><span class="t-item">Manufacturing</span>
+            <span class="t-item">Healthcare</span><span class="t-item">Education</span><span class="t-item">Hospitality</span><span class="t-item">Financial Services</span>
+            <span class="t-item">Fintech</span><span class="t-item">Business Management Consulting</span><span class="t-item">Professional Services</span><span class="t-item">Legal</span><span class="t-item">Logistics</span><span class="t-item">Agriculture</span>
+            <span class="t-item">Food and Beverage</span><span class="t-item">Energy</span><span class="t-item">Oil and Gas</span><span class="t-item">Technology</span>
+            <span class="t-item">Telecommunications</span><span class="t-item">Media</span><span class="t-item">Fashion</span><span class="t-item">Beauty and Wellness</span>
+            <span class="t-item">Transport</span><span class="t-item">Security Services</span><span class="t-item">Nonprofits</span><span class="t-item">Creative Agencies</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBLEM / SOLUTION -->
+    <section class="section bg-cream">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">The cost of guesswork</span>
+          <h2>Most SMEs manage their biggest asset on a hunch</h2>
+          <p class="lead">Your people are your largest cost and your largest opportunity. Yet training, promotions and even sackings often rest on gut feeling. StaffiQ turns that hunch into hard evidence you can defend in any boardroom.</p>
+        </div>
+        <div class="grid grid-3">
+          <div class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+            <h3>You cannot see the gaps</h3>
+            <p>When seventy percent of a team fails the same task, that is a training problem, not a people problem. Without data, you never spot it.</p>
+          </div>
+          <div class="card reveal d1">
+            <div class="icon" aria-hidden="true"><span class="naira-mark">&#8358;</span></div>
+            <h3>Training spend is hard to defend</h3>
+            <p>You invest in courses, then hope they worked. StaffiQ connects training activity with assessment evidence leaders can review.</p>
+          </div>
+          <div class="card reveal d2">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+            <h3>Compliance creeps up on you</h3>
+            <p>Certificates expire quietly. StaffiQ shows who is certified, who is overdue and what lapses in thirty, sixty and ninety days.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="section bg-sand" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">Train. Assess. Improve.</span>
+          <h2>Everything to grow your people and prove it worked</h2>
+          <p class="lead">StaffiQ runs the full loop: teach a skill, assess understanding, then show leadership what changed and where more support is needed.</p>
+        </div>
+        <div class="grid grid-3">
+          <div class="card feature-lime reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.7 3 6 3s6-2 6-3v-5"/></svg></div>
+            <h3>Soft skills training</h3>
+            <p>A growing library of practical courses, from communication to project management and critical thinking, distilled from thirty years of consulting. Bite size lessons that fit around a busy shift.</p>
+          </div>
+          <div class="card reveal d1">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v3h6V3M8 12l2 2 4-4"/></svg></div>
+            <h3>Fair assessments</h3>
+            <p>Turn learning into a clear, timed assessment with navigation, progress, countdown guidance and results recorded for review.</p>
+          </div>
+          <div class="card reveal d2">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.2 12.5 7 22l5-3 5 3-1.2-9.5"/></svg></div>
+            <h3>Completion records</h3>
+            <p>Recognise completed learning with clear records and reports that authorised administrators can review.</p>
+          </div>
+          <div class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+            <h3>Skill mastery heat map</h3>
+            <p>Topics across departments in one colour coded grid. Weak spots light up so you fix the right thing, not the loud thing.</p>
+          </div>
+          <div class="card reveal d1">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg></div>
+            <h3>Executive dashboards</h3>
+            <p>Bring readiness, participation, results and coaching priorities into one focused management view.</p>
+          </div>
+          <div class="card reveal d2">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg></div>
+            <h3>Plain language insights</h3>
+            <p>Move from raw scores to practical signals about weak topics, staff progress and the next management action.</p>
+          </div>
+        </div>
+        <div class="center mt-4 reveal">
+          <a href="features.html" class="link-arrow">Explore StaffiQ features
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRAINING CATALOGUE -->
+    <section class="section bg-cream" id="training">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">The StaffiQ academy</span>
+          <h2>Soft skills that make everyday work better</h2>
+          <p class="lead">A practical course library distilled from thousands of client meetings across three decades of consulting. Real skills your people can use on Monday morning, not theory they forget by Friday.</p>
+        </div>
+
+        <div class="loop reveal mb-3">
+          <div class="loop-node n1"><span class="ln-step">01</span>
+            <div class="ln-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7c-2-1.5-5-2-8-2v13c3 0 6 .5 8 2 2-1.5 5-2 8-2V5c-3 0-6 .5-8 2z"/><path d="M12 7v12"/></svg></div>
+            <h4>Learn</h4><p>Short, practical lessons on the skills that matter most.</p></div>
+          <div class="loop-node n2"><span class="ln-step">02</span>
+            <div class="ln-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/><path d="m9 14 2 2 4-4"/></svg></div>
+              <h4>Assess</h4><p>A fair assessment checks understanding.</p></div>
+          <div class="loop-node n3"><span class="ln-step">03</span>
+            <div class="ln-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.2 12.5 7 22l5-3 5 3-1.2-9.5"/></svg></div>
+              <h4>Record</h4><p>Completion and results become visible evidence.</p></div>
+          <div class="loop-node n4"><span class="ln-step">04</span>
+            <div class="ln-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></div>
+            <h4>Improve</h4><p>Leadership sees the gain and plans the next step.</p></div>
+        </div>
+
+        <div class="grid grid-3">
+          <article class="course-card reveal">
+            <div class="c-top"><span class="c-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="track-tag t-comm">Communication</span></div>
+            <h3>Business Communication that Converts</h3>
+            <p>Write and speak so clients say yes. Emails, proposals, presentations and the difficult conversations that make or break deals.</p>
+            <div class="course-meta"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg> 6 lessons</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7"/></svg> Beginner</span></div>
+          </article>
+          <article class="course-card reveal d1">
+            <div class="c-top"><span class="c-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></svg></span><span class="track-tag t-deliver">Delivery</span></div>
+            <h3>Project Management Essentials</h3>
+            <p>Plan, schedule and deliver without the drama. Scope, milestones, risk and the simple habits that keep work on track.</p>
+            <div class="course-meta"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg> 8 lessons</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7"/></svg> Intermediate</span></div>
+          </article>
+          <article class="course-card reveal d2">
+            <div class="c-top"><span class="c-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/></svg></span><span class="track-tag t-personal">Thinking</span></div>
+            <h3>Critical Thinking and Problem Solving</h3>
+            <p>Find the real problem before you spend money on the wrong solution. Root cause analysis, sound judgement and better decisions.</p>
+            <div class="course-meta"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg> 5 lessons</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7"/></svg> All levels</span></div>
+          </article>
+        </div>
+        <div class="center mt-4 reveal">
+          <a href="training.html" class="btn btn-primary">Browse the full catalogue
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPLIT: executive -->
+    <section class="section bg-sand">
+      <div class="container split">
+        <div class="split-copy reveal">
+          <span class="eyebrow">For leaders</span>
+          <h2>Your whole workforce, on one screen</h2>
+          <p class="lead">Stop stitching together spreadsheets. StaffiQ brings learning, assessments, people and results into a focused administrative view that helps you see who is ready and who needs support.</p>
+          <ul class="ticks mt-3">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Question level analysis that separates content problems from people problems</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> At risk early warning before an audit or an incident finds you first</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Focused dashboards that show the numbers that matter</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Searchable reports and export ready result records</li>
+          </ul>
+        </div>
+        <div class="split-media reveal d1">
+          <div class="mock" style="background:linear-gradient(160deg,#0A5B44,#00352A)">
+            <div class="mock-bar"><i></i><i></i><i></i><span>Executive summary</span></div>
+            <div class="mock-screen">
+              <div class="mock-row" style="grid-template-columns:1fr 1fr 1fr">
+                <div class="mock-card"><div class="label">Readiness</div><div class="mock-kpi" style="font-size:1.5rem">86%</div></div>
+                <div class="mock-card"><div class="label">Compliance</div><div class="mock-kpi" style="font-size:1.5rem">100%</div></div>
+                <div class="mock-card"><div class="label">At risk</div><div class="mock-kpi" style="font-size:1.5rem;color:var(--coral)">3</div></div>
+              </div>
+              <div class="mock-card">
+                <div class="label">Pass rate trend · 6 months</div>
+                <div class="mock-chart"><span class="bar" style="height:46%"></span><span class="bar" style="height:54%"></span><span class="bar" style="height:60%"></span><span class="bar" style="height:66%"></span><span class="bar" style="height:78%"></span><span class="bar" style="height:88%"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPLIT: employees -->
+    <section class="section bg-cream">
+      <div class="container split rev">
+        <div class="split-copy reveal">
+          <span class="eyebrow">For your team</span>
+              <h2>Learning and assessments your staff can complete</h2>
+          <p class="lead">Complicated tools slow people down. StaffiQ uses clear instructions, visible progress and familiar controls so staff can focus on learning and assessment.</p>
+          <ul class="ticks mt-3">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Responsive layouts designed for common phones and tablets</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Big tappable answer cards and a bottom bar built for thumbs</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Visible timing and progress throughout each assessment</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Plain language actions that reduce unnecessary confusion</li>
+          </ul>
+        </div>
+        <div class="split-media reveal d1">
+          <div class="mock" style="background:linear-gradient(160deg,#0A5B44,#00352A);max-width:340px;margin-inline:auto">
+                <div class="mock-bar"><i></i><i></i><i></i><span>My assessment</span></div>
+            <div class="mock-screen">
+              <div class="mock-card">
+                <div class="label" style="display:flex;justify-content:space-between">Question 6 of 20 <span style="color:var(--coral);font-weight:700">04:58</span></div>
+                <p style="font-size:0.9rem;color:#33413a;margin-top:8px;font-weight:600">Which control reduces stock loss at the till?</p>
+                <div style="display:grid;gap:8px;margin-top:12px">
+                  <div style="padding:11px 13px;border-radius:10px;border:1.5px solid var(--emerald);background:rgba(14,159,115,0.08);font-size:0.82rem;font-weight:600;color:var(--evergreen-700)">A · Daily reconciliation</div>
+                  <div style="padding:11px 13px;border-radius:10px;border:1px solid #E4EAE5;font-size:0.82rem;color:#5a6862">B · Longer shifts</div>
+                  <div style="padding:11px 13px;border-radius:10px;border:1px solid #E4EAE5;font-size:0.82rem;color:#5a6862">C · Fewer cashiers</div>
+                </div>
+              </div>
+              <div class="mock-card" style="display:flex;align-items:center;gap:10px;font-size:0.78rem;color:var(--evergreen-700);font-weight:600">
+                  <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Answer recorded
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="section bg-sand" id="how">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">How it works</span>
+          <h2>A clear path from learning to action</h2>
+          <p class="lead">Four practical steps take your team from assigned learning to evidence you can use.</p>
+        </div>
+        <div class="grid grid-2" style="max-width:940px;margin-inline:auto">
+          <div class="steps">
+            <div class="step reveal"><div class="num"></div><div><h3>Set up your team</h3><p>Create the right user accounts and organise access around your business structure.</p></div></div>
+            <div class="step reveal d1"><div class="num"></div><div><h3>Assign courses and assessments</h3><p>Use the soft skills library or your own content. Set duration, pass mark and rules in minutes.</p></div></div>
+          </div>
+          <div class="steps">
+          <div class="step reveal d1"><div class="num"></div><div><h3>Staff learn simply</h3><p>Clear navigation and focused content make the next action easy to understand on phone, tablet or desktop.</p></div></div>
+            <div class="step reveal d2"><div class="num"></div><div><h3>Review the evidence</h3><p>Dashboards, analytics and reports turn results into clear coaching and development priorities.</p></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROLES -->
+    <section class="section bg-cream">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Made for everyone</span>
+          <h2>One product, three points of view</h2>
+        </div>
+        <div class="roles reveal">
+          <div class="role-tabs" role="tablist" aria-label="Roles">
+            <button class="role-tab active" role="tab" aria-selected="true" data-role="emp">
+              <span class="ic"><svg viewBox="0 0 24 24" width="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span>
+              <span><span class="rt-title">Employee</span><br /><span class="rt-sub">Learn and prove skill</span></span>
+            </button>
+            <button class="role-tab" role="tab" aria-selected="false" data-role="mgr">
+              <span class="ic"><svg viewBox="0 0 24 24" width="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-8 0v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM20 8v6M23 11h-6"/></svg></span>
+              <span><span class="rt-title">Administrator</span><br /><span class="rt-sub">Guide the team</span></span>
+            </button>
+            <button class="role-tab" role="tab" aria-selected="false" data-role="ceo">
+              <span class="ic"><svg viewBox="0 0 24 24" width="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></span>
+              <span><span class="rt-title">Business leader</span><br /><span class="rt-sub">See the whole picture</span></span>
+            </button>
+          </div>
+          <div>
+            <div class="role-panel" data-role="emp">
+              <h3>A calm, fair place to learn and show what you know</h3>
+            <p>Employees get a friendly first login experience, clear answer controls and a plain language result that names their strongest topic and next focus.</p>
+              <ul class="ticks mt-3">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> One tap to start the next course or assessment</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Review results and personal progress</li>
+              </ul>
+            </div>
+            <div class="role-panel" data-role="mgr" hidden>
+              <h3>See only your team, act with confidence</h3>
+            <p>Administrators can manage people, learning, assessments, questions and results from a role controlled workspace.</p>
+              <ul class="ticks mt-3">
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> User, training and assessment administration</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Searchable reports and result records</li>
+              </ul>
+            </div>
+            <div class="role-panel" data-role="ceo" hidden>
+              <h3>The organisation in ten seconds</h3>
+            <p>Business leaders can review the headline indicators that matter, including participation, performance patterns and where intervention is needed.</p>
+              <ul class="ticks mt-3">
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Performance patterns across the organisation</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Responsive oversight from phone or desktop</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section class="section-tight bg-evergreen">
+      <div class="container">
+        <div class="grid grid-4">
+          <div class="stat reveal"><div class="n">Focused</div><div class="l">Important workforce signals in one view</div></div>
+          <div class="stat reveal d1"><div class="n">Role aware</div><div class="l">The right tools for each authorised user</div></div>
+          <div class="stat reveal d2"><div class="n">Responsive</div><div class="l">Designed for phone, tablet and desktop</div></div>
+          <div class="stat reveal d3"><div class="n">Traceable</div><div class="l">Results and administrative activity are recorded</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST / SOCIAL PROOF -->
+    <section class="section bg-cream" id="proof">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Building the record</span>
+          <h2>The outcomes StaffiQ is built to deliver</h2>
+          <p class="lead">These reflect the kind of results RevenStrat has seen training and assessment fix for SME clients over the years. Shown as illustrative examples until we publish verified customer quotes with permission.</p>
+        </div>
+        <div class="grid grid-3">
+          <div class="quote-card reveal">
+            <div class="stars">★★★★★</div>
+            <blockquote>"We could finally see which branches actually understood the new returns policy, instead of guessing from complaints."</blockquote>
+            <div class="who"><span class="av">RE</span><div><div class="nm">Illustrative example</div><div class="rl">Retail operations, Lagos</div></div></div>
+            <span class="sample-flag">Illustrative example, not a named customer</span>
+          </div>
+          <div class="quote-card reveal d1">
+            <div class="stars">★★★★★</div>
+            <blockquote>"Training stopped being a tick box exercise. We knew who needed a second pass before it became a compliance problem."</blockquote>
+            <div class="who"><span class="av">FS</span><div><div class="nm">Illustrative example</div><div class="rl">Financial services, Abuja</div></div></div>
+            <span class="sample-flag">Illustrative example, not a named customer</span>
+          </div>
+          <div class="quote-card reveal d2">
+            <div class="stars">★★★★★</div>
+            <blockquote>"The skill mastery heat map showed us it was a training gap, not a people problem, inside ten minutes."</blockquote>
+            <div class="who"><span class="av">MF</span><div><div class="nm">Illustrative example</div><div class="rl">Manufacturing, Ogun State</div></div></div>
+            <span class="sample-flag">Illustrative example, not a named customer</span>
+          </div>
+        </div>
+        <p class="proof-note mt-3">Piloting with StaffiQ and happy to be quoted? Write to <a href="mailto:hello@staffiq.ng" class="text-accent" style="font-weight:600">hello@staffiq.ng</a> and we will feature your story here, with your permission.</p>
+      </div>
+    </section>
+
+    <!-- ECOSYSTEM / CROSS-SELL -->
+    <section class="section bg-evergreen">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow on-dark">The RevenStrat workforce suite</span>
+          <h2>Two products. One connected team.</h2>
+          <p class="lead">StaffiQ measures what your people know. TaskPulse tracks what your people do. Run them together and you finally see capability and productivity in the same story.</p>
+        </div>
+        <div class="ecosystem reveal">
+          <div class="eco-card staffiq">
+            <div class="eco-logo"><span class="eco-mark" style="background:#04352A"><img src="assets/img/staffiq-mark-v2.webp" alt="" width="34" height="34" /></span> Staffi<span style="color:var(--lime)">Q</span></div>
+            <div class="eco-role">Capability</div>
+            <p style="margin-top:14px;color:#C6DAD0">Training, assessment, skills and workforce analytics. Know who is ready and who needs support.</p>
+            <a href="features.html" class="link-arrow on-dark mt-2">Explore StaffiQ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          </div>
+          <div class="eco-plus"><span>+</span></div>
+          <div class="eco-card taskpulse">
+            <div class="eco-logo"><span class="eco-mark" style="background:rgba(255,255,255,0.1)">
+              <svg viewBox="0 0 24 24" width="20" fill="none" stroke="#8FE9C4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+            </span> Task<span style="color:#8FE9C4">Pulse</span></div>
+            <div class="eco-role">Productivity</div>
+            <p style="margin-top:14px;color:#C6DAD0">Tasks, workflow and the real time pulse of your team. See what is getting done, and what is stuck.</p>
+            <a href="contact.html" class="link-arrow on-dark mt-2">Ask about the bundle <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING TEASER -->
+    <section class="section bg-cream" id="pricing">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">A plan that fits the work</span>
+          <h2>Choose the level of support your team needs</h2>
+          <p class="lead">Begin with clear monthly pricing per user, then select the level of capability, reporting and support your team needs.</p>
+        </div>
+        <div class="price-grid reveal">
+          <div class="price-card">
+            <div class="plan-name">Starter</div>
+            <div class="plan-desc">For a focused team beginning structured workforce development.</div>
+            <div class="price-amt"><span class="cur">&#8358;</span>7,500 <span class="per">per user monthly</span></div>
+            <div class="plan-min">Minimum 5 users · from &#8358;37,500 monthly</div>
+            <ul class="feat">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> User and role management</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Training and assessments</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Core result reporting</li>
+            </ul>
+            <a href="pricing.html" class="btn btn-ghost btn-block">View Starter</a>
+          </div>
+          <div class="price-card featured">
+            <span class="price-badge">Most popular</span>
+            <div class="plan-name">Growth</div>
+            <div class="plan-desc">For growing SMEs that live in the analytics.</div>
+            <div class="price-amt"><span class="cur">&#8358;</span>12,500 <span class="per">per user monthly</span></div>
+            <div class="plan-min">Minimum 10 users · from &#8358;125,000 monthly</div>
+            <ul class="feat">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Broader team administration</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Full analytics and heat maps</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Reports and contribution workflows</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Organisation specific training content</li>
+            </ul>
+            <a href="contact.html" class="btn btn-lime btn-block">Book a demo</a>
+          </div>
+          <div class="price-card">
+            <div class="plan-name">Command</div>
+            <div class="plan-desc">For multi branch groups and client organisations.</div>
+            <div class="price-amt"><span class="cur">&#8358;</span>15,000 <span class="per">per user monthly</span></div>
+            <div class="plan-min">Minimum 10 users · from &#8358;150,000 monthly</div>
+            <ul class="feat">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Multi branch configuration</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Governance and advanced administration</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> TaskPulse cross product planning</li>
+            </ul>
+            <a href="pricing.html" class="btn btn-ghost btn-block">View Command</a>
+          </div>
+        </div>
+        <p class="center form-note mt-3">Prices are monthly per active user and minimum user counts apply. See the <a href="pricing.html" class="text-accent" style="font-weight:600">plans page</a> for the full entry cost.</p>
+      </div>
+    </section>
+
+    <!-- MANAGEMENT QUESTIONS -->
+    <section class="section bg-sand">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Useful management answers</span>
+          <h2>Questions StaffiQ helps you answer</h2>
+        </div>
+        <div class="grid grid-3">
+          <div class="quote-card reveal">
+            <h3>Where are the real skill gaps?</h3>
+            <p>Compare performance by topic and user so training is directed at the problem that actually exists.</p>
+          </div>
+          <div class="quote-card reveal d1">
+            <h3>Who needs support now?</h3>
+            <p>Use results and participation records to identify people who need coaching, clarification or another learning opportunity.</p>
+          </div>
+          <div class="quote-card reveal d2">
+            <h3>Did the learning make a difference?</h3>
+            <p>Review assessment evidence over time and connect the findings to the next training and management decision.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section bg-cream">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Good questions</span>
+          <h2>The things people ask us first</h2>
+        </div>
+        <div class="faq reveal">
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Does StaffiQ work when the network is poor? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>StaffiQ uses focused pages and responsive controls to keep routine actions manageable on common mobile connections. A stable connection is still required for protected account activity and saving results.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How long does setup take? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Setup depends on team size, role structure, content and reporting needs. We agree the configuration and activation steps with you before implementation begins.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Can I add my own training content? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Absolutely. Alongside the soft skills library you can build custom courses from your own procedures, product knowledge and sales scripts, each ending in a StaffiQ assessment.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How does StaffiQ work with TaskPulse? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>They are sibling products from RevenStrat. StaffiQ builds capability, TaskPulse tracks day to day productivity. Used together you see whether skill is turning into output. Ask us about the bundle.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">What can administrators report on? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Administrators can review assessment results, user activity, training information and the performance signals available to their role.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How is a plan agreed? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>We first understand your team size, training needs, reporting depth and implementation support. You then receive a tailored proposal with clear terms.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Can we cancel or change plans later? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Yes. You can adjust or end your plan with the notice period set out in your proposal. We would rather you understand these terms before you commit than discover them later, so ask us about them at demo stage.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Is there a long contract lock in? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>There is no extended lock in beyond the notice period agreed in your proposal. The minimum user count affects your monthly cost, not how long you are tied in.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Can we try StaffiQ before committing? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>The best way to try StaffiQ today is a guided demonstration using a sample team and a sample assessment, so you see real screens before deciding. We do not currently offer an unsupervised self serve trial.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">What happens to our data if we leave? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Your training records, assessment results and reports belong to your organisation. If you leave, we agree a reasonable export and data handling process with you as part of offboarding.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Why price per user instead of one flat fee? <span class="chev"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+            <div class="faq-a"><p>Per user pricing means you only pay for the people actually using StaffiQ. It scales fairly with your team, rather than a flat fee that overcharges smaller teams or undercharges larger ones.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section">
+      <div class="container">
+        <div class="cta-band reveal">
+          <span class="eyebrow on-dark" style="justify-content:center">Ready when you are</span>
+          <h2>Put evidence behind every people decision</h2>
+          <p>Book a focused demonstration and see how StaffiQ can organise training, assessments and workforce evidence for your business.</p>
+          <div class="cta-actions">
+            <a href="contact.html" class="btn btn-lime btn-lg">Book a demo
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+            <a href="training.html" class="btn btn-ghost on-dark btn-lg">Browse training</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+              <a href="index.html" class="brand"><img class="mark" src="assets/img/staffiq-mark-v2.webp" alt="" width="36" height="36" /><span style="color:#fff">Staffi<span style="color:var(--lime)">Q</span></span></a>
+          <p>Smart employee training and assessment, built for African SMEs. A product of RevenStrat Integrated Services, Lagos, Nigeria.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="features.html">Features</a>
+          <a href="training.html">Training</a>
+          <a href="pricing.html">Pricing</a>
+          <a href="contact.html">Book a demo</a>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <a href="about.html">About</a>
+          <a href="about.html#suite">The suite</a>
+          <a href="contact.html">Contact</a>
+          <a href="resources.html">Resources</a>
+          <a href="solutions.html">Solutions</a>
+        </div>
+        <div class="footer-col">
+          <h4>Get in touch</h4>
+          <a href="mailto:hello@staffiq.ng">hello@staffiq.ng</a>
+          <a href="contact.html">Lagos, Nigeria</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="privacy.html">Privacy notice</a>
+          <a href="terms.html">Terms of use</a>
+          <a href="cookies.html">Cookie notice</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span data-year>2026</span> StaffiQ by RevenStrat Integrated Services. All rights reserved.</span>
+        <span>Built in Lagos for African SMEs.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- STICKY CTA -->
+  <div class="sticky-cta">
+    <a class="btn btn-ghost wa-btn" aria-label="Chat on WhatsApp" target="_blank" rel="noopener" href="https://wa.me/23470080009000?text=Hello%20StaffiQ%2C%20I%20would%20like%20to%20know%20more.">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.64-1.03-5.12-2.9-6.99A9.82 9.82 0 0 0 12.04 2zm0 1.67c2.19 0 4.25.85 5.8 2.4a8.2 8.2 0 0 1 2.4 5.83c0 4.54-3.7 8.23-8.24 8.23a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.25-4.37c0-4.54 3.7-8.23 8.27-8.23zm-4.5 4.73c-.16 0-.43.06-.66.31s-.87.85-.87 2.07.9 2.4 1.02 2.57c.13.16 1.75 2.8 4.3 3.82 2.13.85 2.56.68 3.03.64.46-.04 1.5-.61 1.71-1.2s.21-1.1.15-1.2c-.06-.1-.23-.16-.48-.28s-1.5-.74-1.73-.83c-.23-.08-.4-.13-.57.13s-.65.83-.8 1c-.15.16-.29.19-.55.06-.26-.13-1.08-.4-2.06-1.27-.76-.68-1.28-1.51-1.43-1.77s-.02-.4.11-.53c.11-.11.26-.29.38-.44.13-.15.17-.26.26-.43.08-.16.04-.31-.02-.44-.06-.13-.57-1.4-.79-1.91-.2-.5-.41-.43-.57-.44z"/></svg>
+    </a>
+    <a href="contact.html" class="btn btn-primary">Book a demo</a>
+  </div>
+
+  <script src="assets/js/main.js?v=20260715b"></script>
+</body>
+</html>

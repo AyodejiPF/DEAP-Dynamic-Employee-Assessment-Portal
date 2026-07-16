@@ -18,6 +18,14 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
+        "source": "/api/staffiq-auth",
+        "function": "staffiqAuth"
+      },
+      {
+        "source": "/api/staffiq-tenants",
+        "function": "staffiqTenants"
+      },
+      {
         "source": "/api/analytics-intelligence",
         "function": "analyticsIntelligence"
       },
@@ -26,40 +34,40 @@
         "function": "helpIntelligence"
       },
       {
-        "source": "/api/deap-state",
-        "function": "deapState"
+        "source": "/api/staffiq-state",
+        "function": "staffiqState"
       },
       {
-        "source": "/api/deap-course-images",
-        "function": "deapCourseImages"
+        "source": "/api/staffiq-course-images",
+        "function": "staffiqCourseImages"
       },
       {
-        "source": "/api/deap-question-banks",
-        "function": "deapQuestionBanks"
+        "source": "/api/staffiq-question-banks",
+        "function": "staffiqQuestionBanks"
       },
       {
-        "source": "/api/deap-problem-reports",
-        "function": "deapProblemReports"
+        "source": "/api/staffiq-problem-reports",
+        "function": "staffiqProblemReports"
       },
       {
-        "source": "/api/deap-token/introspect",
-        "function": "deapTokenIntrospection"
+        "source": "/api/staffiq-token/introspect",
+        "function": "staffiqTokenIntrospection"
       },
       {
-        "source": "/api/superadmin/feature_inventory",
-        "function": "deapFeatureInventory"
+        "source": "/api/private/feature_inventory",
+        "function": "staffiqFeatureInventory"
       },
       {
-        "source": "/api/superadmin/feature_inventory/refresh",
-        "function": "deapFeatureInventory"
+        "source": "/api/private/feature_inventory/refresh",
+        "function": "staffiqFeatureInventory"
       },
       {
-        "source": "/api/superadmin/feature_inventory/export",
-        "function": "deapFeatureInventory"
+        "source": "/api/private/feature_inventory/export",
+        "function": "staffiqFeatureInventory"
       },
       {
-        "source": "/api/superadmin/feature_inventory/export/**",
-        "function": "deapFeatureInventory"
+        "source": "/api/private/feature_inventory/export/**",
+        "function": "staffiqFeatureInventory"
       },
       {
         "source": "**",

@@ -1,0 +1,39 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ogBg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04352A"/>
+      <stop offset="1" stop-color="#00241C"/>
+    </linearGradient>
+    <linearGradient id="ogBar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C6F24E"/>
+      <stop offset="1" stop-color="#8FE9C4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#ogBg)"/>
+  <circle cx="1040" cy="120" r="260" fill="#0E9F73" fill-opacity="0.14"/>
+  <circle cx="150" cy="560" r="200" fill="#C6F24E" fill-opacity="0.08"/>
+  <!-- logo mark -->
+  <rect x="80" y="86" width="66" height="66" rx="19" fill="#06463595"/>
+  <rect x="80" y="86" width="66" height="66" rx="19" fill="none" stroke="#0E9F73" stroke-opacity="0.6" stroke-width="1.5"/>
+  <rect x="95" y="122" width="8.5" height="14" rx="4" fill="#EAF7EF"/>
+  <rect x="107" y="113" width="8.5" height="23" rx="4" fill="#8FE9C4"/>
+  <rect x="119" y="103" width="8.5" height="33" rx="4" fill="#C6F24E"/>
+  <circle cx="123" cy="95" r="5" fill="#C6F24E"/>
+  <text x="164" y="134" font-family="'Space Grotesk','Segoe UI',sans-serif" font-size="44" font-weight="700" letter-spacing="-1"><tspan fill="#FBFAF5">Staff</tspan><tspan fill="#C6F24E">iq</tspan></text>
+
+  <text x="80" y="300" font-family="'Space Grotesk','Segoe UI',sans-serif" font-size="76" font-weight="700" fill="#FBFAF5" letter-spacing="-2">Know your people.</text>
+  <text x="80" y="384" font-family="'Space Grotesk','Segoe UI',sans-serif" font-size="76" font-weight="700" letter-spacing="-2"><tspan fill="#C6F24E">Grow your business.</tspan></text>
+  <text x="80" y="452" font-family="'Inter','Segoe UI',sans-serif" font-size="30" fill="#BFD8CE">Smart employee assessment and workforce analytics, built for African SMEs.</text>
+
+  <!-- mini dashboard card -->
+  <g transform="translate(80,500)">
+    <rect width="360" height="70" rx="16" fill="#0A4A38" stroke="#0E9F73" stroke-opacity="0.4"/>
+    <rect x="20" y="40" width="26" height="14" rx="4" fill="url(#ogBar)"/>
+    <rect x="54" y="30" width="26" height="24" rx="4" fill="url(#ogBar)"/>
+    <rect x="88" y="18" width="26" height="36" rx="4" fill="url(#ogBar)"/>
+    <text x="140" y="34" font-family="'Inter',sans-serif" font-size="18" font-weight="600" fill="#FBFAF5">Workforce readiness</text>
+    <text x="140" y="58" font-family="'Space Grotesk',sans-serif" font-size="24" font-weight="700" fill="#C6F24E">86%  ▲</text>
+  </g>
+
+  <text x="1120" y="590" text-anchor="end" font-family="'Inter',sans-serif" font-size="26" font-weight="600" fill="#8FE9C4">staffiq.ng</text>
+</svg>

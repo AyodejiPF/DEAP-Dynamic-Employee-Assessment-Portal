@@ -68,6 +68,7 @@ These accounts are created dynamically by `scripts/smoke.cjs` during test runs a
 |------|---------|-----------|---------------|----------|
 | 2026-07-13 | GitHub Copilot (VS Code) | Created cross-IDE progress tracker, 25-category recommendation report, GitHub setup guide. Updated version to 1.0.0. Built and redeployed. | `docs/DEAP_CODEX_PROGRESS.md`, `docs/DEAP_25_RECOMMENDATIONS_2026.md`, `docs/GITHUB_SETUP.md`, `package.json` | ✅ Yes |
 | 2026-07-13 | GitHub Copilot (VS Code) | Committed all outstanding changes to git. Updated .gitignore. Final build verification. | `.gitignore`, `docs/DEAP_CODEX_PROGRESS.md` | ✅ Yes |
+| 2026-07-16 | GitHub Copilot (VS Code) — V4 Pro (DeepSeek V4 Flash) | Switched to V4 Pro model. Completed SuperAdmin isolation scaffold (auth, tokens, branding, tester accounts, components, stub). Added VITE_SUPERADMIN_SOURCE env variable. Updated vite.config.ts with SuperAdmin alias. Created CODEOWNERS for ownership enforcement. Replaced README with real project documentation. Updated progress log and AGENT-COMMS.md. Build verified (2297 modules, no errors). | `.env.example`, `vite.config.ts`, `README.md`, `docs/DEAP_CODEX_PROGRESS.md`, `.github/CODEOWNERS`, `src/superadmin/**`, `AGENT-COMMS.md` | ⏳ Pending |
 
 ---
 

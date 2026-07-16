@@ -15,6 +15,7 @@ export type ChatsOptions = {
   touchDelay?: number
   selector?: string
   registry?: Record<string, ChatsRegistryValue>
+  onSnooze?: (days: number) => void
 }
 
 const tooltipId = 'chats-global-tooltip'
@@ -195,6 +196,7 @@ function normalizeRegistryValue(value: ChatsRegistryValue): ChatsContent {
 
 class ChatsModule {
   private options = { ...defaultOptions }
+  private onSnooze?: (days: number) => void
   private tooltip?: HTMLDivElement
   private currentTrigger?: HTMLElement
   private showTimer?: number
@@ -207,6 +209,7 @@ class ChatsModule {
     this.destroy()
     this.options = { ...defaultOptions, ...options, registry: { ...defaultOptions.registry, ...(options.registry ?? {}) } }
     this.enabled = this.options.enabled
+    this.onSnooze = options.onSnooze ?? this.onSnooze
     this.tooltip = document.createElement('div')
     this.tooltip.id = tooltipId
     this.tooltip.className = 'chats-tooltip'
@@ -273,6 +276,10 @@ class ChatsModule {
 
   setRegistry(registry: Record<string, ChatsRegistryValue>) {
     this.options.registry = { ...registry }
+  }
+
+  setOnSnooze(handler?: (days: number) => void) {
+    this.onSnooze = handler
   }
 
   private scan(root: HTMLElement) {
@@ -424,6 +431,31 @@ class ChatsModule {
       shortcut.className = 'chats-tooltip__shortcut'
       shortcut.textContent = content.shortcut
       this.tooltip.appendChild(shortcut)
+    }
+    if (this.onSnooze) {
+      const snooze = document.createElement('div')
+      snooze.className = 'chats-tooltip__snooze'
+      const label = document.createElement('span')
+      label.className = 'chats-tooltip__snooze-label'
+      label.textContent = 'Pause tips'
+      snooze.appendChild(label)
+      const choices: Array<[string, number]> = [['1 day', 1], ['3 days', 3], ['1 week', 7]]
+      choices.forEach(([text, days]) => {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'chats-tooltip__snooze-button'
+        button.textContent = text
+        button.dataset.tooltipDisabled = 'true'
+        button.setAttribute('aria-label', `Pause tips and popups for ${text}`)
+        button.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          this.onSnooze?.(days)
+          this.hide(true)
+        })
+        snooze.appendChild(button)
+      })
+      this.tooltip.appendChild(snooze)
     }
   }
 

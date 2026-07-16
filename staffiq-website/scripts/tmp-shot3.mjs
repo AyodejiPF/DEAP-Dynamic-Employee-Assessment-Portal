@@ -1,0 +1,1 @@
+// temporary Playwright verification script used once by Claude/Cowork on 2026-07-15 to screenshot mobile menu state. Mount permissions did not allow deletion; safe to remove manually. Not referenced by package.json.

@@ -1,0 +1,28 @@
+# CODEOWNERS — SuperAdmin files require Platform Owner approval
+# Any PR modifying these paths needs review from Ayodeji Falope.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# SuperAdmin / Platform Owner core logic
+/src/superadmin/**                    @AyodejiFalope
+
+# Token management and API security
+/src/App.tsx                          @AyodejiFalope
+
+# Tenant and role definitions
+/src/tenant.ts                        @AyodejiFalope
+
+# Backend cloud functions (Firebase)
+/functions/index.js                   @AyodejiFalope
+/functions/package.json               @AyodejiFalope
+
+# Deployment and infrastructure
+/firebase.json                        @AyodejiFalope
+/firestore.rules                      @AyodejiFalope
+/storage.rules                        @AyodejiFalope
+
+# Build and CI/CD configuration
+/.github/workflows/**                 @AyodejiFalope
+/vite.config.ts                       @AyodejiFalope
+
+# Database schema
+/database/schema.sql                  @AyodejiFalope

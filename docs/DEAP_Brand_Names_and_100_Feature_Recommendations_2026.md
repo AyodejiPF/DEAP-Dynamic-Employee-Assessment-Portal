@@ -2,7 +2,7 @@
 
 Prepared 10 July 2026 for Ayodeji Falope, RevenStrat Integrated Services.
 
-This document covers three deliverables: ten candidate brand names for the training and assessment platform, a record of the code cleanup performed, and one hundred feature recommendations split into fifty user simplicity items and fifty executive insight items for the CEO and Super Admin. Every recommendation is grounded in what the codebase already contains, so each one is an extension of the current foundation rather than a fantasy.
+This document covers three deliverables: ten candidate brand names for the training and assessment platform, a record of the code cleanup performed, and one hundred feature recommendations split into fifty user simplicity items and fifty executive insight items for the CEO and Platform Owner. Every recommendation is grounded in what the codebase already contains, so each one is an extension of the current foundation rather than a fantasy.
 
 ## Part 1: Ten Brand Name Candidates
 
@@ -27,7 +27,7 @@ The audit ran the TypeScript compiler, ESLint and a production build across the 
 
 | # | Location | Problem | Fix applied |
 |---|----------|---------|-------------|
-| 1 | Super Admin Notifications view | Date.now() called during render for the latest event age, breaking the React hooks purity rule | Added a notificationsNowTick state refreshed every 30 seconds, mirroring the pattern already used at the dashboard countdown, and referenced it in render |
+| 1 | Platform Owner Notifications view | Date.now() called during render for the latest event age, breaking the React hooks purity rule | Added a notificationsNowTick state refreshed every 30 seconds, mirroring the pattern already used at the dashboard countdown, and referenced it in render |
 | 2 | Settings token panel | Date.now() called during render for tokens due for rotation | Added a settingsNowTick state refreshed every 60 seconds and referenced it |
 | 3 | Settings token panel | Date.now() called during render for tokens expiring within 14 days | Same settingsNowTick state referenced |
 | 4 | Settings token panel JSX | Date.now() called during render for the rotation due badge | Same settingsNowTick state referenced |
@@ -94,7 +94,7 @@ Ordered by importance, most important first. Effort and impact are rated Low, Me
 | 49 | Sound and vibration cues | Optional subtle cues for timer warnings on mobile. | Low | Low |
 | 50 | Celebration moments | A brief congratulations animation on passing or completing a course. Small delight, real retention. | Low | Low |
 
-## Part 4: Fifty Features to Give the CEO and Super Admin More Insight
+## Part 4: Fifty Features to Give the CEO and Platform Owner More Insight
 
 Ordered by importance, most important first. Research note: current learning analytics practice holds that pass and fail rates are the least useful slice of assessment data; question level patterns reveal whether a problem is a content problem or a people problem, and executive reporting should tie training to business outcomes with a handful of headline metrics.
 
@@ -127,7 +127,7 @@ Ordered by importance, most important first. Research note: current learning ana
 | 25 | Scheduled report delivery | Any saved report can be emailed on a schedule to named recipients. | Medium | Medium |
 | 26 | Export centre | One place listing every workbook export ever generated, with re download and history; export logic already exists. | Low | Medium |
 | 27 | Audit trail search | Full text search and filtered export over the existing audit events, ready for external auditors. | Medium | High |
-| 28 | Permission change alerts | Instant notification to the Super Admin when roles or permissions change, using the existing audit stream. | Low | High |
+| 28 | Permission change alerts | Instant notification to the Platform Owner when roles or permissions change, using the existing audit stream. | Low | High |
 | 29 | Usage heat map | Logins and activity by hour and weekday, revealing when training actually happens and when to schedule launches. | Low | Medium |
 | 30 | Adoption funnel | Invited, activated, first test completed, regularly active: the four stages of rollout in one funnel chart. | Medium | High |
 | 31 | Learning engagement index | A single composite per employee blending recency, frequency and depth of activity from the existing analytics events. | Medium | Medium |
@@ -138,7 +138,7 @@ Ordered by importance, most important first. Research note: current learning ana
 | 36 | Topic to content gap mapping | When a topic fails widely and no training module covers it, say so and suggest creating one, closing the loop between assessment and training. | High | High |
 | 37 | Bug and feedback trends | Trend and resolution time panels over the existing problem reports module, with severity mix and SLA tracking. | Medium | Medium |
 | 38 | Contribution culture metrics | Leaderboards and trends from the existing contribution points, showing who strengthens the platform. | Low | Low |
-| 39 | Sync and system health panel | Uptime, sync failures and client diagnostics (already recorded locally) surfaced for the Super Admin. | Medium | Medium |
+| 39 | Sync and system health panel | Uptime, sync failures and client diagnostics (already recorded locally) surfaced for the Platform Owner. | Medium | Medium |
 | 40 | Token governance dashboard | The API token registry already tracks rotation, risk and usage; add a summary panel with expiry calendar and risk trends. | Low | Medium |
 | 41 | Segmented announcements | Send targeted notifications to precise cohorts: everyone who failed test X, every manager, one department. | Medium | Medium |
 | 42 | Question author quality | Which authors or sources produce items that perform well statistically, informing where to commission new content. | Medium | Low |

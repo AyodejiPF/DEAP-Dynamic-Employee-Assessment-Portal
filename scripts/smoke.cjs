@@ -6,7 +6,7 @@ const path = require('node:path')
 const targetUrl = process.env.TARGET_URL || 'https://training-assessment-1c8ef.web.app'
 
 function writeFixtureFiles() {
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deap-smoke-'))
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'staffiq-smoke-'))
   const usersPath = path.join(fixtureDir, 'real-employees.csv')
   const questionsPath = path.join(fixtureDir, 'real-question-bank.csv')
   const courseImagePath = path.join(fixtureDir, 'course-placeholder.png')
@@ -14,7 +14,7 @@ function writeFixtureFiles() {
   fs.writeFileSync(
     usersPath,
     [
-      'Employee ID,Full Name,Email,Department,Role Title,DEAP Role,Password,Manager Email,Status',
+      'Employee ID,Full Name,Email,Department,Role Title,Staffiq Role,Password,Manager Email,Status',
       'EMP-100,Ada Realdata,ada.realdata@iicocece.local,Compliance,Compliance Analyst,employee,Pass123!,admin@iicocece.com,Active',
       'EMP-101,Bola Evidence,bola.evidence@iicocece.local,Sales,Sales Associate,employee,Pass124!,admin@iicocece.com,Active',
       'EMP-102,Inactive Person,inactive.person@iicocece.local,Sales,Former Staff,employee,Pass125!,admin@iicocece.com,Inactive',
@@ -48,7 +48,7 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
   const failures = []
 
-  await page.route('**/api/deap-state', async (route) => {
+  await page.route('**/api/staffiq-state', async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, smokeOnly: true }) })
       return
@@ -76,14 +76,14 @@ async function main() {
       }),
     })
   })
-  await page.route('**/api/deap-course-images', async (route) => {
+  await page.route('**/api/staffiq-course-images', async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, smokeOnly: true }) })
       return
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ images: {} }) })
   })
-  await page.route('**/api/deap-question-banks**', async (route) => {
+  await page.route('**/api/staffiq-question-banks**', async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, smokeOnly: true }) })
       return
@@ -112,12 +112,12 @@ async function main() {
   await page.waitForSelector('text=Dashboard', { timeout: 15000 })
   await page.getByRole('button', { name: /Notifications/ }).click()
   await page.waitForSelector('text=Everyone activity ledger', { timeout: 15000 })
-  await page.waitForSelector('text=Super Admin only', { timeout: 15000 })
+  await page.waitForSelector('text=Platform Owner only', { timeout: 15000 })
 
   const bootState = await page.evaluate(() => {
-    const users = JSON.parse(localStorage.getItem('deap-users') || '[]')
-    const questions = JSON.parse(localStorage.getItem('deap-questions') || '[]')
-    const tests = JSON.parse(localStorage.getItem('deap-tests') || '[]')
+    const users = JSON.parse(localStorage.getItem('staffiq-users') || '[]')
+    const questions = JSON.parse(localStorage.getItem('staffiq-questions') || '[]')
+    const tests = JSON.parse(localStorage.getItem('staffiq-tests') || '[]')
     return {
       users,
       activeEmployees: users.filter((user) => user.role === 'employee').length,
@@ -132,7 +132,7 @@ async function main() {
   await page.waitForSelector('text=Training Workspace', { timeout: 15000 })
   await page.waitForSelector('text=Content Studio', { timeout: 15000 })
   const blankTrainingText = await page.locator('body').innerText()
-  if (/Topic groups|DEAP V2\.0 blueprint active|xAPI style tracking taxonomy/i.test(blankTrainingText)) {
+  if (/Topic groups|Staffiq V2\.0 blueprint active|xAPI style tracking taxonomy/i.test(blankTrainingText)) {
     failures.push('Training tab is not blank on a clean boot.')
   }
 
@@ -162,7 +162,7 @@ async function main() {
     return image?.getAttribute('src')?.startsWith('data:image/')
   })
   const courseImageState = await page.evaluate(() => {
-    const registry = JSON.parse(localStorage.getItem('deap-course-image-registry') || '{}')
+    const registry = JSON.parse(localStorage.getItem('staffiq-course-image-registry') || '{}')
     return Object.values(registry).some((item) => item && String(item.courseImageUrl || '').startsWith('data:image/'))
   })
   if (!courseImageState) failures.push('Uploaded course placeholder image was not saved to the course image registry.')
@@ -179,7 +179,7 @@ async function main() {
   await adaDeploymentRow.locator('.deployment-toggle').click()
   await page.waitForSelector('text=deployed to 1 user', { timeout: 15000 })
   const deploymentState = await page.evaluate(() => {
-    const deployments = JSON.parse(localStorage.getItem('deap-course-deployments') || '{}')
+    const deployments = JSON.parse(localStorage.getItem('staffiq-course-deployments') || '{}')
     return Object.values(deployments).some((records) => records && Object.values(records).some((record) => record && record.userId && record.enabled))
   })
   if (!deploymentState) failures.push('Course deployment toggle did not save an enabled user-level deployment record.')
@@ -199,7 +199,7 @@ async function main() {
   await page.getByRole('button', { name: /Back to Training Workspace/ }).click()
   const trainingText = await page.locator('body').innerText()
   if (/Support Assistant/i.test(trainingText)) failures.push('Old Support Assistant naming is still visible in the Training surface.')
-  if (/Trainings grouped by question-bank topic|xAPI style tracking taxonomy|DEAP V2\.0 blueprint active/i.test(trainingText)) {
+  if (/Trainings grouped by question-bank topic|xAPI style tracking taxonomy|Staffiq V2\.0 blueprint active/i.test(trainingText)) {
     failures.push('Old training placeholder catalogue is still visible after the blank workspace update.')
   }
 
@@ -209,7 +209,7 @@ async function main() {
   await page.getByRole('button', { name: 'Log in' }).click()
   await page.waitForSelector('text=Dashboard', { timeout: 15000 }).catch(() => {})
   const employeeNotificationsCount = await page.getByRole('button', { name: /Notifications/ }).count()
-  if (employeeNotificationsCount) failures.push('Employee navigation can see the Super Admin notifications tab.')
+  if (employeeNotificationsCount) failures.push('Employee navigation can see the Platform Owner notifications tab.')
   await page.getByRole('button', { name: /Training/ }).click()
   await page.waitForSelector('text=Compliance Evidence Course', { timeout: 15000 })
   await page.getByRole('button', { name: 'Sign out' }).click()
@@ -228,9 +228,9 @@ async function main() {
   await page.waitForSelector('text=Dashboard', { timeout: 15000 })
 
   const realState = await page.evaluate(() => {
-    const users = JSON.parse(localStorage.getItem('deap-users') || '[]')
-    const questions = JSON.parse(localStorage.getItem('deap-questions') || '[]')
-    const metadata = JSON.parse(localStorage.getItem('deap-question-bank-metadata') || '{}')
+    const users = JSON.parse(localStorage.getItem('staffiq-users') || '[]')
+    const questions = JSON.parse(localStorage.getItem('staffiq-questions') || '[]')
+    const metadata = JSON.parse(localStorage.getItem('staffiq-question-bank-metadata') || '{}')
     return {
       activeEmployees: users.filter((user) => user.role === 'employee').length,
       hasImportedEmployee: users.some((user) => user.fullName === 'Ada Realdata'),
@@ -252,7 +252,7 @@ async function main() {
   const defaultReportValue = await reportSelect.inputValue()
   if (defaultReportValue !== 'all-employees') failures.push('Reports dropdown does not default to All employees.')
   if (!/^All employees$/m.test(reportOptionText)) failures.push('Reports dropdown is missing the All employees option.')
-  if (!/Ayodeji Falope \(Super Admin\)/.test(reportOptionText)) failures.push('Reports dropdown is missing Admin.')
+  if (!/Ayodeji Falope \(Platform Owner\)/.test(reportOptionText)) failures.push('Reports dropdown is missing Admin.')
   if (!/Ada Realdata \(Employee\)/.test(reportOptionText) || !/Bola Evidence \(Employee\)/.test(reportOptionText)) failures.push('Reports dropdown is missing imported employee names.')
   await page.locator('.employee-report-card h3', { hasText: 'Ayodeji Falope' }).waitFor({ timeout: 15000 })
   await page.locator('.employee-report-card h3', { hasText: 'Ada Realdata' }).waitFor({ timeout: 15000 })

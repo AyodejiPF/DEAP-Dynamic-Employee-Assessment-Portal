@@ -9,7 +9,7 @@
  *   - backend_unavailable (temporary)
  */
 
-import { type ReactNode, useState, useEffect } from 'react'
+import { type ReactNode, useState, useEffect, useMemo } from 'react'
 import { Lock, AlertCircle, Clock3 } from 'lucide-react'
 import type { AIFeatureName, AIAccessResult, AIBlockReason } from '../ai-types'
 import { checkAIAccess, type AIAccessContext } from '../ai-access'
@@ -180,26 +180,61 @@ export function useAIAccess(
     'help_chat', 'codex_repair', 'training_recommend',
   ]
 
-  const featureMap = {} as Record<AIFeatureName, boolean>
-  let firstBlock: AIAccessResult | undefined
+  // Cache key based on context — 5 minute TTL
+  const cacheKey = useMemo(() =>
+    `ai-access:${ctx.userId}:${ctx.tenantPlanId}:${ctx.tenantAIAccess}:${ctx.userAIAccess}`,
+    [ctx.userId, ctx.tenantPlanId, ctx.tenantAIAccess, ctx.userAIAccess]
+  )
 
-  allFeatures.forEach((feature) => {
-    const result = checkAIAccess({ ...ctx, featureName: feature })
-    featureMap[feature] = result.allowed
-    if (!result.allowed && !firstBlock) {
-      firstBlock = result
-    }
-  })
+  // Check session cache first
+  const cached = useMemo(() => {
+    try {
+      const entry = JSON.parse(sessionStorage.getItem(cacheKey) || 'null')
+      if (entry && Date.now() - entry.timestamp < 5 * 60 * 1000) {
+        return entry.data
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [cacheKey])
+
+  const featureMap = useMemo(() => {
+    if (cached) return cached.features as Record<AIFeatureName, boolean>
+
+    const map = {} as Record<AIFeatureName, boolean>
+    let firstBlock: AIAccessResult | undefined
+
+    allFeatures.forEach((feature) => {
+      const result = checkAIAccess({ ...ctx, featureName: feature })
+      map[feature] = result.allowed
+      if (!result.allowed && !firstBlock) {
+        firstBlock = result
+      }
+    })
+
+    // Cache for 5 minutes
+    try {
+      const blocked = firstBlock as { allowed: false; reason: AIBlockReason; message: string } | undefined
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        data: { features: map, firstBlockReason: blocked?.reason, firstBlockMessage: blocked?.message },
+      }))
+    } catch { /* sessionStorage may be full */ }
+
+    return map
+  }, [ctx, allFeatures, cached, cacheKey])
 
   const aiEnabled = allFeatures.some((f) => featureMap[f])
+
+  const firstBlockReason = cached?.firstBlockReason as AIBlockReason | undefined
+  const firstBlockMessage = cached?.firstBlockMessage as string | undefined
 
   return {
     aiEnabled,
     features: featureMap,
     context: ctx,
     canUse: (feature) => featureMap[feature] ?? false,
-    blockReason: firstBlock?.allowed === false ? firstBlock.reason : undefined,
-    blockMessage: firstBlock?.allowed === false ? firstBlock.message : undefined,
+    blockReason: firstBlockReason,
+    blockMessage: firstBlockMessage,
   }
 }
 

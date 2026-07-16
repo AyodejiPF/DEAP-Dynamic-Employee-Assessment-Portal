@@ -37,7 +37,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
   {
     priority: 'Priority 1',
     theme: 'Reliability, Trust, and Control',
-    purpose: 'Make DEAP dependable for live employees, admins, compliance evidence, and executive review.',
+    purpose: 'Make Staffiq dependable for live employees, admins, compliance evidence, and executive review.',
     items: [
       {
         title: 'Server-Authoritative Assessment State',
@@ -48,7 +48,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'Real Authentication and Password Reset',
         description:
-          'Replace demo-style credentials with production identity controls, account recovery, account disabling, and safer admin-only enforcement. This gives DEAP a path toward secure staff onboarding and reduced password support.',
+          'Replace demo-style credentials with production identity controls, account recovery, account disabling, and safer admin-only enforcement. This gives Staffiq a path toward secure staff onboarding and reduced password support.',
         sourceHint: 'Enterprise LMS user management',
       },
       {
@@ -78,7 +78,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'Backup and Restore Console',
         description:
-          'Provide scheduled backups for users, tests, question banks, attempts, and analytics, plus restore points for accidental imports or bulk edits. DEAP should recover from operational mistakes without losing learning records.',
+          'Provide scheduled backups for users, tests, question banks, attempts, and analytics, plus restore points for accidental imports or bulk edits. Staffiq should recover from operational mistakes without losing learning records.',
         sourceHint: 'Enterprise resilience',
       },
       {
@@ -96,7 +96,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'Safe Deployment Checklist',
         description:
-          'Turn every release into a repeatable quality gate with build checks, smoke tests, function checks, Firestore rule checks, and live browser verification. This reduces release risk as DEAP grows.',
+          'Turn every release into a repeatable quality gate with build checks, smoke tests, function checks, Firestore rule checks, and live browser verification. This reduces release risk as Staffiq grows.',
         sourceHint: 'Production deployment discipline',
       },
     ],
@@ -212,7 +212,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'Learning Paths',
         description:
-          'Group tests, lessons, remediation, and certificates into structured paths for new agents, team leaders, compliance officers, and managers. DEAP becomes a development system, not only a test portal.',
+          'Group tests, lessons, remediation, and certificates into structured paths for new agents, team leaders, compliance officers, and managers. Staffiq becomes a development system, not only a test portal.',
         sourceHint: 'Tailored training pathways',
       },
       {
@@ -305,7 +305,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
   {
     priority: 'Priority 5',
     theme: 'Enterprise Scale',
-    purpose: 'Prepare DEAP for multi-organisation rollout and integration with existing systems.',
+    purpose: 'Prepare Staffiq for multi-organisation rollout and integration with existing systems.',
     items: [
       {
         title: 'Single Sign-On',
@@ -340,7 +340,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'SCORM and LTI Support',
         description:
-          'Support standard learning packages and integrations so DEAP can work with universities and corporate LMS ecosystems. This makes adoption easier beside existing platforms.',
+          'Support standard learning packages and integrations so Staffiq can work with universities and corporate LMS ecosystems. This makes adoption easier beside existing platforms.',
         sourceHint: 'LMS interoperability',
       },
       {
@@ -352,7 +352,7 @@ export const enterpriseRoadmap: ProductFeatureGroupDraft[] = [
       {
         title: 'Multi-Tenant Organisations',
         description:
-          'Allow separate organisations, divisions, departments, or client companies to use the same platform while keeping data isolated. This supports scaling DEAP beyond one internal deployment.',
+          'Allow separate organisations, divisions, departments, or client companies to use the same platform while keeping data isolated. This supports scaling Staffiq beyond one internal deployment.',
         sourceHint: 'Moodle multi-tenancy',
       },
       {
@@ -595,7 +595,7 @@ export const analyticsFeatureCatalogue: RecommendationFeature[] = [
   {
     title: 'Reveal-Answer Rate',
     description:
-      'Measure how often users choose to reveal the answer and lose points. This identifies topics where employees are using DEAP as a learning tool rather than demonstrating mastery.',
+      'Measure how often users choose to reveal the answer and lose points. This identifies topics where employees are using Staffiq as a learning tool rather than demonstrating mastery.',
     track: 'analytics',
     category: 'Learning Support',
     sourceHint: 'Assessment support signals',
@@ -817,6 +817,7 @@ const implementedUpgradeItems = new Set(
     'Compliance Evidence Packs',
     'Scheduled Reports',
     'API Access',
+    'Multi-Tenant Organisations',
     'Executive Visual Hierarchy',
     'Dense Desktop Dashboard Mode',
     'Mobile-First Test Layout',
@@ -882,7 +883,6 @@ const integrationUpgradeItems = new Set(
     'Single Sign-On',
     'HRIS Sync',
     'SCORM and LTI Support',
-    'Multi-Tenant Organisations',
   ].map(featureKey),
 )
 

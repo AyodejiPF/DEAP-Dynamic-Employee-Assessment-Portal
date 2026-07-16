@@ -1,0 +1,103 @@
+{
+  "hosting": {
+    "site": "staffiq-ng",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": false,
+    "trailingSlash": false,
+    "rewrites": [
+      {
+        "source": "/api/analytics-intelligence",
+        "function": "analyticsIntelligence"
+      },
+      {
+        "source": "/api/help-intelligence",
+        "function": "helpIntelligence"
+      },
+      {
+        "source": "/api/staffiq-state",
+        "function": "deapState"
+      },
+      {
+        "source": "/api/staffiq-course-images",
+        "function": "deapCourseImages"
+      },
+      {
+        "source": "/api/staffiq-question-banks",
+        "function": "deapQuestionBanks"
+      },
+      {
+        "source": "/api/staffiq-problem-reports",
+        "function": "deapProblemReports"
+      },
+      {
+        "source": "/api/staffiq-token/introspect",
+        "function": "deapTokenIntrospection"
+      },
+      {
+        "source": "/api/private/feature_inventory",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/private/feature_inventory/refresh",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/private/feature_inventory/export",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/api/private/feature_inventory/export/**",
+        "function": "deapFeatureInventory"
+      },
+      {
+        "source": "/login",
+        "destination": "/login/index.html"
+      },
+      {
+        "source": "/login/**",
+        "destination": "/login/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://firestore.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self' mailto:; frame-ancestors 'none'; upgrade-insecure-requests" }
+        ]
+      },
+      {
+        "source": "/assets/img/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      },
+      {
+        "source": "/assets/css/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
+        ]
+      },
+      {
+        "source": "/assets/js/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
+        ]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
+        ]
+      }
+    ]
+  }
+}
