@@ -243,35 +243,6 @@
     <a href="contact.html" class="btn btn-primary">Book a demo</a>
   </div>
 
-  <script src="assets/js/main.js?v=20260715b"></script>
-  <script>
-    // Monthly/Annual pricing toggle
-    (function() {
-      var monthlyEls = document.querySelectorAll('.price-monthly')
-      var annualEls = document.querySelectorAll('.price-annual')
-      var toggleMonthly = document.getElementById('toggle-monthly')
-      var toggleAnnual = document.getElementById('toggle-annual')
-
-      function showInterval(interval) {
-        var isAnnual = interval === 'annual'
-        monthlyEls.forEach(function(el) { el.style.display = isAnnual ? 'none' : '' })
-        annualEls.forEach(function(el) { el.style.display = isAnnual ? '' : 'none' })
-        toggleMonthly.setAttribute('aria-checked', isAnnual ? 'false' : 'true')
-        toggleAnnual.setAttribute('aria-checked', isAnnual ? 'true' : 'false')
-        toggleMonthly.classList.toggle('active', !isAnnual)
-        toggleAnnual.classList.toggle('active', isAnnual)
-      }
-
-      // Annual is default
-      showInterval('annual')
-
-      toggleMonthly.addEventListener('click', function() { showInterval('monthly') })
-      toggleAnnual.addEventListener('click', function() { showInterval('annual') })
-
-      // Keyboard support
-      toggleMonthly.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('monthly') } })
-      toggleAnnual.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('annual') } })
-    })()
-  </script>
+  <script src="assets/js/main.js?v=20260716a"></script>
 </body>
 </html>

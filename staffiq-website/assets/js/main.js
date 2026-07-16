@@ -227,3 +227,32 @@
     }
   });
 })();
+
+// ─── Pricing Page Monthly/Annual Toggle ──────────────────────────
+(function () {
+  var monthlyEls = document.querySelectorAll('.price-monthly');
+  var annualEls = document.querySelectorAll('.price-annual');
+  var toggleMonthly = document.getElementById('toggle-monthly');
+  var toggleAnnual = document.getElementById('toggle-annual');
+
+  if (!toggleMonthly || !toggleAnnual) return;
+
+  function showInterval(interval) {
+    var isAnnual = interval === 'annual';
+    monthlyEls.forEach(function (el) { el.style.display = isAnnual ? 'none' : ''; });
+    annualEls.forEach(function (el) { el.style.display = isAnnual ? '' : 'none'; });
+    toggleMonthly.setAttribute('aria-checked', isAnnual ? 'false' : 'true');
+    toggleAnnual.setAttribute('aria-checked', isAnnual ? 'true' : 'false');
+    toggleMonthly.classList.toggle('active', !isAnnual);
+    toggleAnnual.classList.toggle('active', isAnnual);
+  }
+
+  // Annual is default
+  showInterval('annual');
+
+  toggleMonthly.addEventListener('click', function () { showInterval('monthly'); });
+  toggleAnnual.addEventListener('click', function () { showInterval('annual'); });
+
+  toggleMonthly.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('monthly'); } });
+  toggleAnnual.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('annual'); } });
+})();
