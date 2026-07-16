@@ -239,8 +239,8 @@
 
   function showInterval(interval) {
     var isAnnual = interval === 'annual';
-    monthlyEls.forEach(function (el) { el.style.display = isAnnual ? 'none' : ''; });
-    annualEls.forEach(function (el) { el.style.display = isAnnual ? '' : 'none'; });
+    monthlyEls.forEach(function (el) { el.style.display = isAnnual ? 'none' : 'block'; });
+    annualEls.forEach(function (el) { el.style.display = isAnnual ? 'block' : 'none'; });
     toggleMonthly.setAttribute('aria-checked', isAnnual ? 'false' : 'true');
     toggleAnnual.setAttribute('aria-checked', isAnnual ? 'true' : 'false');
     toggleMonthly.classList.toggle('active', !isAnnual);
