@@ -20009,6 +20009,24 @@ const helpKnowledgeItems: HelpContentItem[] = [
     estimatedMinutes: 5,
     relatedIds: ['help-ai-features-overview', 'help-client-workspaces'],
   },
+  {
+    id: 'help-codex-repair',
+    type: 'guide',
+    title: 'Codex Repair — AI Bug Repair (Command only)',
+    shortSummary: 'Codex Repair generates fix prompts for bug reports, available exclusively on the Command plan.',
+    body: 'Codex Repair is exclusive to the Command plan (N15,000/user/month). It analyses bug reports from the Bug Reports gateway and generates structured repair prompts for Codex or any AI coding agent. The prompt includes the bug description, affected area, severity, reproduction steps, and suggested fix direction. SuperAdmin can toggle this feature per tenant from the AI Usage dashboard. Starter and Growth plan users see an upgrade prompt instead.',
+    category: 'AI Features',
+    subcategory: 'Codex Repair',
+    tags: ['codex', 'bug repair', 'ai', 'command plan', 'developer'],
+    audience: ['admin'],
+    owner: 'Staffiq Admin',
+    status: 'published',
+    updatedAt: '2026-07-16',
+    lastReviewedAt: '2026-07-16',
+    requirementRefs: ['AI-007'],
+    estimatedMinutes: 3,
+    relatedIds: ['help-ai-features-overview', 'help-ai-boundaries', 'bug-reports'],
+  },
 ]
 
 const helpLearningPaths: LearningPath[] = [
