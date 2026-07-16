@@ -141,3 +141,16 @@ export {
 } from './billing/stateMachine'
 
 export type { SubscriptionStatus } from './billing/stateMachine'
+
+// ─── Billing — Entitlement Resolution ────────────────────────────
+
+export {
+  resolveEntitlements,
+  checkEntitlement,
+  invalidateEntitlementCache,
+} from './billing/entitlements'
+
+export type {
+  EntitlementMap,
+  EntitlementContext,
+} from './billing/entitlements'

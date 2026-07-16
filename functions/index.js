@@ -2687,6 +2687,7 @@ exports.staffiqAIAggregation = onSchedule(
 
 // ══════════════════════════════════════════════════════════════════
 // STAFFIQ GRANTS — Platform Owner Delegation & Permission Granting
+// Deployed: 2026-07-16 | Trigger: HTTP | Auth: IAM allUsers required
 // ══════════════════════════════════════════════════════════════════
 
 /**

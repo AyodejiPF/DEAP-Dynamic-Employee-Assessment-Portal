@@ -47,39 +47,49 @@
 
     <section class="section-tight bg-cream">
       <div class="container">
+        <!-- Monthly/Annual Toggle -->
+        <div class="pricing-toggle-wrap reveal" role="radiogroup" aria-label="Billing interval">
+          <button class="toggle-option active" role="radio" aria-checked="true" data-interval="annual" id="toggle-annual">Annual <span class="toggle-save">Save ~17%</span></button>
+          <button class="toggle-option" role="radio" aria-checked="false" data-interval="monthly" id="toggle-monthly">Monthly</button>
+        </div>
+        <p class="toggle-hint reveal d1">Annual plans get <strong>2 months free</strong> — that's 12 months for the price of 10.</p>
+
         <div class="price-grid reveal">
           <article class="price-card">
             <div class="plan-name">Starter</div>
             <div class="plan-desc">For a focused team starting structured staff development.</div>
-            <div class="price-amt"><span class="cur">&#8358;</span>10,000 <span class="per">per user monthly</span></div>
-            <div class="plan-min">Minimum 5 users · from &#8358;50,000 monthly</div>
+            <div class="price-amt price-monthly"><span class="cur">&#8358;</span>10,000 <span class="per">per user monthly</span></div>
+            <div class="price-amt price-annual"><span class="cur">&#8358;</span>100,000 <span class="per">per user / year</span><span class="price-save-badge">SAVE &#8358;20,000 — 2 MONTHS FREE!</span><span class="price-mo-equiv">That's only &#8358;8,333/user/month</span></div>
+            <div class="plan-min">Minimum 5 users</div>
             <ul class="feat">
               <li>✓ User and role administration</li>
               <li>✓ Training and assessments</li>
               <li>✓ Question and result records</li>
               <li>✓ Core administrative reporting</li>
             </ul>
-            <a href="contact.html" class="btn btn-ghost btn-block">Choose Starter</a>
+            <a href="https://training-assessment-1c8ef.web.app/checkout?plan=starter" class="btn btn-ghost btn-block">Choose Starter</a>
           </article>
           <article class="price-card featured">
             <span class="price-badge">Recommended</span>
             <div class="plan-name">Growth</div>
             <div class="plan-desc">For an SME that needs deeper insight and more control.</div>
-            <div class="price-amt"><span class="cur">&#8358;</span>12,500 <span class="per">per user monthly</span></div>
-            <div class="plan-min">Minimum 10 users · from &#8358;125,000 monthly</div>
+            <div class="price-amt price-monthly"><span class="cur">&#8358;</span>12,500 <span class="per">per user monthly</span></div>
+            <div class="price-amt price-annual"><span class="cur">&#8358;</span>125,000 <span class="per">per user / year</span><span class="price-save-badge">SAVE &#8358;25,000 — 2 MONTHS FREE!</span><span class="price-mo-equiv">That's only &#8358;10,417/user/month</span></div>
+            <div class="plan-min">Minimum 10 users</div>
             <ul class="feat">
               <li>✓ Everything in Starter</li>
               <li>✓ Analytics and advanced reports</li>
               <li>✓ Organisation specific content</li>
               <li>✓ Feedback and contribution workflows</li>
             </ul>
-            <a href="contact.html" class="btn btn-lime btn-block">Choose Growth</a>
+            <a href="https://training-assessment-1c8ef.web.app/checkout?plan=growth" class="btn btn-lime btn-block">Choose Growth</a>
           </article>
           <article class="price-card">
             <div class="plan-name">Command</div>
             <div class="plan-desc">For complex structures, branches and stronger governance.</div>
-            <div class="price-amt"><span class="cur">&#8358;</span>15,000 <span class="per">per user monthly</span></div>
-            <div class="plan-min">Minimum 10 users · from &#8358;150,000 monthly</div>
+            <div class="price-amt price-monthly"><span class="cur">&#8358;</span>15,000 <span class="per">per user monthly</span></div>
+            <div class="price-amt price-annual"><span class="cur">&#8358;</span>150,000 <span class="per">per user / year</span><span class="price-save-badge">SAVE &#8358;30,000 — 2 MONTHS FREE!</span><span class="price-mo-equiv">That's only &#8358;12,500/user/month</span></div>
+            <div class="plan-min">Minimum 10 users</div>
             <ul class="feat">
               <li>✓ Multi unit configuration</li>
               <li>✓ Advanced permissions and governance</li>
@@ -234,5 +244,34 @@
   </div>
 
   <script src="assets/js/main.js?v=20260715b"></script>
+  <script>
+    // Monthly/Annual pricing toggle
+    (function() {
+      var monthlyEls = document.querySelectorAll('.price-monthly')
+      var annualEls = document.querySelectorAll('.price-annual')
+      var toggleMonthly = document.getElementById('toggle-monthly')
+      var toggleAnnual = document.getElementById('toggle-annual')
+
+      function showInterval(interval) {
+        var isAnnual = interval === 'annual'
+        monthlyEls.forEach(function(el) { el.style.display = isAnnual ? 'none' : '' })
+        annualEls.forEach(function(el) { el.style.display = isAnnual ? '' : 'none' })
+        toggleMonthly.setAttribute('aria-checked', isAnnual ? 'false' : 'true')
+        toggleAnnual.setAttribute('aria-checked', isAnnual ? 'true' : 'false')
+        toggleMonthly.classList.toggle('active', !isAnnual)
+        toggleAnnual.classList.toggle('active', isAnnual)
+      }
+
+      // Annual is default
+      showInterval('annual')
+
+      toggleMonthly.addEventListener('click', function() { showInterval('monthly') })
+      toggleAnnual.addEventListener('click', function() { showInterval('annual') })
+
+      // Keyboard support
+      toggleMonthly.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('monthly') } })
+      toggleAnnual.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('annual') } })
+    })()
+  </script>
 </body>
 </html>
