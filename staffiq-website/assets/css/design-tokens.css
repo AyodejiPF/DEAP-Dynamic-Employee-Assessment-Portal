@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   StaffiQ Shared Design Tokens
+   Staff-iQ Shared Design Tokens
    Version: 1.0 | 2026-07-16
 
    Single source of truth for colors, spacing, typography, shadows, and
-   border radii across the marketing website (staffiq-website/) and the
+   border radii across the marketing website (Staff-iQ-website/) and the
    web application (src/).
 
    Usage:
@@ -13,21 +13,21 @@
 
 :root {
   /* ─── Brand Colors ──────────────────────────────────────────── */
-  --staffiq-green:        #0B3D2E;
-  --staffiq-green-dark:   #072E22;
-  --staffiq-green-light:  #14A678;
-  --staffiq-gold:         #D4AF37;
-  --staffiq-gold-light:   #F0D465;
-  --staffiq-gold-dark:    #B8960F;
-  --staffiq-blue:         #1B3A6B;
-  --staffiq-blue-light:   #2E75B6;
+  --Staff-iQ-green:        #0B3D2E;
+  --Staff-iQ-green-dark:   #072E22;
+  --Staff-iQ-green-light:  #14A678;
+  --Staff-iQ-gold:         #D4AF37;
+  --Staff-iQ-gold-light:   #F0D465;
+  --Staff-iQ-gold-dark:    #B8960F;
+  --Staff-iQ-blue:         #1B3A6B;
+  --Staff-iQ-blue-light:   #2E75B6;
 
   /* ─── Semantic Aliases ──────────────────────────────────────── */
-  --color-primary:        var(--staffiq-green);
-  --color-primary-hover:  var(--staffiq-green-dark);
-  --color-accent:         var(--staffiq-gold);
-  --color-accent-hover:   var(--staffiq-gold-dark);
-  --color-info:           var(--staffiq-blue-light);
+  --color-primary:        var(--Staff-iQ-green);
+  --color-primary-hover:  var(--Staff-iQ-green-dark);
+  --color-accent:         var(--Staff-iQ-gold);
+  --color-accent-hover:   var(--Staff-iQ-gold-dark);
+  --color-info:           var(--Staff-iQ-blue-light);
   --color-success:        #2F6B36;
   --color-warning:        #F39C12;
   --color-danger:         #C00000;
