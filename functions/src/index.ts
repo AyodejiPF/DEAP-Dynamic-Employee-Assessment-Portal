@@ -1,17 +1,21 @@
 /**
  * Cloud Functions — TypeScript Entry Point
  *
- * This module compiles to lib/index.js and serves as the Firebase Functions
- * deployment entry. It:
+ * This module compiles to lib/index.js and can serve as the Firebase Functions
+ * deployment entry once migrated. It:
  *   1. Re-exports all existing JavaScript functions from the legacy index.js
- *   2. Exports AI governance functions with proper access control
+ *   2. Exports AI governance functions with proper TypeScript access control
+ *   3. Exports Cloud Functions for AI usage logging, admin endpoints, and aggregation
  *
  * Build:  npm run build   (tsc)
  * Deploy: npm run deploy  (firebase deploy --only functions)
+ *
+ * Note: The current deployment entry is still functions/index.js (plain JS).
+ * This TypeScript entry is the authoritative source for AI governance logic.
+ * To switch, change package.json "main" from "index.js" to "lib/index.js".
  */
 
 // Re-export ALL legacy JavaScript functions from the existing index.js.
-// The compiled output is at ../index.js (sibling to lib/).
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const legacyExports = require('../index.js')
 
@@ -20,7 +24,7 @@ Object.keys(legacyExports).forEach((key) => {
   exports[key] = legacyExports[key]
 })
 
-// ─── AI Governance Functions (TypeScript) ──────────────────────────
+// ─── AI Governance — Core Engine ──────────────────────────────────
 
 export {
   enforceAIAccess,
@@ -49,3 +53,22 @@ export {
   PLAN_AI_FEATURES,
   PLAN_RESTRICTION_MESSAGES,
 } from './ai/types'
+
+// ─── AI Governance — Cloud Functions ──────────────────────────────
+
+// Usage logging endpoint (POST /api/ai-usage/log)
+export { aiUsageLog } from './ai/usageLogger'
+
+// Admin API endpoints
+export {
+  aiAccessStatus,
+  aiAdminTenantAccess,
+  aiAdminUserAccess,
+  aiAdminUsage,
+} from './ai/adminEndpoints'
+
+// Scheduled functions
+export {
+  aiResetMonthlyCounters,
+  aiAggregation,
+} from './ai/aggregation'

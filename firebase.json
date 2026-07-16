@@ -50,6 +50,26 @@
         "function": "staffiqProblemReports"
       },
       {
+        "source": "/api/ai-usage/log",
+        "function": "staffiqAIUsageLog"
+      },
+      {
+        "source": "/api/ai-access/status",
+        "function": "staffiqAIAccessStatus"
+      },
+      {
+        "source": "/api/ai-admin/tenant-access",
+        "function": "staffiqAIAdminTenantAccess"
+      },
+      {
+        "source": "/api/ai-admin/user-access",
+        "function": "staffiqAIAdminUserAccess"
+      },
+      {
+        "source": "/api/ai-admin/usage",
+        "function": "staffiqAIAdminUsage"
+      },
+      {
         "source": "/api/staffiq-token/introspect",
         "function": "staffiqTokenIntrospection"
       },

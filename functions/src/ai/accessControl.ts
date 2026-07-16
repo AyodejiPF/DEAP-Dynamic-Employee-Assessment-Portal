@@ -26,9 +26,13 @@ import {
   PLAN_RESTRICTION_MESSAGES,
 } from './types'
 
-// ─── Firestore refs ────────────────────────────────────────────────
+// ─── Firestore refs (lazy — avoids init errors outside Cloud Functions runtime) ──
 
-const db = admin.firestore()
+let _db: FirebaseFirestore.Firestore | null = null
+function db(): FirebaseFirestore.Firestore {
+  if (!_db) _db = admin.firestore()
+  return _db
+}
 
 // ─── Core Access Check ─────────────────────────────────────────────
 
@@ -95,7 +99,7 @@ export function enforceAIAccess(ctx: AIAccessContext): AIAccessResult {
  */
 export async function getTenantAIAccess(tenantId: string): Promise<'enabled' | 'disabled'> {
   try {
-    const snap = await db
+    const snap = await db()
       .collection('tenants')
       .doc(tenantId)
       .collection('app')
@@ -119,7 +123,7 @@ export async function getUserAIAccess(
   userId: string,
 ): Promise<'inherit' | 'enabled' | 'disabled'> {
   try {
-    const snap = await db
+    const snap = await db()
       .collection('tenants')
       .doc(tenantId)
       .collection('users')
@@ -146,7 +150,7 @@ export async function getMonthlyCallsUsed(tenantId: string): Promise<number> {
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   try {
-    const snap = await db
+    const snap = await db()
       .collection('tenants')
       .doc(tenantId)
       .collection('app')
@@ -172,13 +176,13 @@ export async function incrementMonthlyCounter(tenantId: string): Promise<void> {
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   try {
-    const ref = db
+    const ref = db()
       .collection('tenants')
       .doc(tenantId)
       .collection('app')
       .doc('ai_monthly_counter')
 
-    await db.runTransaction(async (tx) => {
+    await db().runTransaction(async (tx) => {
       const snap = await tx.get(ref)
       const data = snap.data()
 
@@ -211,7 +215,7 @@ export async function persistUsageEvent(event: Omit<AIUsageEvent, 'createdAt' | 
   }
 
   try {
-    await db.collection('ai_usage_events').add(doc)
+    await db().collection('ai_usage_events').add(doc)
   } catch {
     // Fire-and-forget — log to console for debugging
     console.warn('Failed to persist AI usage event:', event.featureName, event.tenantId)
@@ -226,7 +230,7 @@ export async function persistUsageEvent(event: Omit<AIUsageEvent, 'createdAt' | 
  */
 export async function getTenantPlan(tenantId: string): Promise<TenantPlanID> {
   try {
-    const snap = await db
+    const snap = await db()
       .collection('tenants')
       .doc(tenantId)
       .get()
