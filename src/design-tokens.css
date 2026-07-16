@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   StaffiQ Shared Design Tokens
+   Version: 1.0 | 2026-07-16
+
+   Single source of truth for colors, spacing, typography, shadows, and
+   border radii across the marketing website (staffiq-website/) and the
+   web application (src/).
+
+   Usage:
+     Marketing site:  <link rel="stylesheet" href="/assets/css/design-tokens.css">
+     Web app:         @import './design-tokens.css'; (or link in index.html)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── Brand Colors ──────────────────────────────────────────── */
+  --staffiq-green:        #0B3D2E;
+  --staffiq-green-dark:   #072E22;
+  --staffiq-green-light:  #14A678;
+  --staffiq-gold:         #D4AF37;
+  --staffiq-gold-light:   #F0D465;
+  --staffiq-gold-dark:    #B8960F;
+  --staffiq-blue:         #1B3A6B;
+  --staffiq-blue-light:   #2E75B6;
+
+  /* ─── Semantic Aliases ──────────────────────────────────────── */
+  --color-primary:        var(--staffiq-green);
+  --color-primary-hover:  var(--staffiq-green-dark);
+  --color-accent:         var(--staffiq-gold);
+  --color-accent-hover:   var(--staffiq-gold-dark);
+  --color-info:           var(--staffiq-blue-light);
+  --color-success:        #2F6B36;
+  --color-warning:        #F39C12;
+  --color-danger:         #C00000;
+
+  /* ─── Neutrals ──────────────────────────────────────────────── */
+  --color-white:          #FFFFFF;
+  --color-gray-50:        #F9FAFB;
+  --color-gray-100:       #F3F4F6;
+  --color-gray-200:       #E5E7EB;
+  --color-gray-300:       #D1D5DB;
+  --color-gray-400:       #9CA3AF;
+  --color-gray-500:       #6B7280;
+  --color-gray-600:       #4B5563;
+  --color-gray-700:       #374151;
+  --color-gray-800:       #1F2937;
+  --color-gray-900:       #111827;
+  --color-black:          #000000;
+
+  /* ─── Typography ────────────────────────────────────────────── */
+  --font-sans:            'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:            'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-size-xs:         0.75rem;
+  --font-size-sm:         0.875rem;
+  --font-size-base:       1rem;
+  --font-size-lg:         1.125rem;
+  --font-size-xl:         1.25rem;
+  --font-size-2xl:        1.5rem;
+  --font-size-3xl:        1.875rem;
+  --font-size-4xl:        2.25rem;
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+  --font-weight-extrabold: 800;
+
+  /* ─── Spacing ────────────────────────────────────────────────── */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ─── Border Radius ─────────────────────────────────────────── */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  8px;
+  --radius-xl:  12px;
+  --radius-full: 999px;
+
+  /* ─── Shadows ────────────────────────────────────────────────── */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:   0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg:   0 10px 25px rgba(0, 0, 0, 0.1);
+  --shadow-xl:   0 20px 50px rgba(0, 0, 0, 0.15);
+
+  /* ─── Transitions ───────────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow:   350ms ease;
+}

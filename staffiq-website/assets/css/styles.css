@@ -2,7 +2,11 @@
    StaffiQ — Design System
    Brand: Smart employee assessment & workforce analytics for African SMEs
    By RevenStrat Integrated Services. Sibling product to TaskPulse.
+
+   Design tokens: @import url('./design-tokens.css');
    ========================================================================== */
+
+@import url('./design-tokens.css');
 
 /* ---------- Design tokens ---------- */
 :root {

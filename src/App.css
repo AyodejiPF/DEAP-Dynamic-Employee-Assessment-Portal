@@ -1,3 +1,10 @@
+/* ═══════════════════════════════════════════════════════════════
+   StaffiQ Web App — Main Stylesheet
+   Design tokens imported from src/design-tokens.css (shared with staffiq-website/)
+   ═══════════════════════════════════════════════════════════════ */
+
+@import './design-tokens.css';
+
 #root {
   min-height: 100vh;
 }
