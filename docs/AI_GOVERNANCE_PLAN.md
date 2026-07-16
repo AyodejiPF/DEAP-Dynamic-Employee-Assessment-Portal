@@ -1,9 +1,9 @@
 # StaffiQ AI Governance & Usage Analytics — Complete Feature Plan
 
-> **Version**: 1.0
+> **Version**: 1.1
 > **Date**: 2026-07-16
 > **Author**: VS Code Copilot (V4 Pro)
-> **Status**: Planning — awaiting approval for implementation
+> **Status**: ✅ Implemented — see [AI_GOVERNANCE_IMPLEMENTATION.md](./AI_GOVERNANCE_IMPLEMENTATION.md) for the as-built reference
 
 ---
 

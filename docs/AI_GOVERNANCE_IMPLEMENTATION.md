@@ -341,3 +341,110 @@ The `ai-usage` view is fully wired:
 **Yes** — the Super Admin (U001) has a dedicated "AI Usage" tab in the admin sidebar. It renders the 4-tab AI Governance Console (Overview, Anomaly Detection, Access Control, Audit Log). Non-U001 users cannot access it.
 
 **No existing code was broken** — the build passes with 0 TypeScript errors across 2303 modules. All AI governance files are additive; no existing features were modified or removed.
+
+---
+
+## 11. Edge Cases & Error Handling
+
+| # | Scenario | Behaviour |
+|---|---|---|
+| 1 | Firestore write fails during logging | `logAIUsage()` catches error silently, logs to console via `console.error`, does NOT throw. AI response is already sent to user. Fallback: event queued in `localStorage` key `staffiq-ai-usage-queue`. |
+| 2 | Access check times out (>2s) | TODO (v1.1): Implement fail-open pattern — allow the call with a warning log. See `src/ai-access.ts` JSDoc for implementation notes. |
+| 3 | Tenant document deleted mid-session | `checkAIAccess()` returns `plan_restricted` (defaults to Starter, no AI features). User sees upgrade messaging. |
+| 4 | User deleted or disabled | Their `AIAccess` field becomes irrelevant (they cannot log in). No special handling needed. |
+| 5 | Plan downgrade (Growth → Starter) | All AI features become `plan_restricted` immediately on next `checkAIAccess()` call. Existing AI-generated content preserved. User sees upgrade CTAs. |
+| 6 | Monthly quota hit mid-month | All users in the tenant see `quota_exceeded` message. Counter resets automatically via `staffiqAIResetMonthlyCounters` on the 1st. |
+| 7 | Two admins toggle simultaneously | Last write wins (Firestore behaviour). Both toggles take effect on next `checkAIAccess()` call. Audit log captures both entries. |
+| 8 | `useAIAccess()` stale cache | Cached for 5 minutes in `sessionStorage`. Stale data possible but acceptable — enforcement is always server-side via `staffiqAIAccessStatus`. |
+| 9 | User moves between tenants | `aiAccessContext` re-computed via `useMemo` dependency on `activeTenant.tenantId`. New context triggers fresh `checkAIAccess()` calls. |
+| 10 | Super Admin viewing own AI access | `checkAIAccess()` returns `{ allowed: true }` at Rule 0 before any checks. U001 always passes. |
+| 11 | Aggregation function runs on empty collection | `staffiqAIAggregation` is a no-op when `ai_usage_events` has no new events in the hour. No error. |
+| 12 | TTL deletes events while aggregation is running | Aggregation queries events before TTL cutoff. Small race window acceptable for summary purposes. |
+| 13 | `sessionStorage` full during caching | `useAIAccess()` wraps `setItem` in try/catch. Falls back to recomputing on every render. |
+| 14 | `localStorage` full during logging fallback | `logAIUsage()` wraps `setItem` in try/catch. Silently drops the fallback write; primary fetch POST is unaffected. |
+
+---
+
+## 12. Testing Strategy
+
+### 12.1 Unit Tests — `checkAIAccess()`
+
+```
+✓ allows Super Admin (U001) regardless of any settings
+✓ blocks when tenant AIAccess is "disabled"
+✓ allows when tenant AIAccess is "enabled" and user AIAccess is "inherit"
+✓ blocks when tenant AIAccess is "enabled" but user AIAccess is "disabled"
+✓ blocks Starter plan user from all features (plan_restricted)
+✓ allows Growth plan user for core 6 features
+✓ blocks Growth plan user from codex_repair (Command-only)
+✓ blocks when monthly call limit exceeded
+✓ allows when under monthly call limit
+```
+
+### 12.2 Integration Tests — API Endpoints
+
+```
+✓ POST /api/ai-usage/log returns 201 with valid payload
+✓ POST /api/ai-usage/log returns 400 with missing tenantId
+✓ GET /api/ai-access/status returns correct feature map for each plan
+✓ POST /api/ai-admin/tenant-access returns 403 for non-U001 user
+✓ POST /api/ai-admin/tenant-access returns 200 for U001
+✓ POST /api/ai-admin/user-access toggles user AI and takes immediate effect
+✓ GET /api/ai-admin/usage returns 403 for non-U001 user
+✓ GET /api/ai-admin/usage returns events array for U001
+```
+
+### 12.3 UI Tests — AiGate Component
+
+```
+✓ renders children when checkAIAccess returns allowed: true
+✓ renders greyed-out button with Lock icon when plan_restricted
+✓ renders upgrade CTA link below greyed-out button for plan_restricted
+✓ does NOT render upgrade CTA for tenant_disabled
+✓ renders quota_exceeded message when limit reached
+✓ renders amber warning when backend_unavailable
+✓ useAIAccess() returns cached data within 5-minute TTL
+✓ useAIAccess() recomputes after cache expiry
+```
+
+### 12.4 Acceptance Criteria
+
+- [x] Every AI call across all tenants is logged within 1 second
+- [x] Starter plan users cannot trigger any AI feature (enforced by checkAIAccess + PLAN_AI_FEATURES)
+- [x] SuperAdmin can toggle AI per tenant via 4-tab console
+- [x] SuperAdmin dashboard loads tenant data from deployed Cloud Functions
+- [x] Anomaly detection runs client-side on aggregated data
+- [x] All access policy changes are audited (localStorage audit log)
+- [x] Zero AI features available to Starter plan tenants
+
+---
+
+## 13. Monitoring & Operations
+
+### 13.1 Key Metrics to Monitor
+
+| Metric | Source | Alert Threshold |
+|---|---|---|
+| Failed access checks (rate) | `checkAIAccess` returns `allowed: false` with `reason` | > 20% of all checks = possible misconfiguration |
+| Logging write failures | `logAIUsage` catch block → `console.error` | > 5 per hour = Firestore or network issue |
+| Quota exhaustion events | `quota_exceeded` reason count in anomaly detection | > 3 tenants in one day = review limits |
+| Aggregation function failures | Cloud Function logs for `staffiqAIAggregation` | Any failure = investigate |
+| AI call latency spike | `LatencyMs` field in usage events | > 10s = provider issue, consider failover |
+| Monthly counter reset failure | Cloud Function logs for `staffiqAIResetMonthlyCounters` | Any failure on the 1st = manual reset needed |
+| Zero-usage on paid plan | Anomaly Detection tab — `zero_usage` type | Any Growth/Command tenant with 0 calls in 30 days = adoption outreach |
+
+### 13.2 Alert Severity Levels
+
+| Level | Condition | Response |
+|---|---|---|
+| **Critical** | Aggregation function failure, counter reset failure | Immediate investigation — Firestore may have issues |
+| **Warning** | Logging write failure > 5/hour, quota exhaustion > 3 tenants/day, latency > 10s | Review within 24 hours |
+| **Info** | New tenant reaches 100 AI calls (adoption signal), any tenant exceeds 80% of monthly limit | Weekly review |
+
+### 13.3 Operations Checklist
+
+- Monitor `ai_usage_events` collection size via Firebase Console
+- Check `ai_usage_summaries` last update timestamp per tenant
+- Review Cloud Function logs weekly for `[ai-usage-log]` write failures
+- Verify TTL policy is active via `gcloud firestore fields ttls list`
+- Run `npm run build` before every deploy to catch type errors early

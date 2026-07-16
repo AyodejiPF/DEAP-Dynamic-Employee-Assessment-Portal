@@ -40,6 +40,25 @@ export interface AIAccessContext {
  *   3. User-level override → disabled = blocked, enabled = allowed
  *   4. Monthly quota → exceeded = blocked
  *   5. All checks passed → allowed
+ *
+ * Edge cases handled:
+ *   - Missing tenant/user docs → defaults to most restrictive setting
+ *   - Simultaneous admin toggles → last-write-wins (Firestore behaviour)
+ *   - Plan downgrade (Growth→Starter) → immediate plan_restricted on next check
+ *   - User deleted mid-session → they cannot log in; no special handling needed
+ *
+ * TODO (v1.1): Add optional timeout wrapper — if Firestore read exceeds 2s,
+ *   fail-open (allow the call) with a warning log rather than blocking
+ *   legitimate use. Pattern:
+ *   ```
+ *   const result = await Promise.race([
+ *     checkAIAccess(ctx),
+ *     new Promise<AIAccessResult>(resolve =>
+ *       setTimeout(() => resolve({ allowed: true, _timedOut: true }), 2000)
+ *     )
+ *   ])
+ *   if (result._timedOut) console.warn('[ai-access] checkAIAccess timed out — failing open')
+ *   ```
  */
 export function checkAIAccess(ctx: AIAccessContext): AIAccessResult {
   // RULE 0: SuperAdmin always passes
