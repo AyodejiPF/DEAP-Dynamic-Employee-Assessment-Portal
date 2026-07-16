@@ -12,7 +12,15 @@
  * When the AI backend is deployed, they can be enhanced with LLM enrichment.
  */
 
-import type { User } from '../App'
+// ─── Local type mirroring App.tsx User interface ──────────────────
+
+interface User {
+  id: string
+  fullName: string
+  department: string
+  role: string
+  disabled?: boolean
+}
 
 // ─── Re-exported interfaces (mirrors App.tsx types) ────────────────
 
