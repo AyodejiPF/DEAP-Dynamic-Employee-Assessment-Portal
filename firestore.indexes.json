@@ -1,0 +1,31 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ai_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "TenantID", "order": "ASCENDING" },
+        { "fieldPath": "CreatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "TenantID", "order": "ASCENDING" },
+        { "fieldPath": "FeatureName", "order": "ASCENDING" },
+        { "fieldPath": "CreatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ai_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "TenantID", "order": "ASCENDING" },
+        { "fieldPath": "UserID", "order": "ASCENDING" },
+        { "fieldPath": "CreatedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
