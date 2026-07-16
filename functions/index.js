@@ -2684,3 +2684,665 @@ exports.staffiqAIAggregation = onSchedule(
     }
   },
 )
+
+// ══════════════════════════════════════════════════════════════════
+// STAFFIQ GRANTS — Platform Owner Delegation & Permission Granting
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/grants/create — Grant a delegated billing role to a user.
+ * Only the Platform Owner (U001) can create grants.
+ */
+exports.staffiqGrantCreate = onRequest(
+  { timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const callerUserId = req.body.callerUserId || req.headers['x-staffiq-user-id']
+      const callerRole = req.body.callerRole || req.headers['x-staffiq-user-role']
+      const callerFullName = req.body.callerFullName || req.headers['x-staffiq-user-fullname']
+
+      // Only Platform Owner
+      if (callerUserId !== 'U001' || callerRole !== 'super_admin' || (callerFullName || '').trim().toLowerCase() !== 'ayodeji falope') {
+        res.status(403).json({ error: 'Only the Platform Owner can grant delegated roles.' })
+        return
+      }
+
+      const { subjectUserId, role, reason, expiresAt } = req.body
+      if (!subjectUserId || !role || !reason) {
+        res.status(400).json({ error: 'Missing required fields: subjectUserId, role, reason' })
+        return
+      }
+
+      const validRoles = ['billing_admin', 'support', 'finance']
+      if (!validRoles.includes(role)) {
+        res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` })
+        return
+      }
+
+      const grantRef = db.collection('platformGrants').doc()
+      const grant = {
+        grantId: grantRef.id,
+        subjectUserId,
+        role,
+        grantedBy: 'U001',
+        grantedAt: new Date().toISOString(),
+        expiresAt: expiresAt || null,
+        status: 'active',
+        reason,
+        appId: 'staffiq',
+      }
+
+      await grantRef.set(grant)
+
+      // Audit
+      await db.collection('auditLogs').add({
+        appId: 'staffiq',
+        actor: callerUserId,
+        action: 'grant_role',
+        targetType: 'platformGrant',
+        targetId: grant.grantId,
+        before: null,
+        after: { subjectUserId, role, status: 'active' },
+        reason,
+        createdAt: new Date().toISOString(),
+      })
+
+      res.status(200).json({ status: 'ok', grant })
+    } catch (error) {
+      console.error('[grants-create] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/grants/revoke — Revoke an active grant.
+ * Only the Platform Owner (U001) can revoke grants.
+ */
+exports.staffiqGrantRevoke = onRequest(
+  { timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const callerUserId = req.body.callerUserId || req.headers['x-staffiq-user-id']
+      const callerRole = req.body.callerRole || req.headers['x-staffiq-user-role']
+      const callerFullName = req.body.callerFullName || req.headers['x-staffiq-user-fullname']
+
+      if (callerUserId !== 'U001' || callerRole !== 'super_admin' || (callerFullName || '').trim().toLowerCase() !== 'ayodeji falope') {
+        res.status(403).json({ error: 'Only the Platform Owner can revoke delegated roles.' })
+        return
+      }
+
+      const { grantId, reason } = req.body
+      if (!grantId || !reason) {
+        res.status(400).json({ error: 'Missing required fields: grantId, reason' })
+        return
+      }
+
+      const grantRef = db.collection('platformGrants').doc(grantId)
+      const grantSnap = await grantRef.get()
+      if (!grantSnap.exists) {
+        res.status(404).json({ error: `Grant ${grantId} not found.` })
+        return
+      }
+
+      await grantRef.update({ status: 'revoked' })
+
+      await db.collection('auditLogs').add({
+        appId: 'staffiq',
+        actor: callerUserId,
+        action: 'revoke_grant',
+        targetType: 'platformGrant',
+        targetId: grantId,
+        before: { status: 'active' },
+        after: { status: 'revoked' },
+        reason,
+        createdAt: new Date().toISOString(),
+      })
+
+      res.status(200).json({ status: 'ok', message: 'Grant revoked.' })
+    } catch (error) {
+      console.error('[grants-revoke] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * GET /api/grants/list — List all grants (active or revoked).
+ * Accessible to Platform Owner and users with billing:view capability.
+ */
+exports.staffiqGrantList = onRequest(
+  { timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const statusFilter = req.query.status
+
+      let query = db.collection('platformGrants')
+      if (statusFilter && ['active', 'revoked'].includes(statusFilter)) {
+        query = query.where('status', '==', statusFilter)
+      }
+
+      const snapshot = await query.get()
+      const grants = snapshot.docs.map((doc) => doc.data())
+
+      res.status(200).json({ status: 'ok', grants, count: grants.length })
+    } catch (error) {
+      console.error('[grants-list] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+// ══════════════════════════════════════════════════════════════════
+// STAFFIQ BILLING — Subscription, Checkout, Proration
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/webhooks/paystack — Receive Paystack webhook events.
+ */
+exports.staffiqWebhookPaystack = onRequest(
+  { timeoutSeconds: 120, memory: '512MiB' },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const crypto = await import('crypto')
+      const db = admin.firestore()
+
+      // Verify HMAC SHA-512 signature
+      const signature = req.headers['x-paystack-signature'] || ''
+      const secretKey = process.env.PAYSTACK_SECRET_KEY || ''
+      if (!secretKey || !signature) {
+        res.status(401).json({ error: 'Missing signature or secret key' })
+        return
+      }
+
+      const rawBody = JSON.stringify(req.body)
+      const expected = crypto.createHmac('sha512', secretKey).update(rawBody).digest('hex')
+
+      if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
+        res.status(401).json({ error: 'Invalid signature' })
+        return
+      }
+
+      // Idempotency check
+      const eventData = req.body.data || {}
+      const eventId = String(eventData.id || `${req.body.event || 'unknown'}-${Date.now()}`)
+
+      const existingEvent = await db.collection('webhookEvents')
+        .where('providerEventId', '==', eventId)
+        .limit(1)
+        .get()
+
+      if (!existingEvent.empty) {
+        res.status(200).json({ status: 'already_processed' })
+        return
+      }
+
+      // Store webhook
+      await db.collection('webhookEvents').add({
+        provider: 'paystack',
+        providerEventId: eventId,
+        eventType: req.body.event || 'unknown',
+        rawPayload: JSON.stringify(req.body),
+        signatureVerified: true,
+        processed: true,
+        createdAt: new Date().toISOString(),
+      })
+
+      // Process charge.success
+      if (req.body.event === 'charge.success') {
+        const metadata = (eventData.metadata || {})
+        const tenantId = metadata.tenantId
+
+        if (tenantId) {
+          // Record payment
+          await db.collection('paymentTransactions').add({
+            tenantId,
+            provider: 'paystack',
+            providerTransactionId: String(eventData.reference || ''),
+            amount: Number(eventData.amount || 0),
+            currency: 'NGN',
+            status: 'success',
+            paymentMethod: String(eventData.channel || ''),
+            createdAt: new Date().toISOString(),
+          })
+
+          // Create/update subscription
+          const planId = metadata.planId || 'plan_growth'
+          const billingInterval = metadata.billingInterval || 'monthly'
+          const periodStart = new Date()
+          const periodEnd = new Date(periodStart)
+          if (billingInterval === 'annual') {
+            periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+          } else {
+            periodEnd.setMonth(periodEnd.getMonth() + 1)
+          }
+
+          const subSnap = await db.collection('subscriptions')
+            .where('tenantId', '==', tenantId)
+            .limit(1)
+            .get()
+
+          if (subSnap.empty) {
+            const subRef = db.collection('subscriptions').doc()
+            await subRef.set({
+              subscriptionId: subRef.id,
+              tenantId,
+              planId,
+              planVersionId: null,
+              billingInterval,
+              status: 'active',
+              currentPeriodStart: periodStart.toISOString(),
+              currentPeriodEnd: periodEnd.toISOString(),
+              cancelAtPeriodEnd: false,
+              cancelledAt: null,
+              providerSubscriptionId: '',
+              amount: Number(eventData.amount || 0),
+              currency: 'NGN',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
+          } else {
+            await subSnap.docs[0].ref.update({
+              status: 'active',
+              currentPeriodEnd: periodEnd.toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
+          }
+        }
+      }
+
+      res.status(200).json({ status: 'ok' })
+    } catch (error) {
+      console.error('[webhook-paystack] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/billing/checkout — Create a Paystack checkout session.
+ */
+exports.staffiqCreateCheckout = onRequest(
+  { timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const { amount, currency, email, tenantId, planId, billingInterval, callbackUrl } = req.body
+      if (!amount || !email || !tenantId || !planId) {
+        res.status(400).json({ error: 'Missing required fields: amount, email, tenantId, planId' })
+        return
+      }
+
+      const secretKey = process.env.PAYSTACK_SECRET_KEY || ''
+      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          amount,
+          currency: currency || 'NGN',
+          callback_url: callbackUrl || '',
+          metadata: { tenantId, planId, billingInterval: billingInterval || 'monthly' },
+        }),
+      })
+
+      const paystackData = await paystackRes.json()
+      if (!paystackData.status) {
+        res.status(500).json({ error: paystackData.message || 'Checkout initialization failed' })
+        return
+      }
+
+      res.status(200).json({
+        status: 'ok',
+        session: {
+          sessionId: paystackData.data.access_code,
+          authorizationUrl: paystackData.data.authorization_url,
+          reference: paystackData.data.reference,
+        },
+      })
+    } catch (error) {
+      console.error('[billing-checkout] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * GET /api/billing/subscription — Get a tenant's active subscription.
+ */
+exports.staffiqGetSubscription = onRequest(
+  { timeoutSeconds: 30, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const tenantId = req.query.tenantId
+      if (!tenantId) {
+        res.status(400).json({ error: 'Missing tenantId query parameter' })
+        return
+      }
+
+      const snapshot = await db.collection('subscriptions')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['active', 'trialing', 'past_due', 'grace', 'cancel_scheduled'])
+        .limit(1)
+        .get()
+
+      if (snapshot.empty) {
+        res.status(200).json({ status: 'ok', subscription: null })
+        return
+      }
+
+      res.status(200).json({ status: 'ok', subscription: snapshot.docs[0].data() })
+    } catch (error) {
+      console.error('[billing-subscription] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/billing/preview-upgrade — Preview proration before upgrade.
+ */
+exports.staffiqPreviewUpgrade = onRequest(
+  { timeoutSeconds: 30, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const { tenantId, newPrice } = req.body
+      if (!tenantId || !newPrice) {
+        res.status(400).json({ error: 'Missing required fields: tenantId, newPrice' })
+        return
+      }
+
+      const snapshot = await db.collection('subscriptions')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['active', 'trialing', 'past_due', 'grace', 'cancel_scheduled'])
+        .limit(1)
+        .get()
+
+      if (snapshot.empty) {
+        res.status(404).json({ error: 'No active subscription found' })
+        return
+      }
+
+      const sub = snapshot.docs[0].data()
+      const now = new Date()
+      const periodEnd = new Date(sub.currentPeriodEnd)
+      const periodStart = new Date(sub.currentPeriodStart)
+      const totalDays = Math.max(1, Math.round((periodEnd - periodStart) / (1000 * 60 * 60 * 24)))
+      const remainingDays = Math.max(0, Math.round((periodEnd - now) / (1000 * 60 * 60 * 24)))
+
+      const unusedCurrent = Math.round((sub.amount / totalDays) * remainingDays)
+      const newProrated = Math.round((newPrice / totalDays) * remainingDays)
+      const chargeNow = Math.max(0, newProrated - unusedCurrent)
+
+      res.status(200).json({
+        status: 'ok',
+        proration: { chargeNow, unusedCurrent, newProrated, remainingDays, totalDays },
+      })
+    } catch (error) {
+      console.error('[billing-preview] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/billing/upgrade — Execute upgrade with prorated charge.
+ */
+exports.staffiqExecuteUpgrade = onRequest(
+  { timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const { tenantId, newPlanId, newPrice, newBillingInterval, authorizationCode, email } = req.body
+      if (!tenantId || !newPlanId || !newPrice) {
+        res.status(400).json({ error: 'Missing required fields: tenantId, newPlanId, newPrice' })
+        return
+      }
+
+      const snapshot = await db.collection('subscriptions')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['active', 'trialing', 'past_due', 'grace', 'cancel_scheduled'])
+        .limit(1)
+        .get()
+
+      if (snapshot.empty) {
+        res.status(404).json({ error: 'No active subscription found' })
+        return
+      }
+
+      const sub = snapshot.docs[0].data()
+      const now = new Date()
+      const periodEnd = new Date(sub.currentPeriodEnd)
+      const periodStart = new Date(sub.currentPeriodStart)
+      const totalDays = Math.max(1, Math.round((periodEnd - periodStart) / (1000 * 60 * 60 * 24)))
+      const remainingDays = Math.max(0, Math.round((periodEnd - now) / (1000 * 60 * 60 * 24)))
+
+      const unusedCurrent = Math.round((sub.amount / totalDays) * remainingDays)
+      const newProrated = Math.round((newPrice / totalDays) * remainingDays)
+      const chargeNow = Math.max(0, newProrated - unusedCurrent)
+
+      // Charge proration if needed
+      if (chargeNow > 0 && authorizationCode && email) {
+        const secretKey = process.env.PAYSTACK_SECRET_KEY || ''
+        const chargeRes = await fetch('https://api.paystack.co/transaction/charge_authorization', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            authorization_code: authorizationCode,
+            email,
+            amount: chargeNow,
+            currency: sub.currency || 'NGN',
+            metadata: { tenantId, reason: 'upgrade_proration', oldPlanId: sub.planId, newPlanId },
+          }),
+        })
+
+        const chargeData = await chargeRes.json()
+        if (!chargeData.status || chargeData.data.status !== 'success') {
+          res.status(402).json({ error: 'Payment failed. You remain on your current plan.' })
+          return
+        }
+      }
+
+      // Update subscription
+      await snapshot.docs[0].ref.update({
+        planId: newPlanId,
+        billingInterval: newBillingInterval || sub.billingInterval,
+        amount: newPrice,
+        updatedAt: new Date().toISOString(),
+      })
+
+      // Audit
+      await db.collection('auditLogs').add({
+        appId: 'staffiq',
+        actor: tenantId,
+        action: 'upgrade_subscription',
+        targetType: 'subscription',
+        targetId: sub.subscriptionId,
+        before: { planId: sub.planId, amount: sub.amount },
+        after: { planId: newPlanId, amount: newPrice },
+        reason: 'Tenant-initiated upgrade',
+        createdAt: new Date().toISOString(),
+      })
+
+      res.status(200).json({ status: 'ok', message: 'Plan upgraded successfully.', proration: { chargeNow } })
+    } catch (error) {
+      console.error('[billing-upgrade] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/billing/downgrade — Schedule a downgrade at period end.
+ */
+exports.staffiqScheduleDowngrade = onRequest(
+  { timeoutSeconds: 30, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const { tenantId, newPlanId, newPrice } = req.body
+      if (!tenantId || !newPlanId) {
+        res.status(400).json({ error: 'Missing required fields: tenantId, newPlanId' })
+        return
+      }
+
+      const snapshot = await db.collection('subscriptions')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['active', 'trialing', 'past_due', 'grace', 'cancel_scheduled'])
+        .limit(1)
+        .get()
+
+      if (snapshot.empty) {
+        res.status(404).json({ error: 'No active subscription found' })
+        return
+      }
+
+      const sub = snapshot.docs[0].data()
+
+      await snapshot.docs[0].ref.update({
+        cancelAtPeriodEnd: false,
+        scheduledDowngradePlanId: newPlanId,
+        scheduledDowngradePrice: newPrice || sub.amount,
+        updatedAt: new Date().toISOString(),
+      })
+
+      await db.collection('auditLogs').add({
+        appId: 'staffiq',
+        actor: tenantId,
+        action: 'schedule_downgrade',
+        targetType: 'subscription',
+        targetId: sub.subscriptionId,
+        before: { planId: sub.planId },
+        after: { scheduledPlanId: newPlanId, effectiveAt: sub.currentPeriodEnd },
+        reason: 'Tenant-initiated downgrade',
+        createdAt: new Date().toISOString(),
+      })
+
+      res.status(200).json({
+        status: 'ok',
+        message: `Your plan will change at the end of your current billing period.`,
+        effectiveDate: sub.currentPeriodEnd,
+      })
+    } catch (error) {
+      console.error('[billing-downgrade] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)
+
+/**
+ * POST /api/billing/cancel — Cancel subscription at period end.
+ */
+exports.staffiqCancelSubscription = onRequest(
+  { timeoutSeconds: 30, memory: '256MiB' },
+  async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    try {
+      const db = admin.firestore()
+      const { tenantId, reason } = req.body
+      if (!tenantId) {
+        res.status(400).json({ error: 'Missing tenantId' })
+        return
+      }
+
+      const snapshot = await db.collection('subscriptions')
+        .where('tenantId', '==', tenantId)
+        .where('status', 'in', ['active', 'trialing', 'past_due', 'grace', 'cancel_scheduled'])
+        .limit(1)
+        .get()
+
+      if (snapshot.empty) {
+        res.status(404).json({ error: 'No active subscription found' })
+        return
+      }
+
+      const sub = snapshot.docs[0].data()
+
+      await snapshot.docs[0].ref.update({
+        cancelAtPeriodEnd: true,
+        cancelledAt: new Date().toISOString(),
+        cancelReason: reason || '',
+        updatedAt: new Date().toISOString(),
+      })
+
+      await db.collection('auditLogs').add({
+        appId: 'staffiq',
+        actor: tenantId,
+        action: 'cancel_subscription',
+        targetType: 'subscription',
+        targetId: sub.subscriptionId,
+        before: { status: sub.status },
+        after: { status: 'cancel_scheduled', effectiveAt: sub.currentPeriodEnd },
+        reason: reason || 'No reason provided',
+        createdAt: new Date().toISOString(),
+      })
+
+      res.status(200).json({
+        status: 'ok',
+        message: `Subscription will be cancelled at the end of your billing period.`,
+      })
+    } catch (error) {
+      console.error('[billing-cancel] Error:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  },
+)

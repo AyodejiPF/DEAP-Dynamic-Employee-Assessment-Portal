@@ -25,6 +25,7 @@ import {
   PLAN_AI_FEATURES,
   PLAN_RESTRICTION_MESSAGES,
 } from './types'
+import { isPlatformOwner } from '../grants/types'
 
 // ─── Firestore refs (lazy — avoids init errors outside Cloud Functions runtime) ──
 
@@ -43,8 +44,8 @@ function db(): FirebaseFirestore.Firestore {
  * @returns AIAccessResult — if allowed: false, return the block to the client.
  */
 export function enforceAIAccess(ctx: AIAccessContext): AIAccessResult {
-  // 0. SuperAdmin bypass
-  if (ctx.userId === 'U001') {
+  // 0. Platform Owner bypass — uses shared identity check
+  if (isPlatformOwner({ userId: ctx.userId, role: 'super_admin', fullName: 'ayodeji falope' })) {
     return { allowed: true }
   }
 

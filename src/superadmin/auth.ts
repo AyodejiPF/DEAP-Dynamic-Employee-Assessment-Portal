@@ -1,40 +1,30 @@
 /**
  * SuperAdmin authentication and authorisation helpers.
- * These verify that the current user is the Platform Owner before
- * allowing access to sensitive operations.
+ *
+ * ALL owner identity logic is defined in src/superadmin/owner.ts.
+ * This file re-exports from there so existing imports continue to work.
+ * New code should import directly from './owner'.
  */
 
-import type { SuperAdminUser } from './types'
+// Re-export everything from the single source of truth
+export {
+  PLATFORM_OWNER,
+  isPlatformOwner,
+  requirePlatformOwner,
+  getOwnerLabel,
+  getLegacyLabel,
+  isReservedOwnerIdentity,
+  OWNER_CAPABILITIES,
+  CAPABILITY_MAP,
+} from './owner'
 
-/** The single Platform Owner role value. */
-export const OWNER_ROLE = 'super_admin'
+export type {
+  OwnerIdentity,
+  DelegatedRole,
+  PlatformGrant,
+  BillingCapability,
+} from './owner'
 
-/**
- * Returns true if the given user is the Platform Owner.
- * Checks both role and identity to prevent role-spoofing.
- */
-export function isPlatformOwner(user: SuperAdminUser | undefined): boolean {
-  return Boolean(
-    user &&
-      user.role === OWNER_ROLE &&
-      user.userId === 'U001' &&
-      user.fullName.trim().toLowerCase() === 'ayodeji falope',
-  )
-}
-
-/**
- * Throws if the given user is not the Platform Owner.
- * Use this to guard SuperAdmin operations server-side or in critical paths.
- */
-export function requirePlatformOwner(user: SuperAdminUser | undefined): asserts user is SuperAdminUser {
-  if (!isPlatformOwner(user)) {
-    throw new Error('Only the Platform Owner can perform this action.')
-  }
-}
-
-/**
- * Returns the display label for the owner role.
- */
-export function getOwnerLabel(): string {
-  return 'Platform Owner'
-}
+// Legacy alias — kept for backward compatibility with existing imports
+import { PLATFORM_OWNER } from './owner'
+export const OWNER_ROLE = PLATFORM_OWNER.ownerRole

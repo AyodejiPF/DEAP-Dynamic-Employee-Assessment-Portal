@@ -118,6 +118,7 @@ import {
   type TenantUserStatus,
 } from './tenant'
 import './App.css'
+import { isPlatformOwner } from './superadmin/owner'
 
 type OwnerRole = 'super_admin'
 const OWNER_ROLE = ['super', 'admin'].join('_') as OwnerRole
@@ -1303,12 +1304,8 @@ const trainingContentTypeDefinitions: TrainingContentTypeDefinition[] = [
 const trainingContentTypeById = new Map(trainingContentTypeDefinitions.map((definition) => [definition.id, definition]))
 
 function isAyodejiTokenOwner(user?: User): boolean {
-  return Boolean(
-    user &&
-      user.role === OWNER_ROLE &&
-      user.userId === 'U001' &&
-      user.fullName.trim().toLowerCase() === 'ayodeji falope',
-  )
+  if (!user) return false
+  return isPlatformOwner({ userId: user.userId, role: user.role, fullName: user.fullName })
 }
 
 function normalizeBranding(branding: Branding | undefined): Branding {

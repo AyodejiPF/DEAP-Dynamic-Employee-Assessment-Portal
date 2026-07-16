@@ -164,4 +164,7 @@ Per the coordination protocol v2.0 (section 7), every agent across every IDE MUS
 
 ### 2026-07-16 | Chat: Tips snooze feature | Agent: Claude Cowork
 - **Prompt**: "/p2 give the option on the top left just before the resizer and let the button disable tips and popups for a short duration (1 day, 3 days, one week), available to all users; also with every tip popup on the webapp; first check if this is done, if done improve it."
-- **Objective**: Add a snooze/pause control for contextual tips and popups in the tenant app, in the sidebar before the resizer and inside every tooltip. [Catalogued late]
+- **Objective**: Add a snooze/pause control for contextual tips and popups in the tenant app, in the sidebar before the resizer and inside every tooltip. [Catalogu
+### 2026-07-16 | Chat: Pricing update | Agent: Claude Cowork
+- **Prompt**: "change the pricing: N7,500 becomes N10,000 and N10,000 becomes N12,500; hurry and deploy immediately."
+- **Objective**: Raise StaffiQ marketing pricing (Starter to 10,000, Growth to 12,500) and deploy to staffiq.ng. [Catalogued late]

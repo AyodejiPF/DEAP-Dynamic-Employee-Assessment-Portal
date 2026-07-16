@@ -72,3 +72,72 @@ export {
   aiResetMonthlyCounters,
   aiAggregation,
 } from './ai/aggregation'
+
+// ─── Grants — Platform Owner Delegation ──────────────────────────
+
+export {
+  grantRole,
+  revokeGrant,
+  listGrants,
+  getUserGrants,
+  checkCapability,
+  requireCapability,
+} from './grants/grantManagement'
+
+export type {
+  DelegatedRole,
+  BillingCapability,
+  PlatformGrant,
+  GrantCheckContext,
+} from './grants/types'
+
+export {
+  CAPABILITY_MAP,
+  OWNER_CAPABILITIES,
+  isPlatformOwner,
+  PLATFORM_OWNER_USER_ID,
+  PLATFORM_OWNER_ROLE,
+  PLATFORM_OWNER_NAME,
+} from './grants/types'
+
+// ─── Grants — Cloud Functions ────────────────────────────────────
+
+export {
+  staffiqGrantCreate,
+  staffiqGrantRevoke,
+  staffiqGrantList,
+} from './grants/adminEndpoints'
+
+// ─── Billing — Payment, Proration, Subscription Management ──────
+
+export {
+  staffiqWebhookPaystack,
+  staffiqCreateCheckout,
+  staffiqGetSubscription,
+  staffiqPreviewUpgrade,
+  staffiqExecuteUpgrade,
+  staffiqScheduleDowngrade,
+  staffiqCancelSubscription,
+} from './billing/endpoints'
+
+export type {
+  PaymentProvider,
+  CheckoutParams,
+  CheckoutSession,
+  PaymentVerification,
+} from './billing/provider'
+
+export {
+  calculateUpgradeProration,
+  calculateDowngradeCredit,
+  calculateMonthlyToAnnual,
+} from './billing/proration'
+
+export {
+  assertValidTransition,
+  hasFeatureAccess,
+  isBillable,
+  isRecoverable,
+} from './billing/stateMachine'
+
+export type { SubscriptionStatus } from './billing/stateMachine'

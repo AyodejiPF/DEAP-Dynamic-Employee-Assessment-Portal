@@ -75,6 +75,46 @@
         "function": "staffiqAIAdminUsage"
       },
       {
+        "source": "/api/grants/create",
+        "function": "staffiqGrantCreate"
+      },
+      {
+        "source": "/api/grants/revoke",
+        "function": "staffiqGrantRevoke"
+      },
+      {
+        "source": "/api/grants/list",
+        "function": "staffiqGrantList"
+      },
+      {
+        "source": "/api/webhooks/paystack",
+        "function": "staffiqWebhookPaystack"
+      },
+      {
+        "source": "/api/billing/checkout",
+        "function": "staffiqCreateCheckout"
+      },
+      {
+        "source": "/api/billing/subscription",
+        "function": "staffiqGetSubscription"
+      },
+      {
+        "source": "/api/billing/preview-upgrade",
+        "function": "staffiqPreviewUpgrade"
+      },
+      {
+        "source": "/api/billing/upgrade",
+        "function": "staffiqExecuteUpgrade"
+      },
+      {
+        "source": "/api/billing/downgrade",
+        "function": "staffiqScheduleDowngrade"
+      },
+      {
+        "source": "/api/billing/cancel",
+        "function": "staffiqCancelSubscription"
+      },
+      {
         "source": "/login",
         "destination": "/login/index.html"
       },
