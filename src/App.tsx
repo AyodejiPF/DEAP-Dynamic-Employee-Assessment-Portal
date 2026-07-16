@@ -86,6 +86,9 @@ import {
 import { analyticsImprovementIdeas, reportImprovementIdeas, type ImprovementIdea } from './reportingAnalyticsIdeas'
 import { CHATS } from './chats-module'
 import { AiGate } from './components/AiGate'
+import { GatedAIHelpAssistant } from './components/AIHelpAssistant'
+import { GatedSmartTasks } from './components/SmartTasks'
+import { AIUsageDashboard } from './components/AIUsageDashboard'
 import { logAIUsage, estimateTokens } from './ai-access'
 import type { TenantPlanID } from './ai-types'
 import {
@@ -198,6 +201,8 @@ type AppView =
   | 'help'
   | 'taking-test'
   | 'result'
+  | 'ai-usage'
+  | 'smart-tasks'
 
 type FeatureInventoryClassification = 'specific' | 'generic'
 type FeatureInventoryVisibility = 'public_user' | 'admin' | OwnerRole | 'system_only'
@@ -2623,9 +2628,11 @@ const navItems = [
   ['tests', 'tests', 'Tests'],
   ['employees', 'employees', 'Manage Users'],
   ['analytics', 'analytics', 'AI Analytics'],
+  ['smart-tasks', 'my-tests', 'Smart Tasks'],
   ['reports', 'reports', 'Reports'],
   ['bug-reports', 'notifications', 'Bug Reports'],
   ['feature-inventory', 'inventory', 'Feature Inventory'],
+  ['ai-usage', 'analytics', 'AI Usage'],
   ['tenants', 'admin', 'Client Workspaces'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
@@ -2645,7 +2652,9 @@ const adminViewPermissions: Partial<Record<AppView, PermissionKey>> = {
   tests: 'manage_tests',
   employees: 'manage_users',
   analytics: 'view_analytics',
+  'smart-tasks': 'view_analytics',
   reports: 'export_reports',
+  'ai-usage': 'view_analytics',
   settings: 'manage_settings',
 }
 
@@ -6472,6 +6481,18 @@ function App() {
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === OWNER_ROLE
   const isOwnerAdmin = currentUser?.role === OWNER_ROLE
   const canManageApiTokens = isAyodejiTokenOwner(currentUser)
+
+  // AI access context — reusable across all AI-gated views
+  const aiAccessContext = useMemo(() => ({
+    userId: currentUser?.userId ?? currentUser?.id ?? 'unknown',
+    userRole: currentUser?.role ?? 'employee',
+    tenantId: activeTenant.tenantId,
+    tenantPlanId: activeTenant.plan as TenantPlanID,
+    tenantAIAccess: 'enabled' as const,
+    userAIAccess: 'inherit' as const,
+    monthlyCallsUsed: 0,
+    monthlyLimit: activeTenant.plan === 'command' ? 500 : activeTenant.plan === 'growth' ? 200 : 0,
+  }), [currentUser, activeTenant.tenantId, activeTenant.plan])
   const usersVisibleToCurrentUser = users.filter((user) => !isTesterAccount(user))
   const activeSession = sessions.find((session) => session.id === activeSessionId && !isSessionNullified(session))
   const currentPermissions = currentUser ? (isAdmin && !isTesterAccount(currentUser) ? defaultPermissionsFor(currentUser) : (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser))) : undefined
@@ -9627,7 +9648,24 @@ function App() {
           />
         )}
         {view === 'my-results' && <MyResults currentUser={currentUser} sessions={sessions} tests={tests} />}
-        {view === 'help' && <HelpFaq currentUser={currentUser} />}
+        {view === 'help' && (
+          <section className="panel">
+            <div className="panel-heading-row">
+              <div>
+                <h2>Learning / Help Centre</h2>
+                <p>Browse FAQs, learning paths, and get AI-powered help with Staffiq.</p>
+              </div>
+            </div>
+            <GatedAIHelpAssistant aiContext={aiAccessContext} currentUser={currentUser} onToast={setToast} />
+            <HelpFaq currentUser={currentUser} />
+          </section>
+        )}
+        {view === 'ai-usage' && currentUser?.userId === 'U001' && (
+          <AIUsageDashboard currentUserId={currentUser.userId} onToast={setToast} />
+        )}
+        {view === 'smart-tasks' && (
+          <GatedSmartTasks aiContext={aiAccessContext} currentUser={currentUser} onToast={setToast} />
+        )}
         {view === 'taking-test' && activeSession && (
           <TestDelivery
             key={activeSession.id}

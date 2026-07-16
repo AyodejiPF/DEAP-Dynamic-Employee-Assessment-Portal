@@ -271,6 +271,7 @@ export async function buildAccessContext(params: {
   return {
     userId,
     userRole,
+    tenantId,
     tenantPlanId,
     tenantAIAccess,
     userAIAccess,

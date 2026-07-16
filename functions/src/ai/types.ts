@@ -63,6 +63,7 @@ export type AIAccessResult =
 export interface AIAccessContext {
   userId: string
   userRole: string
+  tenantId: string
   tenantPlanId: TenantPlanID
   tenantAIAccess: TenantAIAccess
   userAIAccess: UserAIAccess

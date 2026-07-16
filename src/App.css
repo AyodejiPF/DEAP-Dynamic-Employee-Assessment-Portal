@@ -7898,6 +7898,394 @@ details {
   color: var(--primary);
 }
 
+/* ─── AI Help Assistant ──────────────────────────────────────────── */
+
+.ai-help-assistant {
+  margin-top: 1.5rem;
+}
+
+.help-chat-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1rem;
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.help-chat-sidebar {
+  background: var(--surface-alt, #f8f9fa);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-right: 1px solid var(--border);
+}
+
+.help-chat-thread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.help-chat-thread button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--text);
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.help-chat-thread.active button {
+  background: var(--primary-light, rgba(0, 67, 49, 0.08));
+  font-weight: 600;
+}
+
+.help-chat-thread .icon-button {
+  flex-shrink: 0;
+  padding: 0.2rem;
+  opacity: 0.5;
+}
+
+.help-chat-thread .icon-button:hover {
+  opacity: 1;
+  color: var(--danger, #e74c3c);
+}
+
+.help-chat-main {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  overflow: hidden;
+}
+
+.help-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 2rem;
+}
+
+.help-welcome h3 {
+  margin: 0;
+}
+
+.quick-help-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  max-width: 480px;
+}
+
+.help-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.help-message {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 90%;
+}
+
+.help-message.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.help-message.assistant {
+  align-self: flex-start;
+}
+
+.help-message-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.help-message-body {
+  background: var(--surface-alt);
+  border-radius: 12px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.88rem;
+}
+
+.help-message-body p { margin: 0; }
+
+.help-message-body small {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.help-message.user .help-message-body {
+  background: var(--primary);
+  color: #fff;
+}
+
+.typing-indicator {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.help-chat-input {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.help-chat-input input {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+}
+
+/* ─── Smart Tasks ────────────────────────────────────────────────── */
+
+.smart-tasks-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.smart-tasks-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.smart-tasks-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.smart-tasks-examples .hint {
+  margin: 0 0.5rem 0 0;
+  font-size: 0.82rem;
+}
+
+.smart-tasks-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.smart-tasks-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.smart-tasks-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.smart-tasks-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.smart-tasks-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.smart-tasks-meta span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.smart-tasks-actions-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.smart-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.smart-task-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.smart-task-card.priority-high {
+  border-left: 4px solid var(--danger, #e74c3c);
+}
+
+.smart-task-card.priority-medium {
+  border-left: 4px solid var(--warning, #f39c12);
+}
+
+.smart-task-card.priority-low {
+  border-left: 4px solid var(--success, #27ae60);
+}
+
+.smart-task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.smart-task-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.smart-task-title-input {
+  flex: 1;
+  border: none;
+  border-bottom: 1px dashed var(--border);
+  padding: 0.25rem 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  background: none;
+  color: var(--text);
+}
+
+.priority-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+}
+
+.priority-badge.high { color: var(--danger, #e74c3c); border-color: var(--danger, #e74c3c); }
+.priority-badge.medium { color: var(--warning, #f39c12); border-color: var(--warning, #f39c12); }
+.priority-badge.low { color: var(--success, #27ae60); border-color: var(--success, #27ae60); }
+
+.smart-task-desc-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.84rem;
+  resize: vertical;
+  font-family: inherit;
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.smart-task-footer {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.smart-task-footer label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.smart-task-footer input {
+  width: 100px;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* ─── Dark mode overrides ─────────────────────────────────────── */
+
+:root[data-theme="dark"] .help-chat-layout {
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .help-chat-sidebar {
+  background: rgba(255,255,255,0.03);
+}
+
+:root[data-theme="dark"] .help-message-body {
+  background: rgba(255,255,255,0.06);
+}
+
+:root[data-theme="dark"] .help-message.user .help-message-body {
+  background: var(--primary);
+}
+
+:root[data-theme="dark"] .smart-task-title-input {
+  color: #e5e7eb;
+}
+
+:root[data-theme="dark"] .smart-task-desc-input {
+  background: rgba(255,255,255,0.04);
+}
+
 /* Learning tips toggle switch — slides right for ON (bright), left for OFF (dark), with on/off labels */
 .chats-toggle-label {
   display: inline-flex;

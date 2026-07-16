@@ -19,6 +19,7 @@ import { PLAN_AI_FEATURES, PLAN_RESTRICTION_MESSAGES } from './ai-types'
 export interface AIAccessContext {
   userId: string
   userRole: string
+  tenantId: string
   tenantPlanId: TenantPlanID
   tenantAIAccess: TenantAIAccess
   userAIAccess: UserAIAccess

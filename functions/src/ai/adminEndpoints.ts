@@ -97,7 +97,7 @@ export const aiAccessStatus = onRequest(
         getMonthlyCallsUsed(tenantId),
       ])
 
-      const baseCtx = { userId, userRole, tenantPlanId, tenantAIAccess, userAIAccess, monthlyLimit: null as number | null, monthlyCallsUsed }
+      const baseCtx = { userId, userRole, tenantId, tenantPlanId, tenantAIAccess, userAIAccess, monthlyLimit: null as number | null, monthlyCallsUsed }
       const featureMap = buildFeatureAccessMap(baseCtx)
 
       const aiEnabled = Object.values(featureMap).some(Boolean)
