@@ -10,14 +10,14 @@
  * Wired as the 'ai-usage' view in App.tsx navigation.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import {
   Activity, AlertTriangle, Search, Download, ShieldCheck, ToggleLeft, ToggleRight,
-  BarChart3, Settings2, FileText, Sparkles, TrendingUp, Clock, UsersRound,
-  Zap, DollarSign, XCircle, CheckCircle2,
+  BarChart3, Settings2, FileText, Sparkles,
+  Zap, XCircle, CheckCircle2,
 } from 'lucide-react'
-import type { AIFeatureName, TenantAIAccess, TenantPlanID } from '../ai-types'
-import { planDisplayName, logAIUsage } from '../ai-access'
+import type { AIFeatureName, TenantAIAccess, TenantPlanID, AIUsageEvent } from '../ai-types'
+import { planDisplayName } from '../ai-access'
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -269,7 +269,7 @@ export function AIUsageDashboard({ currentUserId, onToast }: AIUsageDashboardPro
 
   // ─── Render ──────────────────────────────────────────────────────
 
-  const TABS: Array<{ id: ConsoleTab; label: string; icon: JSX.Element }> = [
+  const TABS: Array<{ id: ConsoleTab; label: string; icon: ReactNode }> = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 size={16} /> },
     { id: 'anomalies', label: `Anomalies${criticalAnomalies + warningAnomalies > 0 ? ` (${criticalAnomalies + warningAnomalies})` : ''}`, icon: <AlertTriangle size={16} /> },
     { id: 'access-control', label: 'Access Control', icon: <Settings2 size={16} /> },
