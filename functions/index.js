@@ -2695,7 +2695,7 @@ exports.staffiqAIAggregation = onSchedule(
  * Only the Platform Owner (U001) can create grants.
  */
 exports.staffiqGrantCreate = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
@@ -2767,7 +2767,7 @@ exports.staffiqGrantCreate = onRequest(
  * Only the Platform Owner (U001) can revoke grants.
  */
 exports.staffiqGrantRevoke = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
@@ -2825,7 +2825,7 @@ exports.staffiqGrantRevoke = onRequest(
  * Accessible to Platform Owner and users with billing:view capability.
  */
 exports.staffiqGrantList = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
@@ -2860,7 +2860,7 @@ exports.staffiqGrantList = onRequest(
  * POST /api/webhooks/paystack — Receive Paystack webhook events.
  */
 exports.staffiqWebhookPaystack = onRequest(
-  { timeoutSeconds: 120, memory: '512MiB' },
+  { timeoutSeconds: 120, memory: '512MiB', invoker: 'public' },
   async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' })
@@ -2987,7 +2987,7 @@ exports.staffiqWebhookPaystack = onRequest(
  * POST /api/billing/checkout — Create a Paystack checkout session.
  */
 exports.staffiqCreateCheckout = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
@@ -3042,7 +3042,7 @@ exports.staffiqCreateCheckout = onRequest(
  * GET /api/billing/subscription — Get a tenant's active subscription.
  */
 exports.staffiqGetSubscription = onRequest(
-  { timeoutSeconds: 30, memory: '256MiB' },
+  { timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
@@ -3080,7 +3080,7 @@ exports.staffiqGetSubscription = onRequest(
  * POST /api/billing/preview-upgrade — Preview proration before upgrade.
  */
 exports.staffiqPreviewUpgrade = onRequest(
-  { timeoutSeconds: 30, memory: '256MiB' },
+  { timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
@@ -3132,7 +3132,7 @@ exports.staffiqPreviewUpgrade = onRequest(
  * POST /api/billing/upgrade — Execute upgrade with prorated charge.
  */
 exports.staffiqExecuteUpgrade = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
@@ -3227,7 +3227,7 @@ exports.staffiqExecuteUpgrade = onRequest(
  * POST /api/billing/downgrade — Schedule a downgrade at period end.
  */
 exports.staffiqScheduleDowngrade = onRequest(
-  { timeoutSeconds: 30, memory: '256MiB' },
+  { timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
@@ -3290,7 +3290,7 @@ exports.staffiqScheduleDowngrade = onRequest(
  * POST /api/billing/cancel — Cancel subscription at period end.
  */
 exports.staffiqCancelSubscription = onRequest(
-  { timeoutSeconds: 30, memory: '256MiB' },
+  { timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type')
