@@ -20,39 +20,39 @@
       },
       {
         "source": "/api/staffiq-state",
-        "function": "deapState"
+        "function": "staffiqState"
       },
       {
         "source": "/api/staffiq-course-images",
-        "function": "deapCourseImages"
+        "function": "staffiqCourseImages"
       },
       {
         "source": "/api/staffiq-question-banks",
-        "function": "deapQuestionBanks"
+        "function": "staffiqQuestionBanks"
       },
       {
         "source": "/api/staffiq-problem-reports",
-        "function": "deapProblemReports"
+        "function": "staffiqProblemReports"
       },
       {
         "source": "/api/staffiq-token/introspect",
-        "function": "deapTokenIntrospection"
+        "function": "staffiqTokenIntrospection"
       },
       {
         "source": "/api/private/feature_inventory",
-        "function": "deapFeatureInventory"
+        "function": "staffiqFeatureInventory"
       },
       {
         "source": "/api/private/feature_inventory/refresh",
-        "function": "deapFeatureInventory"
+        "function": "staffiqFeatureInventory"
       },
       {
         "source": "/api/private/feature_inventory/export",
-        "function": "deapFeatureInventory"
+        "function": "staffiqFeatureInventory"
       },
       {
         "source": "/api/private/feature_inventory/export/**",
-        "function": "deapFeatureInventory"
+        "function": "staffiqFeatureInventory"
       },
       {
         "source": "/login",
