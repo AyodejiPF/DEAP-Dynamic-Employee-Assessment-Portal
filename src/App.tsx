@@ -5634,7 +5634,7 @@ async function loadBundledQuestionBank(bank: { id: string; path: string }): Prom
 function App() {
   const [activeTenant, setActiveTenant] = useState<TenantSession>(() => getActiveTenant() ?? {
     tenantId: 'tenant_staffiq_main',
-    displayName: 'Staff-iQ Main Workspace',
+    displayName: 'StaffiQ Main Workspace',
     slug: 'staffiq-main',
     portalCode: 'staffiq-main',
     status: 'active',
@@ -10254,7 +10254,7 @@ function TenantManagementPanel({ activeTenant, onToast }: { activeTenant: Tenant
               <strong>{issuedCredential.password}</strong>
             </div>
             <div className="modal-actions">
-              <button className="primary-button" type="button" onClick={() => void copyToClipboard(`Staff-iQ sign in\nWorkspace: ${tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}\nUser ID: ${issuedCredential.user.userId}\nTemporary password: ${issuedCredential.password}`)}>
+              <button className="primary-button" type="button" onClick={() => void copyToClipboard(`StaffiQ sign in\nWorkspace: ${tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}\nUser ID: ${issuedCredential.user.userId}\nTemporary password: ${issuedCredential.password}`)}>
                 <Copy size={18} /> Copy Credential
               </button>
               <button className="secondary-button" type="button" onClick={() => setIssuedCredential(undefined)}>Done</button>

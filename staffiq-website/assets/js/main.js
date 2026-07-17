@@ -1,4 +1,4 @@
-/* Staff-iQ — site interactions (vanilla JS, no dependencies) */
+/* StaffiQ — site interactions (vanilla JS, no dependencies) */
 (function () {
   "use strict";
   var doc = document;
@@ -115,7 +115,7 @@
       if (success) { success.classList.add("show"); success.setAttribute("role", "status"); }
       form.querySelectorAll("input,select,textarea,button").forEach(function (el) { el.disabled = true; });
       // Open the user's mail client as the delivery mechanism for now.
-      window.location.href = "mailto:hello@Staff-iQ.ng?subject=Staff-iQ%20demo%20request%20from%20" +
+      window.location.href = "mailto:hello@staffiq.ng?subject=StaffiQ%20demo%20request%20from%20" +
         encodeURIComponent(company || name) + "&body=" + body;
     });
   });
@@ -256,3 +256,6 @@
   toggleMonthly.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('monthly'); } });
   toggleAnnual.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInterval('annual'); } });
 })();
+
+/* --- StaffiQ premium experience loader (2026-07-17, additive, reversible) --- */
+(function(){try{var s=document.createElement("script");s.src="/assets/js/experience.js";s.defer=true;document.head.appendChild(s);}catch(e){}})();

@@ -3,7 +3,13 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "firestore": {
@@ -15,7 +21,19 @@
   "hosting": {
     "site": "training-assessment-1c8ef",
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.md",
+      "**/docs/**",
+      "docs/internal/**",
+      "BUILD_BRIEF.md",
+      "**/.env",
+      "**/.env.*",
+      "**/*.internal.*",
+      "**/*.confidential.*"
+    ],
     "rewrites": [
       {
         "source": "/api/staffiq-auth",

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Staff-iQ — Design System
+   StaffiQ — Design System
    Brand: Smart employee assessment & workforce analytics for African SMEs
    By RevenStrat Integrated Services. Sibling product to TaskPulse.
 
@@ -377,7 +377,7 @@ body.nav-open .nav-toggle span::after { top: 0; transform: rotate(-45deg); }
 .eco-card { border-radius: var(--r-lg); padding: clamp(24px, 3vw, 34px); border: 1px solid rgba(255,255,255,0.12); position: relative; overflow: hidden; }
 .eco-card .eco-logo { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; margin-bottom: 8px; }
 .eco-card .eco-mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; }
-.eco-card.Staff-iQ { background: linear-gradient(165deg, #0A5B44, #00352A); color: #EAF3EE; }
+.eco-card.StaffiQ { background: linear-gradient(165deg, #0A5B44, #00352A); color: #EAF3EE; }
 .eco-card.taskpulse { background: #07382e; color: #EAF3EE; }
 .eco-card .eco-role { font-size: 0.8rem; letter-spacing: 0; text-transform: uppercase; font-weight: 700; opacity: 0.7; }
 .eco-plus { display: grid; place-items: center; }
