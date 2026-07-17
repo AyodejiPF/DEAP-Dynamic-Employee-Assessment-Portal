@@ -89,6 +89,7 @@ import { AiGate } from './components/AiGate'
 import { GatedAIHelpAssistant } from './components/AIHelpAssistant'
 import { GatedSmartTasks } from './components/SmartTasks'
 import { AIUsageDashboard } from './components/AIUsageDashboard'
+import { PricingPage } from './components/billing/PricingPage'
 import { logAIUsage, estimateTokens } from './ai-access'
 import type { TenantPlanID } from './ai-types'
 import {
@@ -204,6 +205,7 @@ type AppView =
   | 'result'
   | 'ai-usage'
   | 'smart-tasks'
+  | 'pricing'
 
 type FeatureInventoryClassification = 'specific' | 'generic'
 type FeatureInventoryVisibility = 'public_user' | 'admin' | OwnerRole | 'system_only'
@@ -2630,6 +2632,7 @@ const navItems = [
   ['bug-reports', 'notifications', 'Bug Reports'],
   ['feature-inventory', 'inventory', 'Feature Inventory'],
   ['ai-usage', 'analytics', 'AI Usage'],
+  ['pricing', 'settings', 'Pricing'],
   ['tenants', 'admin', 'Client Workspaces'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
@@ -2652,6 +2655,7 @@ const adminViewPermissions: Partial<Record<AppView, PermissionKey>> = {
   'smart-tasks': 'view_analytics',
   reports: 'export_reports',
   'ai-usage': 'view_analytics',
+  pricing: 'view_analytics',
   settings: 'manage_settings',
 }
 
@@ -9662,6 +9666,9 @@ function App() {
         )}
         {view === 'smart-tasks' && (
           <GatedSmartTasks aiContext={aiAccessContext} currentUser={currentUser} onToast={setToast} />
+        )}
+        {view === 'pricing' && (
+          <PricingPage />
         )}
         {view === 'taking-test' && activeSession && (
           <TestDelivery
