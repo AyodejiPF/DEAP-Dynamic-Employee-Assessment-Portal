@@ -90,6 +90,7 @@ import { GatedAIHelpAssistant } from './components/AIHelpAssistant'
 import { GatedSmartTasks } from './components/SmartTasks'
 import { AIUsageDashboard } from './components/AIUsageDashboard'
 import { PricingPage } from './components/billing/PricingPage'
+import { BillingPage } from './components/billing/BillingPage'
 import { logAIUsage, estimateTokens } from './ai-access'
 import type { TenantPlanID } from './ai-types'
 import {
@@ -206,6 +207,7 @@ type AppView =
   | 'ai-usage'
   | 'smart-tasks'
   | 'pricing'
+  | 'billing'
 
 type FeatureInventoryClassification = 'specific' | 'generic'
 type FeatureInventoryVisibility = 'public_user' | 'admin' | OwnerRole | 'system_only'
@@ -2633,6 +2635,7 @@ const navItems = [
   ['feature-inventory', 'inventory', 'Feature Inventory'],
   ['ai-usage', 'analytics', 'AI Usage'],
   ['pricing', 'settings', 'Pricing'],
+  ['billing', 'settings', 'Billing'],
   ['tenants', 'admin', 'Client Workspaces'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
@@ -2656,6 +2659,7 @@ const adminViewPermissions: Partial<Record<AppView, PermissionKey>> = {
   reports: 'export_reports',
   'ai-usage': 'view_analytics',
   pricing: 'view_analytics',
+  billing: 'manage_settings',
   settings: 'manage_settings',
 }
 
@@ -5630,7 +5634,7 @@ async function loadBundledQuestionBank(bank: { id: string; path: string }): Prom
 function App() {
   const [activeTenant, setActiveTenant] = useState<TenantSession>(() => getActiveTenant() ?? {
     tenantId: 'tenant_staffiq_main',
-    displayName: 'StaffiQ Main Workspace',
+    displayName: 'Staff-iQ Main Workspace',
     slug: 'staffiq-main',
     portalCode: 'staffiq-main',
     status: 'active',
@@ -9670,6 +9674,15 @@ function App() {
         {view === 'pricing' && (
           <PricingPage />
         )}
+        {view === 'billing' && activeTenant && (
+          <BillingPage
+            tenantId={activeTenant.tenantId}
+            currentUser={currentUser}
+            isPlatformOwner={isPlatformOwner({ userId: currentUser.userId, role: currentUser.role, fullName: currentUser.fullName })}
+            isBillingAdmin={false}
+            onToast={setToast}
+          />
+        )}
         {view === 'taking-test' && activeSession && (
           <TestDelivery
             key={activeSession.id}
@@ -10241,7 +10254,7 @@ function TenantManagementPanel({ activeTenant, onToast }: { activeTenant: Tenant
               <strong>{issuedCredential.password}</strong>
             </div>
             <div className="modal-actions">
-              <button className="primary-button" type="button" onClick={() => void copyToClipboard(`StaffiQ sign in\nWorkspace: ${tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}\nUser ID: ${issuedCredential.user.userId}\nTemporary password: ${issuedCredential.password}`)}>
+              <button className="primary-button" type="button" onClick={() => void copyToClipboard(`Staff-iQ sign in\nWorkspace: ${tenants.find((tenant) => tenant.id === issuedCredential.user.tenantId)?.slug ?? issuedCredential.user.tenantId}\nUser ID: ${issuedCredential.user.userId}\nTemporary password: ${issuedCredential.password}`)}>
                 <Copy size={18} /> Copy Credential
               </button>
               <button className="secondary-button" type="button" onClick={() => setIssuedCredential(undefined)}>Done</button>
