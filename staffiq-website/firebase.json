@@ -115,6 +115,10 @@
         "function": "staffiqCancelSubscription"
       },
       {
+        "source": "/api/entitlements/check",
+        "function": "staffiqEntitlementsCheck"
+      },
+      {
         "source": "/login",
         "destination": "/login/index.html"
       },
