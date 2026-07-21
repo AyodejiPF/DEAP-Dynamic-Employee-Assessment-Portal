@@ -2273,7 +2273,7 @@ const seedUsers: User[] = [
   {
     id: 'u-admin',
     userId: 'U001',
-    email: 'admin@iicocece.com',
+    email: 'info@staffiq.ng',
     fullName: 'Ayodeji Falope',
     displayName: 'Ayodeji',
     password: 'GODhelpUS',
@@ -17826,7 +17826,7 @@ function SettingsPanel({
   onToggleChats: () => void
   onToast: (message: string) => void
 }) {
-  const [activeTab, setActiveTab] = useState<'testerAccounts' | 'credentials' | 'permissions' | 'appearance' | 'branding' | 'apiTokens'>('permissions')
+  const [activeTab, setActiveTab] = useState<'testerAccounts' | 'credentials' | 'permissions' | 'appearance' | 'branding' | 'apiTokens' | 'brandGuide'>('permissions')
   const [revealedUser, setRevealedUser] = useState<User>()
   const visibleSettingsUsers = useMemo(() => users.filter((user) => !isTesterAccount(user)), [users])
   const [selectedUsers, setSelectedUsers] = useState<string[]>(() => visibleSettingsUsers.filter((user) => user.role !== OWNER_ROLE && user.role !== 'admin').map((user) => user.id))
@@ -18012,6 +18012,11 @@ function SettingsPanel({
         <button className={activeTab === 'apiTokens' ? 'active' : ''} type="button" onClick={() => setActiveTab('apiTokens')}>
           <KeyRound size={18} /> Token Studio
         </button>
+        {canManageTesterAccounts && (
+          <button className={activeTab === 'brandGuide' ? 'active' : ''} type="button" onClick={() => setActiveTab('brandGuide')}>
+            <Sparkles size={18} /> Brand Guide
+          </button>
+        )}
       </div>
       {(activeTab === 'credentials' || activeTab === 'permissions') && (
         <div className="settings-filter-row">
@@ -18034,6 +18039,22 @@ function SettingsPanel({
           onVerifyTesterAccountPassword={onVerifyTesterAccountPassword}
           onToast={onToast}
         />
+      )}
+
+      {activeTab === 'brandGuide' && canManageTesterAccounts && (
+        <section className="panel">
+          <div className="panel-heading-row">
+            <div>
+              <h2>Staff-iQ Brand Guide</h2>
+              <p>The brand story, visual identity, voice and usage principles. Visible only to the Platform Owner.</p>
+            </div>
+          </div>
+          <iframe
+            src="/brand/staffiq-brand-guide.html"
+            title="Staff-iQ Brand Guide"
+            style={{ width: '100%', height: '80vh', border: 'none', borderRadius: 12 }}
+          />
+        </section>
       )}
 
       {activeTab === 'credentials' && (
