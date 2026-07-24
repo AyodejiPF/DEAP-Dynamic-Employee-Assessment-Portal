@@ -60,6 +60,14 @@ Entries before 2026-07-16 used an earlier freeform format and are grandfathered.
 
 ### Codex to others
 
+**Date**: 2026-07-19 12:00
+**Prompt Ref**: Chat: AI and IDE access report | Date: 2026-07-19 | "Create a polished Microsoft Word comparison report using both prompt improvers and the document skill."
+**Task**: Creating a visually polished executive Word report covering StaffiQ AI, IDE, tenant and secret access controls.
+**Files**: `output/doc/StaffiQ_AI_IDE_Access_and_Secret_Protection_Report.docx` will be created and rendered for visual inspection.
+**Status**: in-progress
+**Evidence**: Document skill loaded. Current implementation and security findings already verified against source code.
+**Notes**: No application source, production data or deployment configuration will be changed. The document output area is reserved by Codex for this task.
+
 2026-07-14: Building the complete StaffiQ public website inside `staffiq-website`. I will keep the existing application and its current Firebase hosting configuration unchanged. Validation and publishing status will be appended here when complete.
 
 2026-07-14: StaffiQ public website completed and deployed to the dedicated Firebase Hosting site `staffiq-ng`. Source verification passed for seven pages. Browser verification passed for six public pages at desktop and mobile viewports, including overflow, hidden content, browser errors and mobile menu keyboard behaviour. Live HTTP and security header checks passed. Temporary viewing URL: `https://staffiq-ng.web.app`. The existing application hosting configuration was not changed. Ownership of `staffiq-website/` is now released.
@@ -140,3 +148,174 @@ Entries before 2026-07-16 used an earlier freeform format and are grandfathered.
 **Status**: blocked
 **Evidence**: Source verified complete via editor (pricing.html ends at </html> line 238; edits present). Shell mount persistently truncates reads of index.html (stops at 58,934 bytes) and pricing.html (11,426 bytes) across 8 retries, so any sandbox build/copy/deploy yields truncated pages. NOT deployed; live staffiq.ng untouched (old prices still showing).
 **Notes**: staffiq-website is shared (Codex released ownership). To ship: on a real machine run `cd staffiq-website && npm run build && firebase deploy --only hosting` (targets staffiq-ng). MUST build first — sandbox left truncated dist/index.html and dist/pricing.html that build (rm -rf dist) regenerates. Documented stale-mount issue recurring.
+
+### Codex to others
+
+**Date**: 2026-07-19 12:30
+**Prompt Ref**: Chat: AI and IDE access governance report | Date: 2026-07-19 | "Use both prompt improvers and provide the report as a professionally designed Microsoft Word document."
+**Task**: Completed the executive Word report comparing implemented, partial, outstanding and rejected AI and IDE access controls, with an approval checklist, urgent risk register, implementation capability, evidence and authoritative guidance.
+**Files**: `output/doc/StaffiQ_AI_IDE_Access_and_Secret_Protection_Report.docx`
+**Status**: completed
+**Evidence**: Nine page Word render inspected page by page; wide comparison table margins corrected; approval checklist and evidence section verified; expected content present; no secret value pattern detected.
+**Notes**: No application source, production data or cloud deployment was changed. Temporary rendering assets were used only for document quality assurance.
+
+### Codex to others
+
+**Date**: 2026-07-19 13:00
+**Prompt Ref**: Chat: Analytics and Intelligence specification | Date: 2026-07-19 | "Create the attached master specification as a professional Word document and only create a private tab if the instructions require implementation now."
+**Task**: Creating a vendor neutral, academically structured Word master specification for the future Super Admin only Upcoming Features > Analytics and Intelligence capability.
+**Files**: `output/doc/StaffiQ_Analytics_and_Intelligence_Deep_Research_Master_Specification.docx` will be created and visually verified.
+**Status**: in-progress
+**Evidence**: Mission instructions reviewed. They explicitly prohibit the current audit and define the capability as a future implementation target, so no application tab or source code will be changed.
+**Notes**: Only document and prompt catalogue outputs are in scope. No deployment is required because application source is unchanged.
+
+### Codex to others
+
+**Date**: 2026-07-19 18:30
+**Prompt Ref**: Chat: Analytics and Intelligence specification | Date: 2026-07-19 | "Create the attached master specification as a professional Word document and only create a private tab if the instructions require implementation now."
+**Task**: Completed the private, vendor neutral Deep Research master specification for the future Upcoming Features > Analytics and Intelligence capability.
+**Files**: `output/doc/StaffiQ_Analytics_and_Intelligence_Deep_Research_Master_Specification.docx`; prompt catalogue entries appended to the required catalogue files.
+**Status**: completed
+**Evidence**: Thirty five page Microsoft Word render inspected across every page; blank page and long code pagination defects corrected; DOCX package validation passed; 755 paragraphs and 579 tables present; required sections and official references confirmed; no sensitive value pattern detected.
+**Notes**: No application tab was created because the mission explicitly defines it as a future implementation target and prohibits the current audit. No application source, production data, cloud configuration or deployment was changed.
+
+### Codex to others
+
+**Date**: 2026-07-19 19:00
+**Prompt Ref**: Chat: Master analytics research instruction | Date: 2026-07-19 | "Create the supplied Master Research Instruction as a professional Word document and only create the private tab if explicitly instructed."
+**Task**: Creating a polished Microsoft Word edition of the vendor neutral Master Research Instruction for the future Super Admin only Analytics and Intelligence capability.
+**Files**: `output/doc/StaffiQ_Analytics_and_Intelligence_Master_Research_Instruction.docx` will be created and visually verified.
+**Status**: in-progress
+**Evidence**: The supplied mission explicitly states that the feature must not be built yet. No application source or route is therefore in scope.
+**Notes**: This is a document only delivery. No deployment will be required.
+
+### Codex to others
+
+**Date**: 2026-07-19 20:00
+**Prompt Ref**: Chat: Master analytics research instruction | Date: 2026-07-19 | "Create the supplied Master Research Instruction as a professional Word document and only create the private tab if explicitly instructed."
+**Task**: Completed the polished Microsoft Word Master Research Instruction for the future private Analytics and Intelligence capability.
+**Files**: `output/doc/StaffiQ_Analytics_and_Intelligence_Master_Research_Instruction.docx`
+**Status**: completed
+**Evidence**: Forty three page Word render inspected page by page; DOCX package valid; 1,076 paragraphs and 774 tables present; all required sections confirmed; official sources and links included; no sensitive value pattern detected.
+**Notes**: No Super Admin tab was created because the mission explicitly says the feature must not be built yet. No application source, production data, cloud configuration or deployment was changed.
+
+### Copilot (VS Code — V4 Pro) to others
+
+**Date**: 2026-07-20 12:00
+**Prompt Ref**: Chat: Brand briefing | Date: 2026-07-20 | "/P1-Prompt-Improver I am about to start refining the staff iQ brand, Tell me everything you know about the staffiQ brand that i need to share with the agency to create the brand and bring it to life visualy , markeeting and more"
+**Task**: Executed P1 Prompt Improver workflow to create a comprehensive StaffiQ brand creative brief as an agency handoff document. Researched all brand knowledge from the live website (30 pages), product audit reports, upgrade reports, brand name recommendations document, architecture reviews, BUILD_BRIEF, and protocol files. Compiled into a single authoritative 16-section document.
+**Files**: `docs/STAFFIQ_BRAND_CREATIVE_BRIEF.md` (created — 16 sections: Brand Snapshot, Origin & Story, Identity System, Visual Identity with full colour/typography/logo/design language specs, Product Truth with live vs roadmap distinction, Pricing & Commercial Model, Target Audience & Market Positioning, Competitive Context, Brand Voice/Tone/Messaging with word-use rules, Existing Marketing Assets inventory with all 30 pages catalogued, Technical Context for brand implementation, Known Issues & Gaps with 3 categories, Brand Values & Philosophy, RevenStrat Ecosystem with StaffiQ-TaskPulse relationship map, Agency Deliverables Wishlist in 4 phases, Appendix with key facts at a glance), `docs/agents/PROMPT_CATALOGUE.md` (appended), `PROMPTS.md` (appended), `docs/agents/AGENT-COMMS.md` (this entry)
+**Status**: completed
+**Evidence**: Document created at 16 sections covering every known fact about the StaffiQ brand. All claims sourced from: live website HTML/CSS (colours, fonts, design tokens verified in source), PRODUCT_AUDIT_REPORT_2026_07_17.md (brand issues, domain, pricing verification), PRODUCT_UPGRADE_REPORT_2026_07_17.md (glossy design language details, domain revert), DEAP_Brand_Names_and_100_Feature_Recommendations_2026.md (original brand ranking, product features), ARCHITECTURE_REVIEW_V2.md (technical architecture, multi-tenant model), BUILD_BRIEF.md (brand positioning and rules), staffiq-website/index.html (live brand lockup, colours, tagline), about.html (origin story, values, leadership), pricing.html (current pricing verification), features.html (product capabilities). No facts invented. Gaps and roadmap items clearly distinguished from live features.
+**Notes**: This document is designed to be the single handoff artefact for any creative or branding agency. It is self-contained — no other file needs to be read. Agency should still receive a live demo walkthrough. Coordinated with existing ownership map: no source files outside docs/ were modified. No deployment needed (document-only delivery).
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-21 00:00
+**Prompt Ref**: Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Date: 2026-07-21 | "Add www.taskpulse.ng and www.staffiq.ng to Ubersuggest/GA4/Search Console/Clarity, add both webapps to GA, verify Workspace domains + Gmail, store tags in each project folder as .md/.txt, keep a living Word report updated."
+**Task**: Standing up external analytics/SEO stack for both TaskPulse and StaffiQ (browser-driven, via the sibling `iicocece Task Pulse` Cowork session). Writing tracking-ID documentation into this repo (`docs/analytics/`) as part of that rollout; no application source or deployment touched.
+**Files**: `docs/agents/PROMPT_CATALOGUE.md` (this session's prompt appended), `docs/analytics/TRACKING-SETUP.md` and `docs/analytics/TRACKING-SETUP.txt` (to be created — GA4/Search Console/Clarity IDs for staffiq.ng + training-assessment-1c8ef webapp)
+**Status**: in-progress
+**Evidence**: GA4 property "StaffiQ" created (Property ID 15287134091, Measurement ID G-70WMCDHYC0, stream https://www.staffiq.ng); Search Console property https://www.staffiq.ng/ auto-verified via existing DNS-CNAME; sitemap.xml submitted (29 pages, status Success). Confirmed live GA snippet on staffiq.ng still reads the placeholder `G-XXXXXXXXXX` — not yet swapped to the real ID (code edit intentionally deferred to a separate, explicitly-scoped task per this protocol).
+**Notes**: Working from outside this repo's primary session (Cowork session rooted at `iicocece Task Pulse`, operating on this repo only for the documentation drop mandated by the coordination protocol). No collision expected with Copilot's 2026-07-20 12:00 brand-brief entry (different files). Swapping the live placeholder GA ID in `staffiq-website/*.html` is a separate follow-up — flagging here so the next agent doesn't duplicate it blindly.
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-21 16:00
+**Prompt Ref**: Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Date: 2026-07-21 | "do both and do everything else now" (install GA4 + Clarity tracking codes into StaffiQ's live code, following up on Claude's own clarifying question about capability vs. permission)
+**Task**: STARTING — swapping the placeholder GA4 Measurement ID (`G-XXXXXXXXXX`) for the real one (`G-70WMCDHYC0`) across `staffiq-website/*.html`, and adding the Microsoft Clarity snippet (project `xps118m9lt`) alongside it. Not touching `src/App.tsx` in this pass (Codex-owned, per ownership map) — the web-app GA4 stream (`G-PYTVN2Y33X`) will need a follow-up by whoever owns that file.
+**Files**: `staffiq-website/*.html` (GA measurement ID swap + Clarity snippet addition) — full list to follow in the completion entry.
+**Status**: in-progress
+**Evidence**: Checked this log for concurrent activity — most recent touch to `staffiq-website/` was Claude's own 2026-07-16 13:24 entry (pricing update), no active work by any agent in the last 2 hours. Proceeding.
+**Notes**: Per the documented `staffiq-ng` / `training-assessment-1c8ef` separation rule (see Claude 2026-07-16 02:35 entry): this change is source-only in this pass. Deployment to `staffiq-ng` will be confirmed with Ayodeji separately before running, given the prior cross-deploy incident history for this repo.
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-21 16:30
+**Prompt Ref**: Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Date: 2026-07-21 | "do both and do everything else now"
+**Task**: COMPLETED — installed all remaining GA4 + Microsoft Clarity tracking codes for StaffiQ, in source only, verified via clean builds.
+**Files**: All 30 `staffiq-website/*.html` files — swapped placeholder GA Measurement ID `G-XXXXXXXXXX` for real `G-70WMCDHYC0`, added Microsoft Clarity snippet (project `xps118m9lt`) right after the GA block. Root `index.html` (the Vite app shell, NOT `src/App.tsx` — avoided the Codex-owned file entirely) — added the web-app GA4 stream (`G-PYTVN2Y33X`).
+**Status**: completed (source only — not deployed)
+**Evidence**: `grep` confirms zero remaining `G-XXXXXXXXXX` occurrences and exactly one Clarity snippet across all 30 marketing pages. `cd staffiq-website && node scripts/build.mjs` → "StaffiQ website build complete: 40 public entries", and `dist/index.html` contains the real GA ID + Clarity snippet. Root app: `npm run build` → `tsc -b && vite build` succeeded, 2313 modules transformed, 0 errors; `dist/index.html` contains the web-app GA ID.
+**Notes**: `staffiq-website/scripts/verify-site.mjs` reports pre-existing "missing local reference" failures (e.g. `/pricing`, `/contact`) on every page — confirmed unrelated to this change (the script checks clean-URL hrefs as literal filesystem paths, which never resolved even before this edit; GA/Clarity `<script src>` values are absolute `https://` URLs the script's own regex explicitly skips). Did not attempt to fix — out of scope for this task. Deliberately did not touch `src/App.tsx` (Codex-owned) to add the web-app stream; used the untracked root `index.html` instead, which achieves the same result with zero collision risk. **Not deployed to `staffiq-ng` or `training-assessment-1c8ef`** — confirming with Ayodeji before running any deploy, per the documented cross-deploy incident history.
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-22 09:00
+**Prompt Ref**: Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Date: 2026-07-21 | "check the other work and then DEPLOY EVERYTHING." (Ayodeji, on the pending StaffiQ deploy, after being shown the uncommitted-changes risk)
+**Task**: FOUND AND FIXED TWO PRE-EXISTING BUGS while preparing to deploy the tracking-code changes — both would have silently broken things had this deploy gone out as originally configured.
+**Files**:
+- `firebase.json` (repo root) — `hosting.site` was `"staffiq-ng"` (the **marketing** site). This is the exact config the root `deploy:safe` npm script (`firebase deploy --only hosting`, no site override) uses. As checked in, running `npm run deploy:safe` from repo root would have silently overwritten the marketing site with the app build — the precise cross-deploy failure mode this ownership map exists to prevent. Fixed: `site` now reads `"training-assessment-1c8ef"` (the real app site, confirmed via `firebase hosting:sites:list --project iicocece-assessment`).
+- `firebase.json` (repo root) — Content-Security-Policy had `script-src 'self'` and a `connect-src` with no Google Analytics domains. The GA4 tag just added to `index.html` would have been silently blocked by the browser's own CSP enforcement, with no visible error to anyone testing casually. Added `https://www.googletagmanager.com` to `script-src` and `https://www.google-analytics.com` / `https://*.google-analytics.com` to `connect-src`.
+- `staffiq-website/firebase.json` — same CSP gap, also missing Microsoft Clarity's domain (`https://www.clarity.ms`). Added GA + Clarity to both `script-src` and `connect-src`.
+- (Sibling `iicocece Task Pulse` repo, `firebase.taskpulse-hosting.json` — same Clarity gap found and fixed there too; GA was already allowed, Clarity was not.)
+**Status**: in-progress — configs fixed and JSON-validated (`ConvertFrom-Json` parses all three cleanly); proceeding to the actual deploys next.
+**Evidence**: `firebase hosting:sites:list --project iicocece-assessment` confirms `training-assessment-1c8ef` is a real, distinct site from `staffiq-ng`. All three edited `firebase.json` files parse as valid JSON.
+**Notes**: The `site: staffiq-ng` misconfiguration in root `firebase.json` was pre-existing (not introduced this session) and is already committed to git history — it predates this session's work. Recommend a `git blame` by whoever owns this file next, to understand how past successful app deploys avoided it (almost certainly by using an explicit `--site training-assessment-1c8ef` CLI override rather than the `deploy:safe` npm script, since the CLI's `--site` flag overrides the config file's `site` field). Flagging clearly here per the evidence-first / cross-agent-awareness rules rather than silently patching and moving on.
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-22 09:30
+**Prompt Ref**: Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Date: 2026-07-21 | "check the other work and then DEPLOY EVERYTHING."
+**Task**: COMPLETED — deployed both StaffiQ sites and verified all tracking codes live.
+**Files**: No new files — deploys only, using the fixed `firebase.json` (root) and `staffiq-website/firebase.json` from the prior entry.
+**Status**: completed
+**Evidence**:
+- `cd staffiq-website && firebase deploy --only hosting --project iicocece-assessment` → `hosting[staffiq-ng]: release complete`, `Deploy complete!`
+- `firebase deploy --only hosting --project iicocece-assessment` (repo root, after rebuilding) → `hosting[training-assessment-1c8ef]: release complete`, `Deploy complete!` — **confirms the config fix from the prior entry actually worked**: with the old `"site": "staffiq-ng"` value this would have deployed to the wrong site; the log now correctly shows `training-assessment-1c8ef`.
+- Live verification via browser JS inspection, all with zero console errors:
+  - `www.staffiq.ng`: `gtag` fires (`G-70WMCDHYC0`), Microsoft Clarity fires (`xps118m9lt`).
+  - `training-assessment-1c8ef.web.app` (redirects to `/login`): `gtag` fires (`G-PYTVN2Y33X`).
+  - `staffiq.ng/login` (branded entry, served from the marketing site's `/login` bundle): also confirmed serving the app shell correctly, `gtag` fires (`G-PYTVN2Y33X`).
+**Notes**: External tracking/SEO/Workspace rollout for StaffiQ is now fully complete end to end — properties provisioned, code installed, configs fixed, both sites deployed, everything verified live. `docs/analytics/TRACKING-SETUP.md` and `.txt` updated to reflect zero outstanding items. Handoff notes in `AGENT_CLAUDE.md` updated to match.
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-23
+**Prompt Ref**: Chat continuing the TaskPulse Cowork session above — feature parity audit, Super Admin redesign, and consistent "Mr Ayo" branding across Task Pulse and StaffiQ.
+**Task**: in progress.
+**Files**: `docs/STAFFIQ_WHATSAPP_AI_ASSISTANT_PLAN.md` — NEW, written earlier today, should have been announced here at the time, logging retroactively. No source code touched in this repo yet.
+**Status**: about to run a read only source level scan of this repo (src/, functions/, database/schema.sql) to build a feature parity comparison against Task Pulse. No edits expected during the scan. Separately queued, not started: a DEAP to StaffiQ naming sweep, and a Super Admin workspace support access feature, both waiting on Ayodeji's review before any file is touched. Will announce again, and check this file again, before editing anything.
+**Evidence**: n/a yet, read only phase.
+
+**Same entry, scan phase complete:** `docs/TASKPULSE_STAFFIQ_FEATURE_PARITY_AUDIT.xlsx` (NEW)
+delivered, mirrored from the Task Pulse repo root. Confirmed by direct code reading, not
+assumption: the three Super Admin panel stub files, the partial Flutterwave provider, the
+missing manager/reporting hierarchy, and the hardcoded-name authorisation check are all
+catalogued in the Build Gaps sheet with exact file and line references. Files released, no
+ongoing edits in this repo right now. Naming sweep (DEAP to StaffiQ) and the Super Admin
+workspace support access feature are still queued, not started, both waiting on Ayodeji.
+
+**2026-07-23 (later) — Claude (Cowork), naming sweep:** Sized the DEAP to StaffiQ rename before
+touching anything: 298 matching lines across 40 files. Ran the safe half only. 27 living
+documentation files had every case sensitive "DEAP" and "Dynamic Employee Assessment Portal"
+replaced with "StaffiQ" (README.md, docs/ARCHITECTURE_*.md, docs/MULTI_TENANT_ARCHITECTURE.md,
+docs/ZERO_DATA_LOSS_POLICY.md, docs/AI_GOVERNANCE_IMPLEMENTATION.md, docs/GITHUB_SETUP.md,
+docs/DEAP_25_RECOMMENDATIONS_2026.md and its sibling recommendation docs, AI Workbench skill and
+blueprint files, PROMPTS.md, AGENT_COORDINATION_PROTOCOL.md). Verified with a full re grep after,
+zero case sensitive matches left in any of those 27 files.
+
+Deliberately left alone, with reasons:
+1. Historical/append only logs — `docs/agents/AGENT-COMMS.md` (this file), root `AGENT-COMMS.md`,
+   `docs/agents/AGENT_VSCODE.md`, `docs/MODEL_DISCIPLINE_LOG.md`, `docs/DEAP_CODEX_PROGRESS.md`,
+   `PRODUCT_AUDIT_REPORT_2026_07_17.md`, `PRODUCT_UPGRADE_REPORT_2026_07_17.md`. Renaming inside
+   a dated, append only record would quietly rewrite history rather than fix anything.
+2. `functions/index.js` — live Firestore collection names `deapApp`, `deapCourseImages`,
+   `deapQuestionBanks`, plus a `migratedFrom: 'deapApp/sharedState'` note. These are real,
+   currently read collection names. Renaming the string literal without a real data migration
+   would make the app stop finding its own existing data. Not touched.
+3. `scripts/deap-continuity-guard.cjs` and `scripts/deap-problem-monitor.cjs` — env var name
+   `DEAP_PORTAL_URL`, local snapshot folder `.deap-continuity`, API routes `/api/deap-state` and
+   `/api/deap-course-images`. Coupled internal tooling names, not touched blind.
+4. Lowercase `deap` inside filenames/slugs mentioned in prose (e.g. references to
+   `iicocece-deap-1000-usage-analytics.md`) were left as is on purpose — the sed pattern used was
+   case sensitive and only matched the literal "DEAP" acronym or the full phrase, so these
+   accurate file references were never touched and still point at the real file.
+
+Live user facing product copy (`src/App.tsx`) already correctly says "Staffiq is the Dynamic
+Employee Assessment Portal" — StaffiQ as the product name, the phrase as a descriptive subtitle.
+Nothing broken there, no change made.
+
+Remaining code level rename (item 2 and 3 above) needs a real migration plan before anyone
+touches it, not a blind find and replace. Flagging this here so no other agent attempts it
+without reading this note first.

@@ -1,6 +1,6 @@
 # AI Governance System — Implementation Reference
 
-> **Project**: StaffiQ / DEAP Dynamic Employee Assessment Portal  
+> **Project**: StaffiQ / StaffiQ StaffiQ  
 > **Date**: 2026-07-16  
 > **Build**: 0 TypeScript errors, 2303 modules, Vite v8.0.10  
 > **Deployed**: https://training-assessment-1c8ef.web.app  

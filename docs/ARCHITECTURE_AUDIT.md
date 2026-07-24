@@ -1,7 +1,7 @@
 # StaffiQ Architecture & UX Audit — Full Report
 
 > **Date**: 2026-07-16 | **Auditor**: VS Code Copilot (V4 Pro)
-> **Project**: DEAP Dynamic Employee Assessment Portal (StaffiQ)
+> **Project**: StaffiQ StaffiQ (StaffiQ)
 > **Research**: Firebase Hosting docs, multisite best practices
 
 ---

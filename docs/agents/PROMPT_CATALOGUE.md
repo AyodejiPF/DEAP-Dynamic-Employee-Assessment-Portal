@@ -168,3 +168,23 @@ Per the coordination protocol v2.0 (section 7), every agent across every IDE MUS
 ### 2026-07-16 | Chat: Pricing update | Agent: Claude Cowork
 - **Prompt**: "change the pricing: N7,500 becomes N10,000 and N10,000 becomes N12,500; hurry and deploy immediately."
 - **Objective**: Raise StaffiQ marketing pricing (Starter to 10,000, Growth to 12,500) and deploy to staffiq.ng. [Catalogued late]
+
+### 2026-07-19 | Chat: AI and IDE access report | Agent: Codex
+- **Prompt**: Use both prompt improvement skills and the document skill to replace the previous technical response with a polished Microsoft Word report containing beautiful organised tables, professional icons, emoticons and emojis.
+- **Objective**: Produce and visually verify an executive quality Word report comparing completed, partial and outstanding AI, IDE, tenant and secret access controls.
+
+### 2026-07-19 | Chat: Analytics and Intelligence specification | Agent: Codex
+- **Prompt**: "Doc as usual, but if you need to create a tab for the superadmin ALONE, you can do it if the instructions say so." Attachment provides the complete mission for a vendor neutral Deep Research master specification governing a future Super Admin only Upcoming Features > Analytics and Intelligence capability.
+- **Objective**: Produce a professionally structured Microsoft Word master specification without auditing the project or implementing the future tab prematurely.
+
+### 2026-07-19 | Chat: Master analytics research instruction | Agent: Codex
+- **Prompt**: "Doc as usual and only create the Super Admin tab if you were instructed to do so." Attachment supplies a comprehensive Master Research Instruction for the future private Analytics and Intelligence capability and expressly states that the feature must not be built yet.
+- **Objective**: Produce the polished Microsoft Word edition of the research instruction, preserve its vendor neutral execution requirements and avoid premature application implementation.
+
+### 2026-07-21 | Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Agent: Claude
+- **Prompt**: Add www.taskpulse.ng and www.staffiq.ng to Ubersuggest, Google Analytics 4, Google Search Console, and Microsoft Clarity; add both domains' webapps to GA; verify both domains in Google Workspace Admin and get Gmail working for staffiq.ng; store every resulting tracking ID/tag for each site inside its own project folder in .md and .txt format; produce and keep updated a single MS Word status report covering all of the above.
+- **Objective**: Stand up the full external analytics/SEO/tracking stack (marketing sites + webapps) for both TaskPulse and StaffiQ, confirm Workspace domain/Gmail health, persist the resulting tags locally for both projects, and report progress in a living Word document.
+
+### 2026-07-21 | Chat: TaskPulse Cowork session — Ubersuggest/GA/Search Console/Clarity rollout | Agent: Claude
+- **Prompt**: "do both and do everything else now" — confirming Claude should (1) retry the TaskPulse Search Console sitemap submission and (2) install the real GA4 Measurement ID + Microsoft Clarity snippet into StaffiQ's actual site code (swap placeholder `G-XXXXXXXXXX` for `G-70WMCDHYC0` across `staffiq-website/*.html`, add Clarity project `xps118m9lt`, add GA4 stream `G-PYTVN2Y33X` to the app), following up on Claude's own clarifying question about capability vs. permission.
+- **Objective**: Install the previously-provisioned GA4 + Clarity tracking codes into StaffiQ's live source (source edit only in this pass; deploy to be confirmed separately given the site's documented cross-deploy incident history).

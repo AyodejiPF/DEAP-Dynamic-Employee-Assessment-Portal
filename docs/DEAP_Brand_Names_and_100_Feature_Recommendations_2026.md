@@ -1,4 +1,4 @@
-# DEAP: Brand Names and 100 Feature Recommendations
+# StaffiQ: Brand Names and 100 Feature Recommendations
 
 Prepared 10 July 2026 for Ayodeji Falope, RevenStrat Integrated Services.
 

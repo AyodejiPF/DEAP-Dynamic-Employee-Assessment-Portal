@@ -134,3 +134,8 @@ input:not([type="checkbox"]):not([type="radio"]) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Global rule: never split a word across lines inside a button */
+button {
+  white-space: nowrap;
+}

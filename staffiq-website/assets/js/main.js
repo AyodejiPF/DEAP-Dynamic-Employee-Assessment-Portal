@@ -114,6 +114,9 @@
       var success = form.querySelector(".form-success");
       if (success) { success.classList.add("show"); success.setAttribute("role", "status"); }
       form.querySelectorAll("input,select,textarea,button").forEach(function (el) { el.disabled = true; });
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "generate_lead", { lead_type: "demo_request", team_size: size });
+      }
       // Open the user's mail client as the delivery mechanism for now.
       window.location.href = "mailto:hello@staffiq.ng?subject=StaffiQ%20demo%20request%20from%20" +
         encodeURIComponent(company || name) + "&body=" + body;

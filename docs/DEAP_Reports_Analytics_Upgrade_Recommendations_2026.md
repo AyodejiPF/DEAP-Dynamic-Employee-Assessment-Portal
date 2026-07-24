@@ -1,8 +1,8 @@
-# DEAP Reports and Analytics Upgrade Recommendations
+# StaffiQ Reports and Analytics Upgrade Recommendations
 
 Date: 2026-05-09
 
-This Markdown catalogue recommends 100 focused upgrades for the DEAP Reporting and Analytics areas: 50 upgrades for the Reports tab and 50 upgrades for the Analytics tab. The recommendations are based on current LMS, BI, dashboard, assessment, accessibility, and reporting patterns from established platforms and documentation.
+This Markdown catalogue recommends 100 focused upgrades for the StaffiQ Reporting and Analytics areas: 50 upgrades for the Reports tab and 50 upgrades for the Analytics tab. The recommendations are based on current LMS, BI, dashboard, assessment, accessibility, and reporting patterns from established platforms and documentation.
 
 ## Research Sources Reviewed
 
@@ -21,15 +21,15 @@ This Markdown catalogue recommends 100 focused upgrades for the DEAP Reporting a
 - University of Washington item-analysis guidance for difficulty, discrimination, and distractor quality: https://www.washington.edu/assessment/scanning-scoring/scoring/reports/item-analysis/
 - University of Minnesota item-analysis report guide for point-biserial and discrimination interpretation: https://survey.umn.edu/exams/additional-resources/report-options-and-interpretation-guide/item-analysis-report
 
-## Design Principles for DEAP Reports and Analytics
+## Design Principles for StaffiQ Reports and Analytics
 
-DEAP should treat reports as evidence records and analytics as decision intelligence. Reports should answer "what happened, who did it, when, and can it be trusted?" Analytics should answer "what does this mean, who needs action, what changed, and what should we do next?" Both areas should support filters, auditability, export, clear visual hierarchy, role permissions, accessibility, and AI-assisted interpretation.
+StaffiQ should treat reports as evidence records and analytics as decision intelligence. Reports should answer "what happened, who did it, when, and can it be trusted?" Analytics should answer "what does this mean, who needs action, what changed, and what should we do next?" Both areas should support filters, auditability, export, clear visual hierarchy, role permissions, accessibility, and AI-assisted interpretation.
 
 ## 50 Reports Tab Upgrade Recommendations
 
 ### R01. Two-Step Report Deletion Confirmation
 
-When an admin deletes a report entry, DEAP should first ask, "Are you sure you want to delete this report?" If the admin confirms, DEAP should then show a second warning that says the deletion cannot be restored once completed. This two-step flow prevents accidental report deletion and matches the seriousness expected for audit records, even though the system should still place the item in Trash for 30 days as a safety layer.
+When an admin deletes a report entry, StaffiQ should first ask, "Are you sure you want to delete this report?" If the admin confirms, StaffiQ should then show a second warning that says the deletion cannot be restored once completed. This two-step flow prevents accidental report deletion and matches the seriousness expected for audit records, even though the system should still place the item in Trash for 30 days as a safety layer.
 
 ### R02. 30-Day Report Trash
 
@@ -45,11 +45,11 @@ Restoring a trashed report should require a confirmation pop-up and should creat
 
 ### R05. Report Deletion Reason Field
 
-Before a report is moved to Trash, DEAP should ask the admin to choose or type a reason such as "network error," "duplicate attempt," "test run," "wrong user," "training error," or "other." This creates accountability and makes future audit reviews easier.
+Before a report is moved to Trash, StaffiQ should ask the admin to choose or type a reason such as "network error," "duplicate attempt," "test run," "wrong user," "training error," or "other." This creates accountability and makes future audit reviews easier.
 
 ### R06. Bulk Report Delete With Preview
 
-Admins should be able to select multiple report entries with checkboxes and delete them in bulk. Before deletion, DEAP should show a preview listing the number of entries, affected users, affected tests, affected departments, and expected analytics impact.
+Admins should be able to select multiple report entries with checkboxes and delete them in bulk. Before deletion, StaffiQ should show a preview listing the number of entries, affected users, affected tests, affected departments, and expected analytics impact.
 
 ### R07. Bulk Restore From Trash
 
@@ -65,7 +65,7 @@ Each report should display an integrity badge such as Active, Trashed, Restored,
 
 ### R10. Report Impact Preview
 
-Before deleting, restoring, nullifying, or excluding a report, DEAP should show the effect on key metrics such as average score, pass rate, completion count, reveal-answer rate, timeout rate, and department ranking. This prevents admins from accidentally changing important dashboards without understanding the consequence.
+Before deleting, restoring, nullifying, or excluding a report, StaffiQ should show the effect on key metrics such as average score, pass rate, completion count, reveal-answer rate, timeout rate, and department ranking. This prevents admins from accidentally changing important dashboards without understanding the consequence.
 
 ### R11. Filtered Report Export
 
@@ -81,11 +81,11 @@ Scheduled reports should respect permissions. A department manager should only r
 
 ### R14. Report Templates
 
-DEAP should provide reusable templates such as Compliance Evidence Report, Department Performance Report, User Attempt History, Question Bank Health Report, Admin Activity Report, and Promotion Readiness Report. Templates reduce repetitive work and ensure consistent reporting.
+StaffiQ should provide reusable templates such as Compliance Evidence Report, Department Performance Report, User Attempt History, Question Bank Health Report, Admin Activity Report, and Promotion Readiness Report. Templates reduce repetitive work and ensure consistent reporting.
 
 ### R15. Custom Report Builder
 
-Admins should be able to create reports by selecting fields, filters, grouping, sorting, date range, and export format. This mirrors Moodle Workplace report builder patterns and makes DEAP more useful as the organization grows.
+Admins should be able to create reports by selecting fields, filters, grouping, sorting, date range, and export format. This mirrors Moodle Workplace report builder patterns and makes StaffiQ more useful as the organization grows.
 
 ### R16. Saved Report Views
 
@@ -97,7 +97,7 @@ Summary reports should allow drillthrough into the underlying records. For examp
 
 ### R18. Report Back Button Flow
 
-After drilling into a detailed report, DEAP should provide a clear back button that returns the admin to the original filtered report. This keeps exploration smooth and prevents admins from getting lost inside nested data.
+After drilling into a detailed report, StaffiQ should provide a clear back button that returns the admin to the original filtered report. This keeps exploration smooth and prevents admins from getting lost inside nested data.
 
 ### R19. Report Snapshot Archive
 
@@ -105,7 +105,7 @@ Every exported report should optionally save a snapshot of the data used at expo
 
 ### R20. Report Version History
 
-If a report definition changes, DEAP should preserve versions of that report template. Admins should be able to compare what changed, who changed it, and whether old scheduled reports used the previous version.
+If a report definition changes, StaffiQ should preserve versions of that report template. Admins should be able to compare what changed, who changed it, and whether old scheduled reports used the previous version.
 
 ### R21. Recent Activity Trail Enhancements
 
@@ -117,7 +117,7 @@ Each report should receive a trust score based on missing data, nullified attemp
 
 ### R23. Exception Report
 
-DEAP should provide an exception report that automatically lists suspicious or unusual records, such as duplicate attempts, very fast completions, timeout-heavy attempts, repeated reveal-answer behavior, and restored deleted entries.
+StaffiQ should provide an exception report that automatically lists suspicious or unusual records, such as duplicate attempts, very fast completions, timeout-heavy attempts, repeated reveal-answer behavior, and restored deleted entries.
 
 ### R24. Network Failure Report
 
@@ -141,7 +141,7 @@ Each question bank should have a report profile showing imported question count,
 
 ### R29. Compliance Evidence Pack
 
-DEAP should generate a compliance evidence pack that includes assignment records, completion records, pass thresholds, attempt dates, score summaries, remediation actions, report changes, and admin audit events. This is useful for internal audit, regulators, and board reporting.
+StaffiQ should generate a compliance evidence pack that includes assignment records, completion records, pass thresholds, attempt dates, score summaries, remediation actions, report changes, and admin audit events. This is useful for internal audit, regulators, and board reporting.
 
 ### R30. Printable Individual Result Report
 
@@ -173,7 +173,7 @@ Admins should be able to annotate a report period with notes such as "new questi
 
 ### R37. Report Access Log
 
-DEAP should log who viewed, exported, deleted, restored, or scheduled each report. Sensitive reports need visibility into access behavior, especially when employee performance data is involved.
+StaffiQ should log who viewed, exported, deleted, restored, or scheduled each report. Sensitive reports need visibility into access behavior, especially when employee performance data is involved.
 
 ### R38. Report Export Watermark
 
@@ -217,7 +217,7 @@ Report creation, viewing, exporting, deletion, restoration, and scheduling shoul
 
 ### R48. Report API Export
 
-DEAP should eventually expose secure report export APIs for approved integrations with HRIS, business intelligence tools, or internal data warehouses. API access should be logged and permission controlled.
+StaffiQ should eventually expose secure report export APIs for approved integrations with HRIS, business intelligence tools, or internal data warehouses. API access should be logged and permission controlled.
 
 ### R49. Report Empty-State Guidance
 
@@ -255,7 +255,7 @@ Every chart and metric should support drillthrough into the exact users, attempt
 
 ### A07. Question Exposure Balance Score
 
-DEAP should measure whether random question selection is balanced across the bank. The score should identify underused and overexposed questions so the platform avoids repeatedly showing the same questions.
+StaffiQ should measure whether random question selection is balanced across the bank. The score should identify underused and overexposed questions so the platform avoids repeatedly showing the same questions.
 
 ### A08. Underused Question Analytics
 
@@ -271,7 +271,7 @@ Each question should show the percentage of users who answered it correctly. Que
 
 ### A11. Question Discrimination Index
 
-DEAP should estimate whether high-performing users answer a question correctly more often than low-performing users. A question with poor or negative discrimination may be ambiguous, miskeyed, or testing the wrong concept.
+StaffiQ should estimate whether high-performing users answer a question correctly more often than low-performing users. A question with poor or negative discrimination may be ambiguous, miskeyed, or testing the wrong concept.
 
 ### A12. Distractor Selection Frequency
 
@@ -295,7 +295,7 @@ Analytics should compare Easy, Medium, and Hard performance. A steep drop from E
 
 ### A17. Score by Question Type
 
-DEAP should compare standard and weighted questions for each user, department, and test. This helps identify whether the workforce is struggling with factual accuracy, applied judgement, or both.
+StaffiQ should compare standard and weighted questions for each user, department, and test. This helps identify whether the workforce is struggling with factual accuracy, applied judgement, or both.
 
 ### A18. Response Time by Topic
 
@@ -307,7 +307,7 @@ Analytics should show whether users slow down, speed up, or become erratic as a 
 
 ### A20. Timeout Rate
 
-DEAP should measure the percentage of questions where the timer expires before the user chooses an option. High timeout rates can point to overly difficult questions, mobile layout friction, or unrealistic time limits.
+StaffiQ should measure the percentage of questions where the timer expires before the user chooses an option. High timeout rates can point to overly difficult questions, mobile layout friction, or unrealistic time limits.
 
 ### A21. Reveal-Answer Rate
 
@@ -315,7 +315,7 @@ Analytics should track how often users reveal the answer and lose points. A high
 
 ### A22. Hint-to-Pass Correlation
 
-If hints are used, DEAP should compare hint usage with final pass outcomes. This shows whether hints support learning or whether hint users still need stronger remediation.
+If hints are used, StaffiQ should compare hint usage with final pass outcomes. This shows whether hints support learning or whether hint users still need stronger remediation.
 
 ### A23. Confidence Accuracy Gap
 
@@ -331,7 +331,7 @@ The platform should track how many interrupted or abandoned attempts are success
 
 ### A26. Retry Improvement Delta
 
-DEAP should compare first-attempt scores with retake scores. Improvement suggests training impact, while no improvement suggests weak remediation, poor feedback, or repeated guessing.
+StaffiQ should compare first-attempt scores with retake scores. Improvement suggests training impact, while no improvement suggests weak remediation, poor feedback, or repeated guessing.
 
 ### A27. Department Risk Ranking
 
@@ -343,7 +343,7 @@ Analytics should compare teams under different supervisors while respecting priv
 
 ### A29. Promotion Readiness Score
 
-DEAP should combine hard-question score, weighted judgement score, consistency, completion history, and manager notes into a promotion readiness indicator. This gives leadership a stronger evidence base.
+StaffiQ should combine hard-question score, weighted judgement score, consistency, completion history, and manager notes into a promotion readiness indicator. This gives leadership a stronger evidence base.
 
 ### A30. Certification Readiness Rate
 
@@ -351,7 +351,7 @@ Analytics should show how many users meet all requirements for certification, in
 
 ### A31. Compliance Evidence Score
 
-For compliance-heavy assessments, DEAP should measure whether each user has been assigned, started, completed, passed, remediated, certified, and audited. This produces an evidence score for regulatory or internal audit use.
+For compliance-heavy assessments, StaffiQ should measure whether each user has been assigned, started, completed, passed, remediated, certified, and audited. This produces an evidence score for regulatory or internal audit use.
 
 ### A32. AI Executive Brief
 
@@ -363,7 +363,7 @@ Admins should have a chat interface that can answer questions about users, tests
 
 ### A34. AI Intervention Recommendations
 
-DEAP should rank employees by intervention priority and explain the reasons, such as failed tests, weak topics, timeouts, reveal-answer behavior, late starts, or low engagement. Each recommendation should include a practical next action.
+StaffiQ should rank employees by intervention priority and explain the reasons, such as failed tests, weak topics, timeouts, reveal-answer behavior, late starts, or low engagement. Each recommendation should include a practical next action.
 
 ### A35. AI Department Training Plans
 
@@ -407,7 +407,7 @@ Admins should compare selected users, departments, tests, question banks, or dat
 
 ### A45. Learning Impact Analytics
 
-DEAP should connect assessment results to remediation and learning center activity. Admins should see whether users who read help content, complete micro-lessons, or retake weak topics improve afterward.
+StaffiQ should connect assessment results to remediation and learning center activity. Admins should see whether users who read help content, complete micro-lessons, or retake weak topics improve afterward.
 
 ### A46. Question Bank Quality Trend
 

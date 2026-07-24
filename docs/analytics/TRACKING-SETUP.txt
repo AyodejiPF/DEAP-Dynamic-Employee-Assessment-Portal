@@ -1,0 +1,66 @@
+STAFFIQ — TRACKING & ANALYTICS QUICK REFERENCE
+Updated: 2026-07-21 by Claude (Cowork)
+
+DOMAINS
+- Marketing site: https://www.staffiq.ng
+- Web app: https://training-assessment-1c8ef.web.app (also staffiq.ng/login)
+
+GOOGLE ANALYTICS 4
+- Property name: StaffiQ
+- Property ID: 15287134091
+- Measurement ID: G-70WMCDHYC0
+- Stream: StaffiQ Marketing Site -> https://www.staffiq.ng
+- Account: ayodeji@revenstrat.com
+- DONE 2026-07-21: real ID swapped into all 30 staffiq-website/*.html pages, build-verified. NOT YET DEPLOYED.
+- Web app stream: StaffiQ Web App -> https://training-assessment-1c8ef.web.app
+  Stream ID: 15293490672 | Measurement ID: G-PYTVN2Y33X
+  DONE 2026-07-21: added to root index.html (Vite app shell, not src/App.tsx), build-verified. NOT YET DEPLOYED.
+
+GOOGLE SEARCH CONSOLE
+- Property: https://www.staffiq.ng/ (URL-prefix)
+- Verified: yes, auto via DNS-CNAME (domain name provider method)
+- Sitemap: sitemap.xml submitted, Success, 29 pages
+
+UBERSUGGEST
+- Project: staffiq.ng
+- Location/Language: Nigeria / English
+- Business type: Employee Training & Assessment Platform
+- Competitors tracked: TalentLMS, Cornerstone OnDemand, Moodle, Docebo, Thinkific, LearnWorlds + 4 more
+- Starter keywords: 15 (workplace skills plan, learning manager system, skill gap assessment, ...)
+
+GOOGLE WORKSPACE
+- Domain staffiq.ng: Secondary domain, Verified
+- Gmail: DONE (2026-07-21). Was blocked by a wrong MX record (0 staffiq.ng., a null MX).
+  Fixed at Go54 DNS host: @ MX record now reads "1 SMTP.GOOGLE.COM." (matches taskpulse.ng).
+  Stray extra MX record ("gmail" name) also removed. Gmail activation confirmed live.
+
+MICROSOFT CLARITY
+- Project: StaffiQ | Project ID: xps118m9lt | URL: www.staffiq.ng | Industry: Careers & Education
+- Account: ayodeji@revenstrat.com (Google sign-in)
+- DONE 2026-07-21: snippet installed across all 30 marketing pages, build-verified. NOT YET DEPLOYED. Snippet:
+  <script type="text/javascript">
+      (function(c,l,a,r,i,t,y){
+          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+          t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+      })(window, document, "clarity", "script", "xps118m9lt");
+  </script>
+
+OUTSTANDING: NONE. Fully deployed and verified live as of 2026-07-22.
+DONE: GA4 stream for training-assessment-1c8ef.web.app — added 2026-07-21
+DONE: Microsoft Clarity project created and code installed — 2026-07-21
+DONE: staffiq.ng MX record fixed and Gmail activated — 2026-07-21
+DONE: GA placeholder swapped + web-app GA stream installed — 2026-07-21
+DONE: Deployed both sites — 2026-07-22.
+  staffiq-website -> staffiq-ng: "Deploy complete!"
+  repo root -> training-assessment-1c8ef: "Deploy complete!"
+  Verified live: www.staffiq.ng fires gtag (G-70WMCDHYC0) + Clarity (xps118m9lt).
+  training-assessment-1c8ef.web.app and staffiq.ng/login both fire gtag (G-PYTVN2Y33X).
+  Zero console errors anywhere.
+BUGS FOUND + FIXED during deploy prep (see AGENT-COMMS.md 2026-07-22 09:00 entry):
+  1. Root firebase.json hosting.site was "staffiq-ng" (wrong site!) -- deploy:safe would
+     have overwritten the marketing site with the app build. Fixed to
+     "training-assessment-1c8ef", confirmed via firebase hosting:sites:list and the
+     actual deploy log.
+  2. Root + staffiq-website firebase.json CSPs didn't allow GA/Clarity script domains --
+     tags would have been silently blocked by the browser. Fixed before deploying.

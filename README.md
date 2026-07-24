@@ -1,4 +1,4 @@
-# StaffiQ / DEAP — Dynamic Employee Assessment Portal
+# StaffiQ / StaffiQ — StaffiQ
 
 > A production-deployed training, assessment, and analytics platform for Nigerian SMEs.
 > Built with React 19, TypeScript 6, Vite 8, and Firebase.

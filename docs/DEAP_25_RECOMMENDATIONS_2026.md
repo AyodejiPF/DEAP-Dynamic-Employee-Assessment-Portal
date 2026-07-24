@@ -1,7 +1,7 @@
-# DEAP: 25 Recommendations Across 25 Categories
+# StaffiQ: 25 Recommendations Across 25 Categories
 
 > Prepared 13 July 2026 for Ayodeji Falope, RevenStrat Integrated Services.
-> Every recommendation is grounded in the existing DEAP codebase and designed for Nigerian SMEs where employees may have low tech literacy and CEOs want dashboard intelligence without technical effort.
+> Every recommendation is grounded in the existing StaffiQ codebase and designed for Nigerian SMEs where employees may have low tech literacy and CEOs want dashboard intelligence without technical effort.
 
 ---
 
@@ -111,11 +111,11 @@ Below the four numbers, show a simple green/yellow/red traffic-light indicator f
 
 ---
 
-## 6. AI Integration — Universal AI Assistant ("Ask DEAP")
+## 6. AI Integration — Universal AI Assistant ("Ask StaffiQ")
 
 **Problem:** AI features exist (analytics intelligence, help intelligence) but are siloed in specific views. Users must know where to find them. There is no single entry point for asking questions in plain language.
 
-**Solution:** Add a persistent "Ask DEAP" floating button (bottom-right corner) on every screen. Clicking it opens a chat panel where any user can type a question in plain English or Pidgin:
+**Solution:** Add a persistent "Ask StaffiQ" floating button (bottom-right corner) on every screen. Clicking it opens a chat panel where any user can type a question in plain English or Pidgin:
 - Employee: "Which test I go write today?"
 - Admin: "Show me everyone wey fail compliance"
 - CEO: "Which department dey do well?"
@@ -244,7 +244,7 @@ Start with UI labels and buttons, then progress to question translation. Use a J
 **Problem:** The current first-login experience is a blank dashboard. Employees do not know what to do. There is no mobile-friendly, familiar onboarding pattern.
 
 **Solution:** Create a WhatsApp-style chat onboarding flow:
-1. App shows a chat bubble: "Welcome to DEAP! 👋 I be your assistant."
+1. App shows a chat bubble: "Welcome to StaffiQ! 👋 I be your assistant."
 2. "You get test wey dey wait you. You ready?"
 3. User taps "Yes" or "Show me later"
 4. If yes, guide them to their first test step by step
@@ -330,7 +330,7 @@ Use batched writes and transactions for atomicity. Keep the single-document patt
 **Solution:** Build a "Compliance Evidence Pack" feature that:
 - Bundles assignment proof, completion status, pass marks, remediation records, certificates, and audit actions into a single downloadable pack
 - Generates a PDF with a cover page, table of contents, and numbered pages
-- Includes a verification code that can be validated on the DEAP website
+- Includes a verification code that can be validated on the StaffiQ website
 - Supports Nigerian regulatory requirements (NAICOM, SEC, etc.)
 
 **AI Integration Angle:** AI reviews the evidence pack for completeness before export and flags missing items: "This pack is missing certificates for 3 employees. Include them?"
@@ -347,7 +347,7 @@ Use batched writes and transactions for atomicity. Keep the single-document patt
 
 **Problem:** The CEO wants information but may not want to type or navigate. They may be driving, in a meeting, or simply prefer speaking.
 
-**Solution:** Add voice input to the "Ask DEAP" assistant (from recommendation #6). The CEO taps the microphone icon and speaks:
+**Solution:** Add voice input to the "Ask StaffiQ" assistant (from recommendation #6). The CEO taps the microphone icon and speaks:
 - "How many people pass this month?"
 - "Which department dey struggle?"
 - "Show me compliance report"
@@ -446,7 +446,7 @@ Also add a "Generate Report" button on the executive dashboard that creates the 
 
 **Low-Tech Employee Impact:** Not directly applicable (executive feature), but the automated insights mean the CEO can act faster to support struggling departments.
 
-**CEO/Executive Impact:** The CEO receives a WhatsApp message every Monday: "DEAP Weekly Report: 78% pass rate. 3 employees at risk. Reply 'details' for more." No app opening required.
+**CEO/Executive Impact:** The CEO receives a WhatsApp message every Monday: "StaffiQ Weekly Report: 78% pass rate. 3 employees at risk. Reply 'details' for more." No app opening required.
 
 **Effort:** Medium | **Impact:** High
 
@@ -541,7 +541,7 @@ Also add a "Generate Report" button on the executive dashboard that creates the 
 | Priority | Category | Effort | Impact |
 |----------|----------|--------|--------|
 | 🔴 1 | Security — Real Authentication | High | High |
-| 🔴 2 | AI Integration — Universal "Ask DEAP" | High | High |
+| 🔴 2 | AI Integration — Universal "Ask StaffiQ" | High | High |
 | 🔴 3 | CEO Dashboard — Executive Summary | Medium | High |
 | 🔴 4 | Simplicity — Voice-Guided Test Taking | Low | High |
 | 🟡 5 | UX — Guided First-Login Tour | Medium | High |
@@ -556,11 +556,11 @@ Also add a "Generate Report" button on the executive dashboard that creates the 
 
 ## Appendix: AI Integration Summary
 
-Every recommendation in this document includes an AI integration angle. Here is a consolidated view of how AI transforms DEAP:
+Every recommendation in this document includes an AI integration angle. Here is a consolidated view of how AI transforms StaffiQ:
 
 | AI Capability | Where Used |
 |---------------|------------|
-| Natural language chat | #6 Ask DEAP, #12 Onboarding, #17 Voice CEO Dashboard |
+| Natural language chat | #6 Ask StaffiQ, #12 Onboarding, #17 Voice CEO Dashboard |
 | Predictive analytics | #7 Pass Risk Prediction, #15 Scalability monitoring |
 | Speech-to-text / text-to-speech | #2 Voice-Guided Test Taking, #17 Voice CEO Dashboard |
 | Language translation | #11 Pidgin/Native Language Support, #19 Pidgin Subtitles |

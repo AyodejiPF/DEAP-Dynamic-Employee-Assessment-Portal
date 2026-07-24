@@ -1,4 +1,4 @@
-# DEAP Zero Data Loss Policy
+# StaffiQ Zero Data Loss Policy
 
 ## Non Negotiable Principle
 

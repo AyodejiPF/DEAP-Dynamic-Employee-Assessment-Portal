@@ -1,0 +1,4 @@
+interface:
+  display_name: "/P2 2 Prompt And Feature Improver"
+  short_description: "Use /P2 for both workflows then implement"
+  default_prompt: "Use /P2 to improve this request with both workflows and implement it."

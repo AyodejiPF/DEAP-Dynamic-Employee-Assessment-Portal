@@ -1,4 +1,66 @@
 User-agent: *
 Allow: /
 
+# --- AI crawlers explicitly allowed (training + live citation/browsing) ---
+
+# OpenAI (ChatGPT)
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+
+# Anthropic (Claude)
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: Claude-User
+Allow: /
+
+# Google AI (Gemini training, NotebookLM, Vertex AI, Assistant read-aloud, agents)
+User-agent: Google-Extended
+Allow: /
+User-agent: Google-CloudVertexBot
+Allow: /
+User-agent: Google-NotebookLM
+Allow: /
+User-agent: Google-Read-Aloud
+Allow: /
+User-agent: Google-Agent
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+
+# Apple Intelligence / Siri / Spotlight
+User-agent: Applebot
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+
+# Amazon (Alexa+, Nova models)
+User-agent: Amazonbot
+Allow: /
+
+# Meta AI (Facebook, Instagram, WhatsApp)
+User-agent: Meta-ExternalAgent
+Allow: /
+
+# DuckDuckGo AI-assisted answers
+User-agent: DuckAssistBot
+Allow: /
+
+# Mistral (Le Chat)
+User-agent: MistralAI-User
+Allow: /
+
+# Common Crawl (feeds many open-weight LLMs)
+User-agent: CCBot
+Allow: /
+
 Sitemap: https://www.staffiq.ng/sitemap.xml

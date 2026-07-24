@@ -1,4 +1,4 @@
-# Shared Multi-Agent Coordination Protocol for DEAP / StaffiQ
+# Shared Multi-Agent Coordination Protocol for StaffiQ / StaffiQ
 
 This document is the master prompt that should be shared with Claude, Codex, Antigravity, and any other AI agent working on this project. It defines how all agents should communicate, how prompts should be recorded, how work should be tracked, and how the repository should behave as a shared team workspace.
 
@@ -391,7 +391,7 @@ When you work, do not just change code. Also preserve continuity, traceability, 
 
 Use the following text as the prompt you share with Claude, Codex, Antigravity, and any other AI agent:
 
-You are joining a shared multi-agent workflow for the DEAP / StaffiQ repository. This repository is the source of truth for the project. You must operate as part of a team, not as a private assistant.
+You are joining a shared multi-agent workflow for the StaffiQ / StaffiQ repository. This repository is the source of truth for the project. You must operate as part of a team, not as a private assistant.
 
 Before you begin work, read the following files from the project root:
 

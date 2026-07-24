@@ -1,4 +1,4 @@
-# StaffiQ / DEAP — Human Prompts Only
+# StaffiQ / StaffiQ — Human Prompts Only
 
 > Catalogue of every human prompt sent to any agent in this repository.
 > Organized by chat session, then by date. Agent responses NOT included.
@@ -47,3 +47,18 @@
 ---
 
 *Last updated: 2026-07-16 | 20 prompts across 3 chat sessions*
+
+---
+
+## Chat: 2026-07-19 — Analytics and Intelligence Research Specification
+
+### 2026-07-19
+21. "Doc as usual, but if you need to create a tab for the superadmin ALONE, you can do it if the instructions say so." Attachment: authoritative mission specification for the future Super Admin only Upcoming Features > Analytics and Intelligence capability.
+22. "Doc as usual and only create the Super Admin tab if you were instructed to do so." Attachment: Master Research Instruction for a future Super Admin only Analytics and Intelligence capability, explicitly stating that the feature must not be built yet.
+
+---
+
+## Chat: 2026-07-20 — StaffiQ Brand Creative Brief
+
+### 2026-07-20
+23. "/P1-Prompt-Improver I am about to start refining the staff iQ brand, Tell me everything you know about the staffiQ brand that i need to share with the agency to create the brand and bring it to life visualy , markeeting and more"

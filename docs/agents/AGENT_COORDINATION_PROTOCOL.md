@@ -318,7 +318,7 @@ This repository MAY be accessed from multiple laptops on a local network. The fo
 
 The canonical source of truth for all code and documentation.
 
-- **Remote URL**: `https://github.com/AyodejiPF/DEAP-Dynamic-Employee-Assessment-Portal`
+- **Remote URL**: `https://github.com/AyodejiPF/StaffiQ-Dynamic-Employee-Assessment-Portal`
 - **How to use**: `git clone` or `git pull` from any machine with internet access.
 - **When to use**: Always. This is the primary sync mechanism. Every agent on every machine MUST pull before starting work and push after completing it.
 
@@ -337,8 +337,8 @@ Shared skills, global settings, and agent configuration that applies across all 
 
 A Windows SMB network share for LAN-speed file access when Git push/pull is too slow for large assets.
 
-- **Path pattern**: `\\<MACHINE-NAME>\<SHARE-NAME>\Projects\DEAP\`
-- **Example**: `\\AYODEJI-DESK\Shared\Projects\DEAP\`
+- **Path pattern**: `\\<MACHINE-NAME>\<SHARE-NAME>\Projects\StaffiQ\`
+- **Example**: `\\AYODEJI-DESK\Shared\Projects\StaffiQ\`
 - **How to set up** (human must do this once):
   1. On the primary machine, right-click the project folder → Properties → Sharing → Share.
   2. Note the machine name (run `hostname` in PowerShell).
@@ -415,7 +415,7 @@ Catalogue prompts in docs/agents/PROMPT_CATALOGUE.md.
 Paste this into any new agent's system prompt:
 
 ```
-You are joining a shared multi-agent team for the DEAP / StaffiQ repository.
+You are joining a shared multi-agent team for the StaffiQ / StaffiQ repository.
 You MUST treat the repository as a shared workspace. Read the full protocol
 at docs/agents/AGENT_COORDINATION_PROTOCOL.md before any changes.
 
@@ -437,9 +437,9 @@ RULES:
 - Leave handoff notes in your per-agent file.
 
 NETWORK:
-- Primary: Git at https://github.com/AyodejiPF/DEAP-Dynamic-Employee-Assessment-Portal
+- Primary: Git at https://github.com/AyodejiPF/StaffiQ-Dynamic-Employee-Assessment-Portal
 - Secondary: OneDrive at C:\Users\AyodejiPF\OneDrive\Desktop\AI Workbench\
-- Tertiary: Network share at \\<MACHINE-NAME>\<SHARE-NAME>\Projects\DEAP\ (if configured)
+- Tertiary: Network share at \\<MACHINE-NAME>\<SHARE-NAME>\Projects\StaffiQ\ (if configured)
 ```
 
 ---

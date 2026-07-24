@@ -1,4 +1,4 @@
-# DEAP Product, UI/UX, and Analytics Recommendation Catalogue
+# StaffiQ Product, UI/UX, and Analytics Recommendation Catalogue
 
 Research basis: this catalogue is informed by current LMS, assessment, dashboard, accessibility, and AI assistant patterns, including D2L Brightspace Performance+ learning analytics, Moodle Workplace report scheduling and certifications, Canvas New Analytics, University of Washington item analysis guidance, Perplexity Sonar API documentation, GoodData dashboard accessibility guidance, ArcGIS dashboard accessibility guidance, and WCAG contrast guidance.
 
@@ -126,7 +126,7 @@ Allow admins to configure waiting periods, maximum attempts, remediation require
 
 27. Learning Paths
 
-Group tests, lessons, remediation tasks, and certificates into structured paths for new agents, team leaders, compliance officers, and managers. This makes DEAP feel like a professional development system rather than only a test portal.
+Group tests, lessons, remediation tasks, and certificates into structured paths for new agents, team leaders, compliance officers, and managers. This makes StaffiQ feel like a professional development system rather than only a test portal.
 
 28. Peer Cohort Comparison
 
@@ -206,7 +206,7 @@ Let admins schedule reports to themselves, managers, or executives weekly or mon
 
 46. SCORM and LTI Support
 
-Support standard learning packages and integrations so DEAP can work with universities and corporate LMS ecosystems. This makes the platform easier to adopt alongside existing systems.
+Support standard learning packages and integrations so StaffiQ can work with universities and corporate LMS ecosystems. This makes the platform easier to adopt alongside existing systems.
 
 47. API Access
 
@@ -214,7 +214,7 @@ Expose secure APIs for tests, users, results, question banks, and analytics. Thi
 
 48. Multi-Tenant Organisations
 
-Allow separate organisations, departments, or client companies to use the same platform while keeping data isolated. This supports scaling DEAP beyond one internal deployment.
+Allow separate organisations, departments, or client companies to use the same platform while keeping data isolated. This supports scaling StaffiQ beyond one internal deployment.
 
 49. Data Retention Policies
 

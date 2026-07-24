@@ -1,4 +1,4 @@
-# StaffiQ / DEAP — Comprehensive Architecture Review v2
+# StaffiQ / StaffiQ — Comprehensive Architecture Review v2
 
 > **Date**: 2026-07-16
 > **Scope**: Full codebase, hosting, data model, UX, and deployment pipeline
@@ -23,7 +23,7 @@
 
 ## 1. Executive Summary
 
-StaffiQ/DEAP is a **production-deployed, functional, and revenue-ready** employee assessment platform serving Nigerian SMEs. The architecture got it to market quickly — which is its greatest strength — but now needs structural reinforcement for security, scalability, and multi-agent team collaboration.
+StaffiQ/StaffiQ is a **production-deployed, functional, and revenue-ready** employee assessment platform serving Nigerian SMEs. The architecture got it to market quickly — which is its greatest strength — but now needs structural reinforcement for security, scalability, and multi-agent team collaboration.
 
 **The core tension**: The entire web app lives in a single `App.tsx` file exceeding 18,000 lines. This was the right call for speed-to-market but is now the primary bottleneck for team scaling, security boundaries, and maintainability.
 

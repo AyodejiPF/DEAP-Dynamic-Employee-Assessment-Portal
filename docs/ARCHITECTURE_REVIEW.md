@@ -1,4 +1,4 @@
-# DEAP / StaffiQ Architecture Review
+# StaffiQ / StaffiQ Architecture Review
 
 ## Executive summary
 

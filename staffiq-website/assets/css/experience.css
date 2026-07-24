@@ -1,30 +1,23 @@
 /* ============================================================================
-   StaffiQ Premium Experience Layer  (added 2026-07-17)
-   Additive only. Builds on existing design tokens. Enhances depth, gloss and 3D.
+   StaffiQ Premium Experience Layer  v2  (2026-07-17)
+   Additive only. Glass, gloss, 3D depth, hover zoom, glossy clickables.
+   Builds on existing tokens. No layout geometry changed. Reduced-motion safe.
    Reversible: delete everything between this banner and the END banner.
-   Respects prefers-reduced-motion. No layout geometry is changed.
    ========================================================================== */
-
 :root{
   --lux-accent: var(--lime, #7bd389);
   --lux-gold: var(--amber, #ffb020);
-  --lux-deep: var(--evergreen-900, #062a20);
-  --lux-deep-2: var(--evergreen-700, #0a5b44);
   --lux-glass: color-mix(in srgb, #ffffff 78%, var(--emerald, #0a5b44) 6%);
-  --lux-glass-dark: color-mix(in srgb, var(--evergreen-900, #062a20) 82%, #000 18%);
   --lux-sheen: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,0) 42%);
   --lux-radius: 20px;
-  --lux-shadow: 0 1px 0 rgba(255,255,255,.6) inset,
-                0 18px 40px -18px rgba(6,42,32,.45),
-                0 6px 14px -8px rgba(6,42,32,.30);
-  --lux-shadow-hover: 0 1px 0 rgba(255,255,255,.75) inset,
-                0 34px 70px -22px rgba(6,42,32,.55),
-                0 12px 24px -10px rgba(6,42,32,.38);
+  --lux-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 18px 40px -18px rgba(6,42,32,.45), 0 6px 14px -8px rgba(6,42,32,.30);
+  --lux-shadow-hover: 0 1px 0 rgba(255,255,255,.8) inset, 0 40px 80px -22px rgba(6,42,32,.6), 0 14px 26px -10px rgba(6,42,32,.42);
   --lux-ring: 0 0 0 1px color-mix(in srgb, var(--emerald,#0a5b44) 16%, transparent);
   --lux-ease: cubic-bezier(.2,.7,.2,1);
+  --lux-fast: cubic-bezier(.2,.8,.2,1);
 }
 
-/* ---- Subtle premium depth wash behind the whole page (very low intensity) ---- */
+/* Subtle premium depth wash behind the page */
 body{ position: relative; }
 body::before{
   content:""; position: fixed; inset:-10% -10% auto -10%; height: 60vh; z-index:-2;
@@ -34,15 +27,14 @@ body::before{
   filter: blur(30px); opacity:.55; pointer-events:none;
 }
 
-/* ---- Glossy hero with layered depth ---- */
+/* Hero depth */
 .hero{ position: relative; isolation: isolate; }
 .hero-bg{
   background:
-    radial-gradient(50% 60% at 15% 20%, color-mix(in srgb, var(--lime,#7bd389) 32%, transparent), transparent 60%),
-    radial-gradient(45% 55% at 85% 10%, color-mix(in srgb, var(--emerald,#0a5b44) 26%, transparent), transparent 62%),
+    radial-gradient(50% 60% at 15% 20%, color-mix(in srgb, var(--lime,#7bd389) 30%, transparent), transparent 60%),
+    radial-gradient(45% 55% at 85% 10%, color-mix(in srgb, var(--emerald,#0a5b44) 24%, transparent), transparent 62%),
     radial-gradient(60% 80% at 60% 100%, color-mix(in srgb, var(--amber,#ffb020) 12%, transparent), transparent 60%),
     var(--hero-bg-existing, transparent);
-  filter: saturate(1.05);
 }
 .hero-bg::after{
   content:""; position:absolute; inset:0; pointer-events:none;
@@ -53,101 +45,113 @@ body::before{
 /* ---- Cards: glass surface, specular gloss, layered 3D shadow ---- */
 .card, .mock-card{
   position: relative;
-  background:
-    linear-gradient(180deg, color-mix(in srgb,#fff 92%, var(--emerald,#0a5b44) 3%), color-mix(in srgb,#fff 84%, var(--emerald,#0a5b44) 6%));
+  background: linear-gradient(180deg, color-mix(in srgb,#fff 92%, var(--emerald,#0a5b44) 3%), color-mix(in srgb,#fff 84%, var(--emerald,#0a5b44) 6%));
   border: 1px solid color-mix(in srgb, var(--emerald,#0a5b44) 12%, #fff);
   border-radius: var(--lux-radius);
   box-shadow: var(--lux-shadow);
-  transition: transform .5s var(--lux-ease), box-shadow .5s var(--lux-ease);
-  transform-style: preserve-3d;
-  will-change: transform;
+  transition: transform .45s var(--lux-ease), box-shadow .45s var(--lux-ease);
+  transform-style: preserve-3d; will-change: transform;
 }
 .card::before, .mock-card::before{
   content:""; position:absolute; inset:0; border-radius: inherit; pointer-events:none;
   background: var(--lux-sheen); opacity:.7; mix-blend-mode: screen;
 }
-.card::after, .mock-card::after{
-  content:""; position:absolute; inset:0; border-radius: inherit; pointer-events:none;
-  box-shadow: var(--lux-ring); opacity:.5;
-}
-html[data-premium="on"] .card:hover,
-html[data-premium="on"] .mock-card:hover{
-  box-shadow: var(--lux-shadow-hover);
-}
-
-/* AI / lime feature cards get a richer emerald glass */
+html[data-premium="on"] .card:hover, html[data-premium="on"] .mock-card:hover{ box-shadow: var(--lux-shadow-hover); z-index: 5; }
 .card.feature-lime{
   background: linear-gradient(180deg, color-mix(in srgb, var(--lime,#7bd389) 26%, #fff), color-mix(in srgb, var(--lime,#7bd389) 12%, #fff));
   border-color: color-mix(in srgb, var(--lime,#7bd389) 40%, #fff);
 }
-
-/* Dashboard mock KPIs: glassy tiles that feel three dimensional */
 .mock-kpi{
-  background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.6));
-  border: 1px solid rgba(255,255,255,.7);
-  border-radius: 14px;
-  box-shadow: 0 10px 24px -14px rgba(6,42,32,.5), 0 1px 0 rgba(255,255,255,.8) inset;
-  backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.62));
+  border: 1px solid rgba(255,255,255,.7); border-radius: 14px;
+  box-shadow: 0 10px 24px -14px rgba(6,42,32,.5), 0 1px 0 rgba(255,255,255,.8) inset; backdrop-filter: blur(6px);
 }
 
-/* ---- Glossy buttons with specular highlight and shine sweep ---- */
-.btn{ position: relative; overflow: hidden; border-radius: var(--r-pill, 999px);
-  transition: transform .25s var(--lux-ease), box-shadow .35s var(--lux-ease), filter .35s var(--lux-ease); }
-.btn-primary{
+/* ---- HOVER ZOOM on placeholders (icons, media, tiles) ---- */
+html[data-premium="on"]{ --zoom-sm: 1.14; --zoom-md: 1.08; --zoom-lg: 1.04; }
+html[data-premium="on"] .icon, html[data-premium="on"] .ln-ic, html[data-premium="on"] .c-ic,
+html[data-premium="on"] .eco-mark, html[data-premium="on"] .mock-kpi, html[data-premium="on"] .naira-mark,
+html[data-premium="on"] .track-tag, html[data-premium="on"] .wm-iq{
+  transition: transform .3s var(--lux-fast), box-shadow .3s var(--lux-fast); transform-origin: center;
+}
+html[data-premium="on"] .icon:hover, html[data-premium="on"] .ln-ic:hover, html[data-premium="on"] .c-ic:hover,
+html[data-premium="on"] .eco-mark:hover, html[data-premium="on"] .mock-kpi:hover{ transform: scale(var(--zoom-sm)); z-index: 4; }
+/* images and media placeholders zoom within their frame */
+html[data-premium="on"] .card img, html[data-premium="on"] .mock-card img,
+html[data-premium="on"] .hero-media img, html[data-premium="on"] figure img, html[data-premium="on"] .mock img{
+  transition: transform .4s var(--lux-ease); transform-origin: center; will-change: transform;
+}
+html[data-premium="on"] .card:hover img, html[data-premium="on"] .mock-card:hover img,
+html[data-premium="on"] figure:hover img{ transform: scale(var(--zoom-md)); }
+/* brand mark gives a friendly nudge */
+html[data-premium="on"] .mark{ transition: transform .3s var(--lux-fast); }
+html[data-premium="on"] .brand:hover .mark{ transform: scale(1.08) rotate(-2deg); }
+/* generic card-like wrappers get a gentle lift-zoom if not JS tilted */
+html[data-premium="on"] [class*="card"]:not(.card):not(.mock-card):hover,
+html[data-premium="on"] .tier:hover, html[data-premium="on"] .feat:hover, html[data-premium="on"] .plan:hover,
+html[data-premium="on"] .faq-item:hover, html[data-premium="on"] .t-item:hover{
+  transform: translateY(-4px) scale(var(--zoom-lg)); z-index: 4;
+  transition: transform .4s var(--lux-ease), box-shadow .4s var(--lux-ease);
+}
+
+/* ---- GLOSSY CLICKABLES: every interactive control, none missed ---- */
+.btn, button, [role="button"], .nav-cta a, .nav-toggle, .toggle button, .faq-q, .link-arrow, a.btn-block{
+  position: relative; overflow: hidden;
+  transition: transform .22s var(--lux-fast), box-shadow .3s var(--lux-ease), filter .3s var(--lux-ease), background .3s var(--lux-ease);
+}
+.btn{ border-radius: var(--r-pill, 999px); }
+/* glossy primary */
+.btn-primary, .toggle button.on, button[type="submit"]{
   background: linear-gradient(180deg, color-mix(in srgb, var(--emerald,#0a5b44) 82%, #fff 18%), var(--evergreen-700,#0a5b44));
-  color:#fff;
+  color:#fff; border: 1px solid color-mix(in srgb, var(--evergreen-900,#062a20) 30%, transparent);
   box-shadow: 0 1px 0 rgba(255,255,255,.35) inset, 0 14px 26px -12px rgba(6,42,32,.6), 0 4px 10px -6px rgba(6,42,32,.5);
-  border: 1px solid color-mix(in srgb, var(--evergreen-900,#062a20) 30%, transparent);
 }
-.btn-primary::after{
-  content:""; position:absolute; top:0; left:-120%; width:70%; height:100%;
-  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
-  transform: skewX(-18deg); transition: left .6s var(--lux-ease); pointer-events:none;
+/* specular shine sweep for any glossy clickable */
+.btn::after, .nav-cta a::after, button[type="submit"]::after{
+  content:""; position:absolute; top:0; left:-125%; width:70%; height:100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  transform: skewX(-18deg); transition: left .55s var(--lux-ease); pointer-events:none;
 }
-html[data-premium="on"] .btn-primary:hover::after{ left:130%; }
-html[data-premium="on"] .btn:hover{ transform: translateY(-2px); }
-html[data-premium="on"] .btn:active{ transform: translateY(0) scale(.99); }
-.btn-ghost{ backdrop-filter: blur(4px); background: color-mix(in srgb,#fff 70%, transparent); }
-
-/* ---- Accent chips (eyebrow, pill, tag) get a soft glossy lift ---- */
+html[data-premium="on"] .btn:hover::after, html[data-premium="on"] .nav-cta a:hover::after,
+html[data-premium="on"] button[type="submit"]:hover::after{ left:135%; }
+html[data-premium="on"] .btn:hover, html[data-premium="on"] button:hover, html[data-premium="on"] [role="button"]:hover,
+html[data-premium="on"] .nav-cta a:hover{ transform: translateY(-2px) scale(1.05); }
+html[data-premium="on"] .btn:active, html[data-premium="on"] button:active{ transform: translateY(0) scale(.99); }
+/* ghost / secondary buttons get glass */
+.btn-ghost, .nav-toggle{ backdrop-filter: blur(6px); background: color-mix(in srgb,#fff 68%, transparent); border:1px solid color-mix(in srgb, var(--emerald,#0a5b44) 16%, #fff); }
+/* accent chips */
 .eyebrow, .pill, .tag{
   background: linear-gradient(180deg, color-mix(in srgb, var(--lime,#7bd389) 30%, #fff), color-mix(in srgb, var(--lime,#7bd389) 16%, #fff));
   border: 1px solid color-mix(in srgb, var(--lime,#7bd389) 40%, #fff);
-  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 6px 14px -10px rgba(6,42,32,.5);
-  border-radius: 999px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 6px 14px -10px rgba(6,42,32,.5); border-radius: 999px;
 }
 
-/* ---- Sticky header gains a frosted glass feel on scroll ---- */
-.site-header{
-  backdrop-filter: saturate(1.4) blur(10px);
-  background: color-mix(in srgb, #fff 72%, transparent);
-  transition: box-shadow .4s var(--lux-ease), background .4s var(--lux-ease);
-}
-html[data-scrolled="on"] .site-header{
-  background: color-mix(in srgb, #fff 86%, transparent);
-  box-shadow: 0 10px 30px -18px rgba(6,42,32,.5);
-}
+/* frosted header on scroll */
+.site-header{ backdrop-filter: saturate(1.4) blur(10px); background: color-mix(in srgb, #fff 72%, transparent); transition: box-shadow .35s var(--lux-ease), background .35s var(--lux-ease); }
+html[data-scrolled="on"] .site-header{ background: color-mix(in srgb, #fff 88%, transparent); box-shadow: 0 10px 30px -18px rgba(6,42,32,.5); }
 
-/* ---- Reveal on scroll is intentionally left to the site's existing system.
-   The premium layer never sets opacity on .reveal, so content can never be
-   hidden if this layer or its JS fails to load. ---- */
-
-/* ---- Ambient music control widget (bottom-left, clear of the WhatsApp button) ---- */
-.sq-audio{ position: fixed; left: 16px; bottom: 16px; z-index: 60;
-  display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px;
+/* ambient music control (bottom-left) */
+.sq-audio{ position: fixed; left: 16px; bottom: 16px; z-index: 60; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px;
   background: color-mix(in srgb, var(--evergreen-900,#062a20) 84%, #000 16%); color:#fff;
   box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 16px 30px -16px rgba(0,0,0,.7);
   backdrop-filter: blur(8px); border:1px solid rgba(255,255,255,.14);
-  font: 500 13px/1 var(--font-body, system-ui, sans-serif); transition: transform .3s var(--lux-ease); }
-.sq-audio:hover{ transform: translateY(-2px); }
-.sq-audio button{ all:unset; cursor:pointer; width:34px; height:34px; display:grid; place-items:center;
-  border-radius:50%; background: linear-gradient(180deg, color-mix(in srgb, var(--lime,#7bd389) 70%, #fff), var(--emerald,#0a5b44));
-  color: var(--evergreen-900,#062a20); box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 6px 14px -8px rgba(0,0,0,.6); }
+  font: 500 13px/1 var(--font-body, system-ui, sans-serif); transition: transform .18s var(--lux-fast), box-shadow .18s var(--lux-fast); }
+.sq-audio:hover{ transform: translateY(-2px) scale(1.03); }
+.sq-audio button{ all:unset; cursor:pointer; width:34px; height:34px; display:grid; place-items:center; border-radius:50%;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lime,#7bd389) 70%, #fff), var(--emerald,#0a5b44));
+  color: var(--evergreen-900,#062a20); box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 6px 14px -8px rgba(0,0,0,.6);
+  transition: transform .12s var(--lux-fast); }
+.sq-audio button:hover{ transform: scale(1.1); }
 .sq-audio button:focus-visible{ outline:2px solid var(--lime,#7bd389); outline-offset:2px; }
 .sq-audio .sq-label{ opacity:.85; letter-spacing:.02em; white-space:nowrap; }
+.sq-audio .sq-eq{ display:flex; gap:2px; align-items:flex-end; height:16px; width:20px; }
+.sq-audio .sq-eq i{ width:3px; background:var(--lime,#7bd389); border-radius:2px; height:30%; }
+.sq-audio.is-playing .sq-eq i{ animation: sq-eq .7s ease-in-out infinite; }
+.sq-audio .sq-eq i:nth-child(2){ animation-delay:.15s } .sq-audio .sq-eq i:nth-child(3){ animation-delay:.3s } .sq-audio .sq-eq i:nth-child(4){ animation-delay:.45s }
+@keyframes sq-eq{ 0%,100%{height:25%} 50%{height:95%} }
 .sq-audio input[type="range"]{ width:78px; accent-color: var(--lime,#7bd389); cursor:pointer; }
-.sq-audio.is-idle{ animation: sq-breathe 3.2s var(--lux-ease) infinite; }
-@keyframes sq-breathe{ 0%,100%{ box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 16px 30px -16px rgba(0,0,0,.7);} 50%{ box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 18px 36px -14px rgba(123,211,137,.5);} }
+.sq-audio.is-idle{ animation: sq-breathe 2.4s var(--lux-ease) infinite; }
+@keyframes sq-breathe{ 0%,100%{ box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 16px 30px -16px rgba(0,0,0,.7);} 50%{ box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 18px 36px -14px rgba(123,211,137,.55);} }
 @media (max-width: 520px){ .sq-audio .sq-label{ display:none; } }
 
 /* ============================ RESPONSIVE SAFEGUARDS ============================ */
@@ -155,13 +159,10 @@ html[data-scrolled="on"] .site-header{
 img,video{ max-width:100%; height:auto; }
 html,body{ overflow-x: clip; }
 h1,h2,h3,h4,p,a,li,td,th,figcaption{ overflow-wrap:break-word; }
-@media (max-width: 680px){
-  main, section, .container{ max-width:100%; }
-}
+@media (max-width: 680px){ main, section, .container{ max-width:100%; } }
 
 /* ============================ MOTION SAFETY ============================ */
 @media (prefers-reduced-motion: reduce){
-  .card,.mock-card,.btn,.btn-primary::after,.sq-audio,.reveal,.reveal.is-in{ transition:none !important; animation:none !important; }
-  html[data-premium="on"] .reveal{ opacity:1 !important; transform:none !important; }
+  .card,.mock-card,.btn,.btn-primary::after,.btn::after,.sq-audio,.sq-audio button,.icon,.ln-ic,.c-ic,.eco-mark,.mark,[class*="card"] img{ transition:none !important; animation:none !important; transform:none !important; }
 }
-/* =============================== END Premium Experience Layer =============================== */
+/* =============================== END Premium Experience Layer v2 =============================== */

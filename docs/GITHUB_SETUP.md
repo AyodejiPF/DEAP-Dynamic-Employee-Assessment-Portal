@@ -1,7 +1,7 @@
-# DEAP — GitHub Repository Setup Guide
+# StaffiQ — GitHub Repository Setup Guide
 
 > Prepared 13 July 2026
-> Follow these steps to connect the DEAP project to a GitHub remote repository.
+> Follow these steps to connect the StaffiQ project to a GitHub remote repository.
 
 ---
 
@@ -17,7 +17,7 @@
 
 1. Go to https://github.com/new
 2. Enter a repository name: **deap-dynamic-employee-assessment-portal** (or your preferred name)
-3. Add an optional description: "DEAP — Dynamic Employee Assessment Portal for Nigerian SMEs. Employee training, assessment, analytics, and AI-powered insights."
+3. Add an optional description: "StaffiQ — StaffiQ for Nigerian SMEs. Employee training, assessment, analytics, and AI-powered insights."
 4. Keep the repository **Public** or **Private** as you prefer
 5. **DO NOT** initialise with README, .gitignore, or license (the project already has these)
 6. Click **Create repository**

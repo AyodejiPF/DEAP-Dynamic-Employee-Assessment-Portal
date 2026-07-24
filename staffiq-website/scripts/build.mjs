@@ -21,7 +21,7 @@ const publicFiles = [
   'industries-hospitality.html', 'industries-financial-services.html', 'industries-professional-services.html',
   'industries-logistics.html', 'industries-food-and-beverage.html', 'industries-technology.html',
   // static files
-  'robots.txt', 'sitemap.xml',
+  'robots.txt', 'sitemap.xml', '740b16c2978d44049d88e149a712ef29.txt',
 ]
 
 await rm(output, { recursive: true, force: true })

@@ -1,0 +1,69 @@
+name: Deploy StaffiQ (website + web app)
+
+# Deploys on every push to main, and can be run by hand from the Actions tab.
+# Firebase project: iicocece-assessment
+# Surfaces: staffiq-website (site staffiq-ng) and the web app (site training-assessment-1c8ef)
+#
+# ONE TIME SETUP (Ayodeji):
+#   In this repo: Settings > Secrets and variables > Actions > New repository secret
+#     Name:  FIREBASE_SA_STAFFIQ
+#     Value: paste the full contents of the StaffiQ service account JSON
+#   (StaffiQ already has that key in .secrets/serviceAccount.json; paste that file's contents.)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-staffiq
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT: iicocece-assessment
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Authenticate to Firebase (service account)
+        run: |
+          printf '%s' '${{ secrets.FIREBASE_SA_STAFFIQ }}' > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # ---------- Marketing website (low risk, static) ----------
+      - name: Build website
+        working-directory: staffiq-website
+        run: |
+          if [ -f package-lock.json ]; then npm ci; fi
+          if npm run | grep -q " build"; then npm run build; else node scripts/build.mjs; fi
+
+      - name: Guard against internal document leaks
+        run: node scripts/guard-no-internal-leaks.mjs staffiq-website/dist
+
+      - name: Deploy website (staffiq-ng)
+        working-directory: staffiq-website
+        run: firebase deploy --only hosting:staffiq-ng --project "$FIREBASE_PROJECT" --non-interactive
+
+      # ---------- Web app ----------
+      # If the app build needs VITE_ environment variables, add them as repo secrets
+      # and expose them here as env before this step.
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Deploy app (training-assessment-1c8ef)
+        run: firebase deploy --only hosting:training-assessment-1c8ef --project "$FIREBASE_PROJECT" --non-interactive

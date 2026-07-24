@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ayodeji Humanizer"
+  short_description: "Write in Ayodeji authentic voice"
+  default_prompt: "Use $humanizer to rewrite this message in Ayodeji voice."

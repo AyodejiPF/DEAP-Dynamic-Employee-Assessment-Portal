@@ -1,0 +1,4 @@
+interface:
+  display_name: "/P1 1 Prompt Improver"
+  short_description: "Use /P1 to improve then implement"
+  default_prompt: "Use /P1 to improve this request and implement it."
