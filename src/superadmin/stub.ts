@@ -96,3 +96,13 @@ export function BrandingControl(): null {
 export function TesterAccountControl(): null {
   return null
 }
+
+/** Stub — VersionTrackerPanel renders nothing. */
+export function VersionTrackerPanel(): null {
+  return null
+}
+
+/** Stub — ApiKeysUsagePanel renders nothing. */
+export function ApiKeysUsagePanel(): null {
+  return null
+}

@@ -18,5 +18,7 @@ export { SuperAdminPanel } from './components/SuperAdminPanel'
 export { TokenStudio } from './components/TokenStudio'
 export { BrandingControl } from './components/BrandingControl'
 export { TesterAccountControl } from './components/TesterAccountControl'
+export { VersionTrackerPanel } from './components/VersionTrackerPanel'
+export { ApiKeysUsagePanel } from './components/ApiKeysUsagePanel'
 
 export type { SuperAdminModule } from './types'
