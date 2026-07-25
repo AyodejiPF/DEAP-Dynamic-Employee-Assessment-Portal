@@ -154,3 +154,22 @@ export type {
   EntitlementMap,
   EntitlementContext,
 } from './billing/entitlements'
+
+// ─── Client API Keys — Per Client Usage Tracking ─────────────────
+
+export {
+  staffiqApiKeyIssue,
+  staffiqApiKeyList,
+  staffiqApiKeyRevoke,
+  staffiqApiKeyRotate,
+  staffiqApiKeyUsageReport,
+} from './apiKeys/adminEndpoints'
+
+export { staffiqApiKeyUsageSnapshot } from './apiKeys/scheduled'
+
+export type {
+  ApiKeyRecord,
+  PublicApiKeyRecord,
+  ApiKeyUsageAggregate,
+  ApiKeyUsageSnapshot,
+} from './apiKeys/types'
