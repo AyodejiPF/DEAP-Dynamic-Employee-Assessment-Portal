@@ -31,7 +31,8 @@ const legacyQuestionBanksRef = db.collection('deapQuestionBanks')
 const newLegacySharedStateRef = db.collection('staffiqLegacyApp').doc('sharedState')
 const newLegacyCourseImagesRef = db.collection('staffiqLegacyCourseImages')
 const newLegacyQuestionBanksRef = db.collection('staffiqLegacyQuestionBanks')
-const staffiqMigrationToken = defineSecret('STAFFIQ_MIGRATION_TOKEN')
+// STAFFIQ_MIGRATION_TOKEN secret removed 2026 07 26: declared but never read by any function,
+// was only a placeholder set to unblock a non interactive deploy. Safe deletion, nothing consumes it.
 
 // Defensive dual-write shim for the transition window only (plan section 4). Nothing in this
 // codebase writes to legacySharedStateRef/legacyCourseImagesRef/legacyQuestionBanksRef or their
