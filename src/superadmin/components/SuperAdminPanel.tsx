@@ -15,8 +15,9 @@ import { useState, type ReactNode } from 'react'
 import { getOwnerLabel } from '../owner'
 import { VersionTrackerPanel } from './VersionTrackerPanel'
 import { ApiKeysUsagePanel } from './ApiKeysUsagePanel'
+import { ClientAiKeysPanel } from './ClientAiKeysPanel'
 
-type PanelTab = 'grants' | 'branding' | 'tokens' | 'testers' | 'parity' | 'versionTracker' | 'apiKeys'
+type PanelTab = 'grants' | 'branding' | 'tokens' | 'testers' | 'parity' | 'versionTracker' | 'apiKeys' | 'clientAiKeys'
 
 interface SuperAdminPanelProps {
   children?: ReactNode
@@ -31,6 +32,8 @@ interface SuperAdminPanelProps {
   versionTrackerContent?: ReactNode
   /** Client API Keys and Usage — see ApiKeysUsagePanel.tsx. Self-contained, no props required. */
   apiKeysContent?: ReactNode
+  /** Client AI Keys (DeepSeek, per tenant) — see ClientAiKeysPanel.tsx. Self-contained, no props required. */
+  clientAiKeysContent?: ReactNode
 }
 
 const TAB_CONFIG: { key: PanelTab; label: string }[] = [
@@ -41,6 +44,7 @@ const TAB_CONFIG: { key: PanelTab; label: string }[] = [
   { key: 'parity', label: 'Feature Parity' },
   { key: 'versionTracker', label: 'Version Tracker' },
   { key: 'apiKeys', label: 'Client API Keys' },
+  { key: 'clientAiKeys', label: 'Client AI Keys' },
 ]
 
 export function SuperAdminPanel({
@@ -52,6 +56,7 @@ export function SuperAdminPanel({
   parityContent,
   versionTrackerContent,
   apiKeysContent,
+  clientAiKeysContent,
 }: SuperAdminPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('grants')
 
@@ -69,6 +74,7 @@ export function SuperAdminPanel({
     // Same reasoning again: renders out of the box, tenant ID typed in by hand,
     // until App.tsx wires a real tenant picker through apiKeysContent.
     apiKeys: apiKeysContent ?? <ApiKeysUsagePanel />,
+    clientAiKeys: clientAiKeysContent ?? <ClientAiKeysPanel />,
   }
 
   return (

@@ -106,3 +106,8 @@ export function VersionTrackerPanel(): null {
 export function ApiKeysUsagePanel(): null {
   return null
 }
+
+/** Stub — ClientAiKeysPanel renders nothing. */
+export function ClientAiKeysPanel(): null {
+  return null
+}

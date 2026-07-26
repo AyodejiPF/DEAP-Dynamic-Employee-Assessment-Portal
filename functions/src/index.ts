@@ -173,3 +173,19 @@ export type {
   ApiKeyUsageAggregate,
   ApiKeyUsageSnapshot,
 } from './apiKeys/types'
+
+// ─── Client AI Provider Keys — Per Tenant DeepSeek Credentials ───
+
+export {
+  staffiqAiProviderKeySave,
+  staffiqAiProviderKeyList,
+  staffiqAiProviderKeyDelete,
+} from './aiProviderKeys/adminEndpoints'
+
+export { resolveDeepSeekCredential } from './aiProviderKeys/service'
+
+export type {
+  DeepSeekModelTier,
+  PublicTenantAiProviderKey,
+  ResolvedDeepSeekCredential,
+} from './aiProviderKeys/types'

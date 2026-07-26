@@ -20,5 +20,6 @@ export { BrandingControl } from './components/BrandingControl'
 export { TesterAccountControl } from './components/TesterAccountControl'
 export { VersionTrackerPanel } from './components/VersionTrackerPanel'
 export { ApiKeysUsagePanel } from './components/ApiKeysUsagePanel'
+export { ClientAiKeysPanel } from './components/ClientAiKeysPanel'
 
 export type { SuperAdminModule } from './types'
