@@ -174,18 +174,22 @@ export type {
   ApiKeyUsageSnapshot,
 } from './apiKeys/types'
 
-// ─── Client AI Provider Keys — Per Tenant DeepSeek Credentials ───
+// ─── Client AI Provider Key Pool — Up To 10 DeepSeek Keys, Assignable To Tenants ───
 
 export {
-  staffiqAiProviderKeySave,
-  staffiqAiProviderKeyList,
-  staffiqAiProviderKeyDelete,
+  staffiqAiKeyPoolCreate,
+  staffiqAiKeyPoolList,
+  staffiqAiKeyPoolRelabel,
+  staffiqAiKeyPoolAssign,
+  staffiqAiKeyPoolUnassign,
+  staffiqAiKeyPoolMarkSynced,
+  staffiqAiKeyPoolDelete,
 } from './aiProviderKeys/adminEndpoints'
 
 export { resolveDeepSeekCredential } from './aiProviderKeys/service'
 
 export type {
   DeepSeekModelTier,
-  PublicTenantAiProviderKey,
+  PublicApiKeyPoolEntry,
   ResolvedDeepSeekCredential,
 } from './aiProviderKeys/types'

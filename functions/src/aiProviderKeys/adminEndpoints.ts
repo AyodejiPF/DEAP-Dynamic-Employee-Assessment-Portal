@@ -1,8 +1,12 @@
 /**
- * Client AI Provider Keys — Admin API Endpoints (TypeScript)
+ * Client AI Provider Key Pool — Admin API Endpoints (TypeScript)
  *
- *   POST /api/ai-provider-keys/save
+ *   POST /api/ai-provider-keys/create
  *   GET  /api/ai-provider-keys/list
+ *   POST /api/ai-provider-keys/relabel
+ *   POST /api/ai-provider-keys/assign
+ *   POST /api/ai-provider-keys/unassign
+ *   POST /api/ai-provider-keys/mark-synced
  *   POST /api/ai-provider-keys/delete
  *
  * Same CORS, header identity and Platform Owner / Tenant Admin guard as
@@ -10,7 +14,17 @@
  */
 
 import { onRequest } from 'firebase-functions/v2/https'
-import { saveTenantAiProviderKey, listTenantAiProviderKeys, deleteTenantAiProviderKey } from './service'
+import {
+  createPoolKey,
+  listPoolKeys,
+  relabelPoolKey,
+  assignPoolKey,
+  unassignPoolKey,
+  markPoolKeyPortalSynced,
+  deletePoolKey,
+  ApiKeyPoolLimitError,
+  ApiKeyPoolAssignedError,
+} from './service'
 
 const allowedOrigins = new Set([
   'https://training-assessment-1c8ef.web.app',
@@ -42,7 +56,15 @@ function requirePlatformOwnerOrAdmin(req: any, res: any): boolean {
   return false
 }
 
-export const staffiqAiProviderKeySave = onRequest(
+function handleServiceError(res: any, error: unknown, fallback: string): void {
+  if (error instanceof ApiKeyPoolLimitError || error instanceof ApiKeyPoolAssignedError) {
+    res.status(400).json({ message: error.message })
+    return
+  }
+  res.status(500).json({ message: error instanceof Error ? error.message : fallback })
+}
+
+export const staffiqAiKeyPoolCreate = onRequest(
   { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
@@ -52,25 +74,24 @@ export const staffiqAiProviderKeySave = onRequest(
     }
     if (!requirePlatformOwnerOrAdmin(req, res)) return
 
-    const tenantId = String(req.body?.tenantId ?? '').trim()
-    const clientLabel = String(req.body?.clientLabel ?? '').trim()
+    const label = String(req.body?.label ?? '').trim()
     const apiKey = String(req.body?.apiKey ?? '').trim()
-    if (!tenantId || !clientLabel || !apiKey) {
-      res.status(400).json({ message: 'tenantId, clientLabel and apiKey are all required.' })
+    if (!label || !apiKey) {
+      res.status(400).json({ message: 'label and apiKey are both required.' })
       return
     }
 
     try {
       const actorUserId = String(req.get('x-staffiq-user-id') ?? 'unknown')
-      const saved = await saveTenantAiProviderKey(tenantId, clientLabel, apiKey, actorUserId)
-      res.status(200).json({ key: saved })
+      const created = await createPoolKey(label, apiKey, actorUserId)
+      res.status(201).json({ key: created })
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to save the client AI key.' })
+      handleServiceError(res, error, 'Failed to add this key to the pool.')
     }
   }
 )
 
-export const staffiqAiProviderKeyList = onRequest(
+export const staffiqAiKeyPoolList = onRequest(
   { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'GET, OPTIONS')
@@ -81,15 +102,15 @@ export const staffiqAiProviderKeyList = onRequest(
     if (!requirePlatformOwnerOrAdmin(req, res)) return
 
     try {
-      const keys = await listTenantAiProviderKeys()
+      const keys = await listPoolKeys()
       res.status(200).json({ keys })
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to list client AI keys.' })
+      handleServiceError(res, error, 'Failed to list the key pool.')
     }
   }
 )
 
-export const staffiqAiProviderKeyDelete = onRequest(
+export const staffiqAiKeyPoolRelabel = onRequest(
   { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
@@ -99,17 +120,124 @@ export const staffiqAiProviderKeyDelete = onRequest(
     }
     if (!requirePlatformOwnerOrAdmin(req, res)) return
 
-    const tenantId = String(req.body?.tenantId ?? '').trim()
-    if (!tenantId) {
-      res.status(400).json({ message: 'tenantId is required.' })
+    const keyId = String(req.body?.keyId ?? '').trim()
+    const label = String(req.body?.label ?? '').trim()
+    if (!keyId || !label) {
+      res.status(400).json({ message: 'keyId and label are both required.' })
       return
     }
 
     try {
-      await deleteTenantAiProviderKey(tenantId)
+      const actorUserId = String(req.get('x-staffiq-user-id') ?? 'unknown')
+      const updated = await relabelPoolKey(keyId, label, actorUserId)
+      res.status(200).json({ key: updated })
+    } catch (error) {
+      handleServiceError(res, error, 'Failed to rename this key.')
+    }
+  }
+)
+
+export const staffiqAiKeyPoolAssign = onRequest(
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
+  async (req, res) => {
+    setCors(req, res, 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+    if (!requirePlatformOwnerOrAdmin(req, res)) return
+
+    const keyId = String(req.body?.keyId ?? '').trim()
+    const tenantId = String(req.body?.tenantId ?? '').trim()
+    const tenantLabel = String(req.body?.tenantLabel ?? '').trim()
+    if (!keyId || !tenantId || !tenantLabel) {
+      res.status(400).json({ message: 'keyId, tenantId and tenantLabel are all required.' })
+      return
+    }
+
+    try {
+      const actorUserId = String(req.get('x-staffiq-user-id') ?? 'unknown')
+      const updated = await assignPoolKey(keyId, tenantId, tenantLabel, actorUserId)
+      res.status(200).json({ key: updated })
+    } catch (error) {
+      handleServiceError(res, error, 'Failed to assign this key.')
+    }
+  }
+)
+
+export const staffiqAiKeyPoolUnassign = onRequest(
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
+  async (req, res) => {
+    setCors(req, res, 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+    if (!requirePlatformOwnerOrAdmin(req, res)) return
+
+    const keyId = String(req.body?.keyId ?? '').trim()
+    if (!keyId) {
+      res.status(400).json({ message: 'keyId is required.' })
+      return
+    }
+
+    try {
+      const actorUserId = String(req.get('x-staffiq-user-id') ?? 'unknown')
+      const updated = await unassignPoolKey(keyId, actorUserId)
+      res.status(200).json({ key: updated })
+    } catch (error) {
+      handleServiceError(res, error, 'Failed to unassign this key.')
+    }
+  }
+)
+
+export const staffiqAiKeyPoolMarkSynced = onRequest(
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
+  async (req, res) => {
+    setCors(req, res, 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+    if (!requirePlatformOwnerOrAdmin(req, res)) return
+
+    const keyId = String(req.body?.keyId ?? '').trim()
+    if (!keyId) {
+      res.status(400).json({ message: 'keyId is required.' })
+      return
+    }
+
+    try {
+      const actorUserId = String(req.get('x-staffiq-user-id') ?? 'unknown')
+      const updated = await markPoolKeyPortalSynced(keyId, actorUserId)
+      res.status(200).json({ key: updated })
+    } catch (error) {
+      handleServiceError(res, error, 'Failed to mark this key as synced.')
+    }
+  }
+)
+
+export const staffiqAiKeyPoolDelete = onRequest(
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
+  async (req, res) => {
+    setCors(req, res, 'POST, OPTIONS')
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+    if (!requirePlatformOwnerOrAdmin(req, res)) return
+
+    const keyId = String(req.body?.keyId ?? '').trim()
+    if (!keyId) {
+      res.status(400).json({ message: 'keyId is required.' })
+      return
+    }
+
+    try {
+      await deletePoolKey(keyId)
       res.status(200).json({ deleted: true })
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to remove the client AI key.' })
+      handleServiceError(res, error, 'Failed to remove this key.')
     }
   }
 )
