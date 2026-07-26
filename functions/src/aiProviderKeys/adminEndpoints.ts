@@ -43,7 +43,7 @@ function requirePlatformOwnerOrAdmin(req: any, res: any): boolean {
 }
 
 export const staffiqAiProviderKeySave = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB' },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -71,7 +71,7 @@ export const staffiqAiProviderKeySave = onRequest(
 )
 
 export const staffiqAiProviderKeyList = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB' },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'GET, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -90,7 +90,7 @@ export const staffiqAiProviderKeyList = onRequest(
 )
 
 export const staffiqAiProviderKeyDelete = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB' },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') {

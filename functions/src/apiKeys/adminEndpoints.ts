@@ -55,7 +55,7 @@ function requireAdminForTenant(req: any, res: any, tenantId: string): boolean {
 }
 
 export const staffiqApiKeyIssue = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', secrets: ['STAFFIQ_API_KEY_PEPPER'] },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public', secrets: ['STAFFIQ_API_KEY_PEPPER'] },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -90,7 +90,7 @@ export const staffiqApiKeyIssue = onRequest(
 )
 
 export const staffiqApiKeyList = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB' },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'GET, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -115,7 +115,7 @@ export const staffiqApiKeyList = onRequest(
 )
 
 export const staffiqApiKeyRevoke = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB' },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public' },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -147,7 +147,7 @@ export const staffiqApiKeyRevoke = onRequest(
 )
 
 export const staffiqApiKeyRotate = onRequest(
-  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', secrets: ['STAFFIQ_API_KEY_PEPPER'] },
+  { region: 'us-central1', timeoutSeconds: 15, memory: '256MiB', invoker: 'public', secrets: ['STAFFIQ_API_KEY_PEPPER'] },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -184,7 +184,7 @@ export const staffiqApiKeyRotate = onRequest(
  * bearer token, checked with a constant time comparison below.
  */
 export const staffiqApiKeyUsageReport = onRequest(
-  { region: 'us-central1', timeoutSeconds: 20, memory: '256MiB', secrets: ['STAFFIQ_RECONCILIATION_TOKEN'] },
+  { region: 'us-central1', timeoutSeconds: 20, memory: '256MiB', invoker: 'public', secrets: ['STAFFIQ_RECONCILIATION_TOKEN'] },
   async (req, res) => {
     setCors(req, res, 'GET, OPTIONS')
     if (req.method === 'OPTIONS') {
