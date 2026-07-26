@@ -28,10 +28,20 @@ requirePattern(functionsSource, /action === 'user_create'/, 'Cross tenant user c
 requirePattern(functionsSource, /action === 'user_status'/, 'Permanent user status management is missing.')
 requirePattern(functionsSource, /action === 'user_role'/, 'Tenant role management is missing.')
 requirePattern(functionsSource, /StaffiQ never deletes user records/, 'Backend user deletion protection is missing.')
-requirePattern(functionsSource, /migratedFrom: 'deapApp\/sharedState'/, 'Non destructive legacy state migration is missing.')
-requirePattern(functionsSource, /legacyCourseImagesRef = db\.collection\('deapCourseImages'\)/, 'Legacy course image migration source is missing.')
+// Firestore collection rename cutover (2026-07-26, see
+// docs/STAFFIQ_FIRESTORE_COLLECTION_RENAME_MIGRATION_PLAN.md): reads now come from the
+// staffiqLegacy* names, verified backfilled and byte-for-byte matching the deap* originals.
+// The deap* refs stay declared in functions/index.js (untouched, unused for reads) as the
+// dual-write safety net target and because the old collections themselves are retained for
+// the retention window -- so this gate checks both: the new names are wired up for reads, and
+// the old collection references have not been deleted out from under the safety net.
+requirePattern(functionsSource, /migratedFrom: 'staffiqLegacyApp\/sharedState'/, 'Non destructive legacy state migration is missing.')
+requirePattern(functionsSource, /newLegacySharedStateRef = db\.collection\('staffiqLegacyApp'\)\.doc\('sharedState'\)/, 'Renamed legacy shared state source is missing.')
+requirePattern(functionsSource, /newLegacyCourseImagesRef = db\.collection\('staffiqLegacyCourseImages'\)/, 'Renamed legacy course image migration source is missing.')
+requirePattern(functionsSource, /legacyCourseImagesRef = db\.collection\('deapCourseImages'\)/, 'Original legacy course image collection reference (retained as dual-write safety net) is missing.')
 requirePattern(functionsSource, /migration\.courseImagesMigratedAt/, 'Course image migration completion tracking is missing.')
-requirePattern(functionsSource, /legacyQuestionBanksRef = db\.collection\('deapQuestionBanks'\)/, 'Legacy question bank migration source is missing.')
+requirePattern(functionsSource, /newLegacyQuestionBanksRef = db\.collection\('staffiqLegacyQuestionBanks'\)/, 'Renamed legacy question bank migration source is missing.')
+requirePattern(functionsSource, /legacyQuestionBanksRef = db\.collection\('deapQuestionBanks'\)/, 'Original legacy question bank collection reference (retained as dual-write safety net) is missing.')
 requirePattern(functionsSource, /migration\.questionBanksMigratedAt/, 'Question bank migration completion tracking is missing.')
 requirePattern(appSource, /TenantManagementPanel/, 'Tenant management interface is missing.')
 requirePattern(appSource, /Workspace code/, 'Workspace selection at sign in is missing.')

@@ -1,6 +1,6 @@
 ---
 name: multi-perspective-review
-description: Reviews a feature or deliverable through four distinct lenses in sequence — strategy/scope, design/UX, engineering soundness, and live QA — instead of one generic pass. Use before shipping a client-facing feature, before a StaffiQ/StaffiQ release, or when a single review pass feels like it's missing things.
+description: Reviews a feature or deliverable through four distinct lenses in sequence — strategy/scope, design/UX, engineering soundness, and live QA — instead of one generic pass. Use before shipping a client-facing feature, before a StaffiQ release, or when a single review pass feels like it's missing things.
 ---
 
 # Multi-Perspective Review

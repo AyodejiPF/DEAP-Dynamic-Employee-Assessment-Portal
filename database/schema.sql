@@ -44,6 +44,16 @@ CREATE TABLE users (
   full_name VARCHAR(255) NOT NULL,
   role user_role NOT NULL DEFAULT 'employee',
   department_id UUID REFERENCES departments(id),
+  -- Nullable, self-referencing reporting-line link. Additive/backward compatible:
+  -- no NOT NULL constraint, ON DELETE SET NULL so removing a manager never cascades
+  -- into deleting their reports, and no change to the existing flat
+  -- super_admin/admin/employee role model above. Mirrors the `supervisorId` field
+  -- StaffiQ's live Firestore-backed runtime already carries on user records
+  -- (see src/App.tsx `interface User`); this column brings the same concept into
+  -- the (currently unused-at-runtime) Postgres schema for parity and any future
+  -- relational migration. "Manager" here is a relationship, not a role: any user
+  -- can be named as another user's manager regardless of their `role` value.
+  manager_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -171,6 +181,7 @@ CREATE TABLE audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX idx_users_manager ON users(manager_id);
 CREATE INDEX idx_questions_difficulty ON questions(difficulty);
 CREATE INDEX idx_questions_topic ON questions(topic_tag);
 CREATE INDEX idx_sessions_user ON test_sessions(user_id);

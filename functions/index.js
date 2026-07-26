@@ -3,6 +3,11 @@ const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
 const crypto = require('crypto')
+const {
+  resolveAiAccessTier,
+  guardAiQuestion,
+  filterAiAnswerToTier,
+} = require('./ai-guard')
 
 if (!admin.apps.length) {
   admin.initializeApp()
@@ -11,9 +16,31 @@ if (!admin.apps.length) {
 const perplexityApiKey = defineSecret('PERPLEXITY_API_KEY')
 const staffiqSessionSecret = defineSecret('STAFFIQ_SESSION_SECRET')
 const db = admin.firestore()
+// Firestore rename migration (see docs/STAFFIQ_FIRESTORE_COLLECTION_RENAME_MIGRATION_PLAN.md).
+// CUTOVER COMPLETE (2026-07-26): the real backfill ran against production and verification
+// passed (document counts match exactly for all three collections: sharedState doc, 2/2 course
+// images, 3/3 question banks + all 4,532 question bank chunks across both, deep-equality spot
+// checked). All reads now come from the staffiqLegacy* names below. The deap* refs are kept,
+// untouched and unused for reads, purely as the dual-write safety net target below and because
+// the Zero Data Loss Policy requires the old collections to stay in place for the retention
+// window (at least 30, up to 90 days) before any deletion is even considered -- deletion is a
+// separate, explicit, Platform-Owner-approved action, never automatic.
 const legacySharedStateRef = db.collection('deapApp').doc('sharedState')
 const legacyCourseImagesRef = db.collection('deapCourseImages')
 const legacyQuestionBanksRef = db.collection('deapQuestionBanks')
+const newLegacySharedStateRef = db.collection('staffiqLegacyApp').doc('sharedState')
+const newLegacyCourseImagesRef = db.collection('staffiqLegacyCourseImages')
+const newLegacyQuestionBanksRef = db.collection('staffiqLegacyQuestionBanks')
+const staffiqMigrationToken = defineSecret('STAFFIQ_MIGRATION_TOKEN')
+
+// Defensive dual-write shim for the transition window only (plan section 4). Nothing in this
+// codebase writes to legacySharedStateRef/legacyCourseImagesRef/legacyQuestionBanksRef or their
+// staffiqLegacy* counterparts today (confirmed by the migration plan), so this has no live caller
+// -- it exists so that if a future change ever adds a write path to these legacy collections
+// before they are fully retired, that write cannot silently diverge the old and new collections.
+async function writeLegacyMirror(oldRef, newRef, data, options) {
+  await Promise.all([oldRef.set(data, options), newRef.set(data, options)])
+}
 const featureInventoryVersionsRef = db.collection('featureInventoryVersions')
 const featureInventoryItemsRef = db.collection('featureInventoryItems')
 const featureInventoryScanLogsRef = db.collection('featureInventoryScanLogs')
@@ -126,12 +153,12 @@ async function writeTenantAudit(input) {
 
 async function finaliseLegacyAssetMigration(ref) {
   const now = new Date().toISOString()
-  const sourceImages = await legacyCourseImagesRef.select('batchId').limit(1000).get()
+  const sourceImages = await newLegacyCourseImagesRef.select('batchId').limit(1000).get()
   const targetImages = await tenantCourseImagesRef(defaultTenantId).select('batchId').limit(1000).get()
   const targetImageIds = new Set(targetImages.docs.map((doc) => doc.id))
   const missingImageIds = sourceImages.docs.filter((doc) => !targetImageIds.has(doc.id)).map((doc) => doc.id)
 
-  const sourceBanks = await legacyQuestionBanksRef.select('batchId', 'questionCount', 'chunkCount').limit(250).get()
+  const sourceBanks = await newLegacyQuestionBanksRef.select('batchId', 'questionCount', 'chunkCount').limit(250).get()
   const targetBanks = await tenantQuestionBanksRef(defaultTenantId).select('batchId', 'questionCount', 'chunkCount').limit(250).get()
   const targetBankData = new Map(targetBanks.docs.map((doc) => [doc.id, doc.data() || {}]))
   const incompleteBanks = sourceBanks.docs.filter((doc) => {
@@ -188,11 +215,11 @@ async function ensureDefaultTenant() {
   const scopedStateRef = tenantStateRef(defaultTenantId)
   const scopedState = await scopedStateRef.get()
   if (!scopedState.exists) {
-    const legacy = await legacySharedStateRef.get()
+    const legacy = await newLegacySharedStateRef.get()
     if (legacy.exists) {
       await scopedStateRef.set({
         ...legacy.data(),
-        migratedFrom: 'deapApp/sharedState',
+        migratedFrom: 'staffiqLegacyApp/sharedState',
         migratedAt: new Date().toISOString(),
       })
     }
@@ -1633,7 +1660,7 @@ exports.staffiqCourseImages = onRequest(
       if (req.method === 'GET') {
         const migration = verified.tenant.id === defaultTenantId ? (await tenantRef(defaultTenantId).get()).data()?.migration || {} : {}
         const snapshot = verified.tenant.id === defaultTenantId && !migration.courseImagesMigratedAt
-          ? await legacyCourseImagesRef.limit(1000).get()
+          ? await newLegacyCourseImagesRef.limit(1000).get()
           : await courseImagesRef.limit(1000).get()
         const images = {}
         snapshot.forEach((doc) => {
@@ -1708,7 +1735,7 @@ exports.staffiqQuestionBanks = onRequest(
       if (req.method === 'GET') {
         const migration = verified.tenant.id === defaultTenantId ? (await tenantRef(defaultTenantId).get()).data()?.migration || {} : {}
         const useLegacyBanks = verified.tenant.id === defaultTenantId && !migration.questionBanksMigratedAt
-        const readableQuestionBanksRef = useLegacyBanks ? legacyQuestionBanksRef : questionBanksRef
+        const readableQuestionBanksRef = useLegacyBanks ? newLegacyQuestionBanksRef : questionBanksRef
         const rawBatchIds = Array.isArray(req.query.batchId) ? req.query.batchId : req.query.batchId ? [req.query.batchId] : []
         const batchIds = rawBatchIds.map((batchId) => String(batchId || '').trim()).filter(Boolean)
         if (!batchIds.length) {
@@ -2084,6 +2111,37 @@ exports.analyticsIntelligence = onRequest(
       return
     }
 
+    // ── AI answer guard (hierarchy aware) ──────────────────────────
+    // Runs BEFORE any model call. `askedBy` is an optional, additive field the
+    // client may send ({ userId, role }); when present, and the payload already
+    // carries the portal user directory (it does today, via analytics.portalInventory.users),
+    // the guard also blocks named-person questions the caller has no reporting-chain
+    // reach over. When askedBy is absent, this degrades to the existing (pre-guard)
+    // behaviour for the keyword/tier check only — nothing here narrows access for
+    // admin/super_admin callers, who already saw everything.
+    const askedBy = req.body?.askedBy && typeof req.body.askedBy === 'object' ? req.body.askedBy : null
+    const viewerTier = resolveAiAccessTier(askedBy?.role)
+    const rawDirectory = Array.isArray(req.body?.analytics?.portalInventory?.users)
+      ? req.body.analytics.portalInventory.users
+      : []
+    const guardDirectory = rawDirectory
+      .map((user) => ({
+        userId: user?.userId,
+        fullName: user?.name,
+        displayName: user?.displayName,
+        supervisorId: user?.supervisorId,
+        role: user?.role,
+      }))
+      .filter((user) => user.userId)
+    const personGuardContext = askedBy?.userId
+      ? { viewerUserId: askedBy.userId, viewerRole: askedBy.role, directory: guardDirectory }
+      : undefined
+    const guardResult = guardAiQuestion(question, viewerTier, personGuardContext)
+    if (guardResult.blocked) {
+      res.json(guardResult.response)
+      return
+    }
+
     const payload = trimPayload({
       filters: req.body?.filters ?? {},
       chatHistory: Array.isArray(req.body?.chatHistory) ? req.body.chatHistory.slice(-10) : [],
@@ -2130,11 +2188,12 @@ exports.analyticsIntelligence = onRequest(
         res.status(upstream.status).json({ error: data?.error?.message ?? data?.message ?? 'Perplexity request failed.' })
         return
       }
-      res.json({
+      const rawAnswer = {
         answer: data?.choices?.[0]?.message?.content ?? 'No analysis was returned.',
         model: data?.model,
         citations: Array.isArray(data?.citations) ? data.citations : [],
-      })
+      }
+      res.json(filterAiAnswerToTier(rawAnswer, viewerTier, personGuardContext))
     } catch (error) {
       res.status(502).json({ error: error instanceof Error ? error.message : 'AI provider request failed.' })
     }
@@ -2190,6 +2249,63 @@ exports.helpIntelligence = onRequest(
       return
     }
 
+    // ── AI answer guard (hierarchy aware) ──────────────────────────
+    // Runs BEFORE any model call, mirroring the analyticsIntelligence guard above.
+    // `userContext.userId` and a top-level `directory` array are optional, additive
+    // fields the client may send. Unlike analyticsIntelligence — whose caller already
+    // has the full portal user directory in memory and forwards it in the request
+    // body — the Help Center payload historically carried no people directory. When
+    // the caller doesn't supply one directly, we fall back to a small server-side
+    // lookup of the tenant's shared-state directory (the same `users` collection the
+    // rest of the app reads/writes via /api/staffiq-state), keyed off an optional
+    // `userContext.tenantId` (or the `x-staffiq-tenant-id` header, already sent by
+    // other Staffiq endpoints). This lets guardHelpQuestion/the person guard in
+    // ai-guard.js resolve reporting chains for Help Center questions too.
+    const helpUserContext = req.body?.userContext && typeof req.body.userContext === 'object' ? req.body.userContext : {}
+    const helpViewerTier = resolveAiAccessTier(helpUserContext.role)
+    const helpRawDirectory = Array.isArray(req.body?.directory) ? req.body.directory : []
+    let helpGuardDirectory = helpRawDirectory
+      .map((user) => ({
+        userId: user?.userId,
+        fullName: user?.fullName ?? user?.name,
+        displayName: user?.displayName,
+        supervisorId: user?.supervisorId,
+        role: user?.role,
+      }))
+      .filter((user) => user.userId)
+    if (!helpGuardDirectory.length) {
+      const helpTenantId = cleanTenantText(
+        helpUserContext.tenantId || req.get('x-staffiq-tenant-id') || '',
+        160,
+      )
+      if (helpTenantId) {
+        try {
+          const tenantStateSnapshot = await tenantStateRef(helpTenantId).get()
+          const tenantState = tenantStateSnapshot.exists ? readSharedStateFromDocument(tenantStateSnapshot.data()) : null
+          const tenantDirectory = Array.isArray(tenantState?.users) ? tenantState.users : []
+          helpGuardDirectory = tenantDirectory
+            .map((user) => ({
+              userId: user?.userId,
+              fullName: user?.fullName,
+              displayName: user?.fullName,
+              supervisorId: user?.supervisorId,
+              role: user?.role,
+            }))
+            .filter((user) => user.userId)
+        } catch (lookupError) {
+          console.error('[help-intelligence] Directory lookup failed:', lookupError.message)
+        }
+      }
+    }
+    const helpPersonGuardContext = helpUserContext.userId
+      ? { viewerUserId: helpUserContext.userId, viewerRole: helpUserContext.role, directory: helpGuardDirectory }
+      : undefined
+    const helpGuardResult = guardAiQuestion(question, helpViewerTier, helpPersonGuardContext)
+    if (helpGuardResult.blocked) {
+      res.json(helpGuardResult.response)
+      return
+    }
+
     const payload = trimHelpPayload({
       userContext: req.body?.userContext ?? {},
       chatHistory: Array.isArray(req.body?.chatHistory) ? req.body.chatHistory.slice(-8) : [],
@@ -2235,11 +2351,12 @@ exports.helpIntelligence = onRequest(
         res.status(upstream.status).json({ error: data?.error?.message ?? data?.message ?? 'Perplexity help request failed.' })
         return
       }
-      res.json({
+      const rawHelpAnswer = {
         answer: data?.choices?.[0]?.message?.content ?? 'No help answer was returned.',
         model: data?.model,
         citations: Array.isArray(data?.citations) ? data.citations : [],
-      })
+      }
+      res.json(filterAiAnswerToTier(rawHelpAnswer, helpViewerTier, helpPersonGuardContext))
     } catch (error) {
       res.status(502).json({ error: error instanceof Error ? error.message : 'AI help provider request failed.' })
     }
@@ -2437,15 +2554,17 @@ exports.staffiqAIAccessStatus = onRequest(
 // ─── Admin: Toggle Tenant AI Access ──────────────────────────────
 
 exports.staffiqAIAdminTenantAccess = onRequest(
-  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
-      const userId = req.get('x-staffiq-user-id')
-      if (userId !== 'U001') {
-        res.status(403).json({ message: 'Only the Super Admin can manage AI access.' })
+      // SECURITY: Platform Owner verified from the signed session, never a header.
+      try {
+        await verifyTenantSession(req, { ownerOnly: true })
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
         return
       }
 
@@ -2473,15 +2592,17 @@ exports.staffiqAIAdminTenantAccess = onRequest(
 // ─── Admin: Toggle User AI Access ────────────────────────────────
 
 exports.staffiqAIAdminUserAccess = onRequest(
-  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public' },
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     setCors(req, res, 'POST, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
-      const userId = req.get('x-staffiq-user-id')
-      if (userId !== 'U001') {
-        res.status(403).json({ message: 'Only the Super Admin can manage AI access.' })
+      // SECURITY: Platform Owner verified from the signed session, never a header.
+      try {
+        await verifyTenantSession(req, { ownerOnly: true })
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
         return
       }
 
@@ -2504,15 +2625,17 @@ exports.staffiqAIAdminUserAccess = onRequest(
 // ─── Admin: Query AI Usage ───────────────────────────────────────
 
 exports.staffiqAIAdminUsage = onRequest(
-  { region: 'us-central1', timeoutSeconds: 60, memory: '512MiB', invoker: 'public' },
+  { region: 'us-central1', timeoutSeconds: 60, memory: '512MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     setCors(req, res, 'GET, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
-      const userId = req.get('x-staffiq-user-id')
-      if (userId !== 'U001') {
-        res.status(403).json({ message: 'Only the Super Admin can view AI usage.' })
+      // SECURITY: Platform Owner verified from the signed session, never a header.
+      try {
+        await verifyTenantSession(req, { ownerOnly: true })
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
         return
       }
 
@@ -2774,24 +2897,26 @@ exports.staffiqEntitlementsCheck = onRequest(
  * Only the Platform Owner (U001) can create grants.
  */
 exports.staffiqGrantCreate = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Staffiq-Tenant-Id')
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
       const db = admin.firestore()
-      const callerUserId = req.body.callerUserId || req.headers['x-staffiq-user-id']
-      const callerRole = req.body.callerRole || req.headers['x-staffiq-user-role']
-      const callerFullName = req.body.callerFullName || req.headers['x-staffiq-user-fullname']
-
-      // Only Platform Owner
-      if (callerUserId !== 'U001' || callerRole !== 'super_admin' || (callerFullName || '').trim().toLowerCase() !== 'ayodeji falope') {
-        res.status(403).json({ error: 'Only the Platform Owner can grant delegated roles.' })
+      // SECURITY: caller identity is derived ONLY from the HMAC signed session,
+      // never from the request body or headers. verifyTenantSession throws 401 or 403
+      // on any invalid, expired, or non owner session.
+      let verified
+      try {
+        verified = await verifyTenantSession(req, { ownerOnly: true })
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
         return
       }
+      const actorId = verified.user.id
 
       const { subjectUserId, role, reason, expiresAt } = req.body
       if (!subjectUserId || !role || !reason) {
@@ -2823,7 +2948,7 @@ exports.staffiqGrantCreate = onRequest(
       // Audit
       await db.collection('auditLogs').add({
         appId: 'staffiq',
-        actor: callerUserId,
+        actor: actorId,
         action: 'grant_role',
         targetType: 'platformGrant',
         targetId: grant.grantId,
@@ -2846,23 +2971,24 @@ exports.staffiqGrantCreate = onRequest(
  * Only the Platform Owner (U001) can revoke grants.
  */
 exports.staffiqGrantRevoke = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Staffiq-Tenant-Id')
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
       const db = admin.firestore()
-      const callerUserId = req.body.callerUserId || req.headers['x-staffiq-user-id']
-      const callerRole = req.body.callerRole || req.headers['x-staffiq-user-role']
-      const callerFullName = req.body.callerFullName || req.headers['x-staffiq-user-fullname']
-
-      if (callerUserId !== 'U001' || callerRole !== 'super_admin' || (callerFullName || '').trim().toLowerCase() !== 'ayodeji falope') {
-        res.status(403).json({ error: 'Only the Platform Owner can revoke delegated roles.' })
+      // SECURITY: caller identity is derived ONLY from the HMAC signed session.
+      let verified
+      try {
+        verified = await verifyTenantSession(req, { ownerOnly: true })
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
         return
       }
+      const actorId = verified.user.id
 
       const { grantId, reason } = req.body
       if (!grantId || !reason) {
@@ -2881,7 +3007,7 @@ exports.staffiqGrantRevoke = onRequest(
 
       await db.collection('auditLogs').add({
         appId: 'staffiq',
-        actor: callerUserId,
+        actor: actorId,
         action: 'revoke_grant',
         targetType: 'platformGrant',
         targetId: grantId,
@@ -2904,15 +3030,27 @@ exports.staffiqGrantRevoke = onRequest(
  * Accessible to Platform Owner and users with billing:view capability.
  */
 exports.staffiqGrantList = onRequest(
-  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public' },
+  { timeoutSeconds: 60, memory: '256MiB', invoker: 'public', secrets: [staffiqSessionSecret] },
   async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*')
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-staffiq-user-id, x-staffiq-user-role, x-staffiq-user-fullname')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Staffiq-Tenant-Id')
     res.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
     if (req.method === 'OPTIONS') { res.status(204).send(''); return }
 
     try {
       const db = admin.firestore()
+      // SECURITY: require a verified session; restrict to Platform Owner or workspace admin.
+      let verified
+      try {
+        verified = await verifyTenantSession(req, {})
+      } catch (authErr) {
+        res.status(authErr.statusCode || 401).json({ error: authErr.message })
+        return
+      }
+      if (!verified.session.isPlatformOwner && verified.user.role !== 'admin') {
+        res.status(403).json({ error: 'Insufficient permissions to view grants.' })
+        return
+      }
       const statusFilter = req.query.status
 
       let query = db.collection('platformGrants')
@@ -3426,3 +3564,25 @@ exports.staffiqCancelSubscription = onRequest(
     }
   },
 )
+
+// ─── Scoped patch: expose tonight's TypeScript authored functions ──────────
+// package.json "main" is still this plain index.js, not the compiled
+// functions/lib/index.js, so functions/src/**/*.ts is otherwise undeployed.
+// Rather than switch "main" (which would also bring several other, unrelated
+// TypeScript functions live at the same time, see docs/agents/AGENT-COMMS.md),
+// this requires only the two new modules built tonight directly from the
+// already compiled lib/ output and re-exports just those function names.
+// Run `npm run build` in functions/ before deploying if these files change.
+const apiKeysAdminEndpoints = require('./lib/apiKeys/adminEndpoints')
+const apiKeysScheduled = require('./lib/apiKeys/scheduled')
+const aiProviderKeysAdminEndpoints = require('./lib/aiProviderKeys/adminEndpoints')
+
+exports.staffiqApiKeyIssue = apiKeysAdminEndpoints.staffiqApiKeyIssue
+exports.staffiqApiKeyList = apiKeysAdminEndpoints.staffiqApiKeyList
+exports.staffiqApiKeyRevoke = apiKeysAdminEndpoints.staffiqApiKeyRevoke
+exports.staffiqApiKeyRotate = apiKeysAdminEndpoints.staffiqApiKeyRotate
+exports.staffiqApiKeyUsageReport = apiKeysAdminEndpoints.staffiqApiKeyUsageReport
+exports.staffiqApiKeyUsageSnapshot = apiKeysScheduled.staffiqApiKeyUsageSnapshot
+exports.staffiqAiProviderKeySave = aiProviderKeysAdminEndpoints.staffiqAiProviderKeySave
+exports.staffiqAiProviderKeyList = aiProviderKeysAdminEndpoints.staffiqAiProviderKeyList
+exports.staffiqAiProviderKeyDelete = aiProviderKeysAdminEndpoints.staffiqAiProviderKeyDelete

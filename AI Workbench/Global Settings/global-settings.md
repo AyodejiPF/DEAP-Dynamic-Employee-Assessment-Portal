@@ -33,7 +33,7 @@ Role: Lead Business Management Consultant, RevenStrat / iicocece, Lagos Nigeria
 
 ## Multi-Agent Coordination (added 2026-07-16)
 
-- For projects using multiple AI agents, create a `docs/agents/` directory following the StaffiQ/StaffiQ coordination protocol v2.0 template.
+- For projects using multiple AI agents, create a `docs/agents/` directory following the StaffiQ coordination protocol v2.0 template.
 - Required files: `AGENT_COORDINATION_PROTOCOL.md`, `AGENT-COMMS.md`, `PROMPT_CATALOGUE.md`, and per-agent scratch files.
 - All shared logs are append-only. Never edit or delete prior entries.
 - Every agent must catalogue every human prompt before beginning work.
@@ -129,7 +129,7 @@ YYYY-MM-DD: what I changed, what I am about to touch, build status, requests.
 
 After completing every instruction or task that results in code changes (edits to .ts, .tsx, .css, .js, .json, or any other source file in the workspace), you MUST immediately run the full deployment command without being asked:
 
-Command: `cd "c:\Users\AyodejiPF\AntiGravity\StaffiQ StaffiQ" && npm run build && firebase deploy --only hosting`
+Command: run from the current project's own root directory — `npm run build && firebase deploy --only hosting`. Never target another project's folder; deploy the repository you are actually working in.
 
 If the build succeeds and Firebase reports "Deploy complete!" (exit code 0), deployment is considered complete for that step.
 If the build or deploy fails, report the error and do not proceed until the issue is resolved.

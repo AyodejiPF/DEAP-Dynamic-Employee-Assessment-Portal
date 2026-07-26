@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { AIFeatureName, TenantAIAccess, TenantPlanID, AIUsageEvent } from '../ai-types'
 import { planDisplayName } from '../ai-access'
+import { tenantFetch } from '../tenant'
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -92,12 +93,8 @@ export function AIUsageDashboard({ currentUserId, onToast }: AIUsageDashboardPro
       url.searchParams.set('limit', '500')
       url.searchParams.set('period', period)
 
-      const res = await fetch(url.toString(), {
-        headers: {
-          'X-Staffiq-User-Id': currentUserId,
-          'X-Staffiq-User-Role': 'super_admin',
-        },
-      })
+      // Identity comes from the signed session attached by tenantFetch, not headers.
+      const res = await tenantFetch(url.toString())
 
       if (!res.ok) throw new Error('Failed to load AI usage data')
       const data = await res.json()
@@ -217,9 +214,8 @@ export function AIUsageDashboard({ currentUserId, onToast }: AIUsageDashboardPro
   async function toggleTenantAI(tenantId: string, currentAccess: TenantAIAccess) {
     const newAccess: TenantAIAccess = currentAccess === 'disabled' ? 'growth_and_above' : 'disabled'
     try {
-      const res = await fetch('/api/ai-admin/tenant-access', {
+      const res = await tenantFetch('/api/ai-admin/tenant-access', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Staffiq-User-Id': currentUserId },
         body: JSON.stringify({ tenantID: tenantId, access: newAccess }),
       })
       if (!res.ok) throw new Error('Failed')
@@ -253,6 +249,29 @@ export function AIUsageDashboard({ currentUserId, onToast }: AIUsageDashboardPro
   }, [])
 
   const selectedRow = selectedTenant ? tenantRows.find((r) => r.tenantId === selectedTenant) : null
+  const [monthlyLimitDraft, setMonthlyLimitDraft] = useState('')
+  const [savingMonthlyLimit, setSavingMonthlyLimit] = useState(false)
+
+  async function saveMonthlyLimit(tenantId: string, currentAccess: TenantAIAccess, rawValue: string) {
+    const trimmed = rawValue.trim()
+    const nextLimit = trimmed === '' || trimmed === '0' ? null : Math.max(0, Number(trimmed) || 0)
+    setSavingMonthlyLimit(true)
+    try {
+      const res = await tenantFetch('/api/ai-admin/tenant-access', {
+        method: 'POST',
+        body: JSON.stringify({ tenantID: tenantId, access: currentAccess, monthlyLimit: nextLimit }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      onToast(`Monthly limit ${nextLimit === null ? 'set to unlimited' : `saved as ${nextLimit} calls`} for ${tenantId}.`)
+      addAuditEntry(tenantId, tenantId, 'Changed monthly AI call limit', 'previous limit', nextLimit === null ? 'Unlimited' : String(nextLimit))
+      setMonthlyLimitDraft('')
+      loadData()
+    } catch {
+      onToast('Failed to save the monthly limit. Please try again.')
+    } finally {
+      setSavingMonthlyLimit(false)
+    }
+  }
   const criticalAnomalies = anomalies.filter((a) => a.severity === 'critical').length
   const warningAnomalies = anomalies.filter((a) => a.severity === 'warning').length
 
@@ -480,11 +499,19 @@ export function AIUsageDashboard({ currentUserId, onToast }: AIUsageDashboardPro
               <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                 <strong>Monthly Call Limit</strong>
                 <p className="hint">Current: {selectedRow.monthlyLimit ?? 'Unlimited'} · Used: {selectedRow.monthlyUsed}</p>
-                <input type="number" placeholder="Set monthly limit (0 = unlimited)" min={0} max={10000} style={{ maxWidth: 280, marginTop: 6 }}
-                  onChange={(e) => {
-                    const val = Math.max(0, Number(e.target.value) || 0)
-                    onToast(`Monthly limit suggestion: ${val} calls (save not implemented in demo)`)
-                  }} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                  <input type="number" placeholder="Set monthly limit (0 = unlimited)" min={0} max={10000} style={{ maxWidth: 280 }}
+                    value={monthlyLimitDraft}
+                    onChange={(e) => setMonthlyLimitDraft(e.target.value)} />
+                  <button
+                    type="button"
+                    className="secondary-button compact"
+                    disabled={savingMonthlyLimit}
+                    onClick={() => saveMonthlyLimit(selectedRow.tenantId, selectedRow.aiAccess, monthlyLimitDraft)}
+                  >
+                    {savingMonthlyLimit ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

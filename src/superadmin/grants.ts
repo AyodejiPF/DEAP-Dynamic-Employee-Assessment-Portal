@@ -15,6 +15,7 @@ import {
   CAPABILITY_MAP,
   OWNER_CAPABILITIES,
 } from './owner'
+import { tenantFetch } from '../tenant'
 
 // ─── Re-exports ─────────────────────────────────────────────────
 
@@ -36,11 +37,17 @@ export type {
 
 const BASE = '/api/grants'
 
+// NOTE: the `caller` parameter is retained for call site compatibility but is NO
+// LONGER sent to the server. The server derives the caller's identity solely from
+// the HMAC signed session attached by tenantFetch (Authorization: Bearer <token>).
+// Self asserted identity in the request body is ignored by the server.
+
 export async function fetchGrants(statusFilter?: 'active' | 'revoked'): Promise<PlatformGrant[]> {
   const url = statusFilter ? `${BASE}/list?status=${statusFilter}` : `${BASE}/list`
-  const res = await fetch(url)
+  const res = await tenantFetch(url)
   if (!res.ok) {
-    throw new Error(`Failed to fetch grants: ${res.statusText}`)
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? `Failed to fetch grants: ${res.statusText}`)
   }
   const data = await res.json()
   return data.grants as PlatformGrant[]
@@ -53,13 +60,10 @@ export async function createGrant(
   reason: string,
   expiresAt?: string,
 ): Promise<PlatformGrant> {
-  const res = await fetch(`${BASE}/create`, {
+  void caller
+  const res = await tenantFetch(`${BASE}/create`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      callerUserId: caller.userId,
-      callerRole: caller.role,
-      callerFullName: caller.fullName,
       subjectUserId,
       role,
       reason,
@@ -79,13 +83,10 @@ export async function revokeGrant(
   grantId: string,
   reason: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/revoke`, {
+  void caller
+  const res = await tenantFetch(`${BASE}/revoke`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      callerUserId: caller.userId,
-      callerRole: caller.role,
-      callerFullName: caller.fullName,
       grantId,
       reason,
     }),

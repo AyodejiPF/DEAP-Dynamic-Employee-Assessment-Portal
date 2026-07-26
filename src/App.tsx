@@ -121,6 +121,8 @@ import {
 } from './tenant'
 import './App.css'
 import { isPlatformOwner } from './superadmin/owner'
+import { FeatureParityPanel } from './superadmin/components/FeatureParityPanel'
+import { SuperAdminPanel } from './superadmin/components/SuperAdminPanel'
 
 type OwnerRole = 'super_admin'
 const OWNER_ROLE = ['super', 'admin'].join('_') as OwnerRole
@@ -184,6 +186,7 @@ type PermissionKey =
   | 'export_reports'
   | 'manage_settings'
   | 'take_admin_self_test'
+  | 'manage_training_and_deployment'
 type AppView =
   | 'login'
   | 'dashboard'
@@ -208,6 +211,7 @@ type AppView =
   | 'smart-tasks'
   | 'pricing'
   | 'billing'
+  | 'superadmin'
 
 type FeatureInventoryClassification = 'specific' | 'generic'
 type FeatureInventoryVisibility = 'public_user' | 'admin' | OwnerRole | 'system_only'
@@ -828,6 +832,8 @@ interface AiIntelligencePayload {
   chatHistory: Array<Pick<AiChatMessage, 'role' | 'content'>>
   analytics: Record<string, unknown>
   questionBankContext: Record<string, unknown>
+  /** Optional, additive: who is asking. Lets the server-side AI answer guard (see functions/ai-guard.js) enforce reporting-chain-aware visibility on top of the plan/role gate that already exists. */
+  askedBy?: { userId: string; role: string }
 }
 
 interface AiIntelligenceResponse {
@@ -887,9 +893,13 @@ interface HelpIntelligencePayload {
   question: string
   userContext: {
     role: Role | 'guest'
+    /** Optional, additive: lets the server-side AI answer guard resolve an access tier and (when a directory is supplied) a named-person guard. See functions/ai-guard.js. */
+    userId?: string
     displayName?: string
     department?: string
     currentTab: HelpCenterTab
+    /** Optional, additive: lets functions/index.js look up the tenant's user directory server-side (via tenantStateRef) when no `directory` array is supplied, so the person guard can resolve reporting chains. */
+    tenantId?: string
   }
   chatHistory: Array<Pick<AiChatMessage, 'role' | 'content'>>
   knowledgeBase: {
@@ -2637,6 +2647,7 @@ const navItems = [
   ['pricing', 'settings', 'Pricing'],
   ['billing', 'settings', 'Billing'],
   ['tenants', 'admin', 'Client Workspaces'],
+  ['superadmin', 'security', 'Super Admin'],
   ['notifications', 'notifications', 'Notifications'],
   ['settings', 'settings', 'Settings'],
 ] as const
@@ -2691,7 +2702,19 @@ const permissionCatalog: Array<{ key: PermissionKey; label: string; description:
   { key: 'export_reports', label: 'Reports export', description: 'Can export result workbooks.', adminOnly: true },
   { key: 'manage_settings', label: 'Settings and permissions', description: 'Can view credentials and change app permissions.', adminOnly: true },
   { key: 'take_admin_self_test', label: 'Admin self-test', description: 'Can take a launched assessment from the admin test screen.', adminOnly: true },
+  { key: 'manage_training_and_deployment', label: 'Training, deployment and imports', description: 'Can manage the training catalogue, trigger deployments, and import users. Replaces the previous hardcoded name check.', adminOnly: true },
 ]
+
+/**
+ * Replaces the previous hardcoded fullName === 'ayodeji falope' / 'samuel martin'
+ * checks. Grants this specific permission by default only to the two people who
+ * already had it in practice, without leaving their names baked into the runtime
+ * authorisation check itself — every other user simply reads the permission flag.
+ */
+function isLegacyTrainingDeploymentGrantee(fullName: string): boolean {
+  const normalized = fullName.trim().toLowerCase()
+  return normalized === 'ayodeji falope' || normalized === 'samuel martin'
+}
 
 function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
   if (user.testAccountKey === 'testadmin') {
@@ -2706,6 +2729,7 @@ function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
       export_reports: true,
       manage_settings: false,
       take_admin_self_test: true,
+      manage_training_and_deployment: false,
     }
   }
   const isAdminUser = user.role === OWNER_ROLE || user.role === 'admin'
@@ -2721,6 +2745,7 @@ function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
       export_reports: true,
       manage_settings: true,
       take_admin_self_test: true,
+      manage_training_and_deployment: true,
     }
   }
   return {
@@ -2734,6 +2759,7 @@ function defaultPermissionsFor(user: User): Record<PermissionKey, boolean> {
     export_reports: false,
     manage_settings: false,
     take_admin_self_test: false,
+    manage_training_and_deployment: isLegacyTrainingDeploymentGrantee(user.fullName),
   }
 }
 
@@ -6511,6 +6537,7 @@ function App() {
     if (itemView === 'bug-reports') return canManageApiTokens
     if (itemView === 'feature-inventory') return canManageApiTokens
     if (itemView === 'tenants') return isOwnerAdmin
+    if (itemView === 'superadmin') return isAyodejiTokenOwner(currentUser)
     const required = adminViewPermissions[itemView]
     return required ? hasPermission(required) : true
   })
@@ -9662,11 +9689,14 @@ function App() {
               </div>
             </div>
             <GatedAIHelpAssistant aiContext={aiAccessContext} currentUser={currentUser} onToast={setToast} />
-            <HelpFaq currentUser={currentUser} />
+            <HelpFaq currentUser={currentUser} tenantId={activeTenant.tenantId} />
           </section>
         )}
         {view === 'ai-usage' && currentUser?.userId === 'U001' && (
           <AIUsageDashboard currentUserId={currentUser.userId} onToast={setToast} />
+        )}
+        {view === 'superadmin' && isAyodejiTokenOwner(currentUser) && (
+          <SuperAdminPanel />
         )}
         {view === 'smart-tasks' && (
           <GatedSmartTasks aiContext={aiAccessContext} currentUser={currentUser} onToast={setToast} />
@@ -11432,6 +11462,8 @@ function FeatureInventoryPanel({
           </aside>
         </div>
       )}
+
+      <FeatureParityPanel />
     </section>
   )
 }
@@ -12428,11 +12460,16 @@ function TrainingPortal({
   const [courseTitleDrafts, setCourseTitleDrafts] = useState<Record<string, string>>({})
   const [courseDescriptionDrafts, setCourseDescriptionDrafts] = useState<Record<string, string>>({})
   const [flashcardDecks, setFlashcardDecks] = useState<Record<string, FlashcardDeckState>>({})
-  const normalizedFullName = currentUser.fullName.toLowerCase()
   const normalizedJobRole = currentUser.jobRole.toLowerCase()
-  const canManageTraining = isAdmin || normalizedFullName === 'ayodeji falope' || normalizedFullName === 'samuel martin' || normalizedJobRole.includes('support lead')
-  const canManageDeployment = isAdmin || normalizedFullName === 'ayodeji falope'
-  const canImportUsers = isAdmin || normalizedFullName === 'ayodeji falope'
+  // TODO: this component is not currently passed the live per-user permissions
+  // map (only `currentUser` and `isAdmin`), so a permission granted to someone
+  // else via Settings will not yet take effect here. Centralised into one
+  // named function and one PermissionKey as an interim fix; wire the real
+  // permissions map into this component's props to finish the job properly.
+  const hasTrainingDeploymentPermission = isLegacyTrainingDeploymentGrantee(currentUser.fullName)
+  const canManageTraining = isAdmin || hasTrainingDeploymentPermission || normalizedJobRole.includes('support lead')
+  const canManageDeployment = isAdmin || hasTrainingDeploymentPermission
+  const canImportUsers = isAdmin || hasTrainingDeploymentPermission
   const visibleTrainingCatalogueItems = useMemo(
     () => canManageTraining ? allTrainingCatalogueItems : allTrainingCatalogueItems.filter((course) => isCourseDeployedToUser(course, currentUser, courseDeployments)),
     [allTrainingCatalogueItems, canManageTraining, courseDeployments, currentUser],
@@ -15610,6 +15647,7 @@ function Analytics({
         banks: bankContext,
         relevantQuestionSamples: samples,
       },
+      askedBy: currentUser ? { userId: currentUser.userId, role: currentUser.role } : undefined,
     }
   }
 
@@ -20378,7 +20416,7 @@ function HelpFeedbackButtons({
   )
 }
 
-function HelpFaq({ currentUser }: { currentUser?: User }) {
+function HelpFaq({ currentUser, tenantId }: { currentUser?: User; tenantId?: string }) {
   const isAdminUser = currentUser?.role === OWNER_ROLE || currentUser?.role === 'admin'
   const [activeTab, setActiveTab] = useState<HelpCenterTab>('learning')
   const [query, setQuery] = useState('')
@@ -20509,9 +20547,11 @@ function HelpFaq({ currentUser }: { currentUser?: User }) {
       question: prompt,
       userContext: {
         role: currentUser?.role ?? 'guest',
+        userId: currentUser?.userId,
         displayName: currentUser?.fullName,
         department: currentUser?.department,
         currentTab: activeTab,
+        tenantId,
       },
       chatHistory: (thread?.messages ?? []).slice(-8).map((message) => ({ role: message.role, content: message.content.slice(0, 1600) })),
       knowledgeBase: {

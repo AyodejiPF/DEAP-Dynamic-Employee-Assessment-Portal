@@ -17,7 +17,7 @@ Before writing custom integration code, check whether one of these reference ser
 Note: the reference **GitHub** server is archived — don't assume it's still maintained; check the MCP Registry (modelcontextprotocol.io) for the current equivalent before building around it.
 
 ## Step 2: If nothing fits, scope a custom server narrowly
-When building a custom MCP server (e.g. a bespoke StaffiQ/StaffiQ data source, an n8n bridge):
+When building a custom MCP server (e.g. a bespoke StaffiQ data source, an n8n bridge):
 - Expose a small number of specific tools, each doing one clear thing (e.g. `get_client_status`, not `run_arbitrary_query`).
 - Validate every tool's input against a schema — don't accept freeform strings that get passed straight to an external system.
 - Prefer read-only tools by default; only add write/mutating tools when the task genuinely requires them, and flag those clearly.

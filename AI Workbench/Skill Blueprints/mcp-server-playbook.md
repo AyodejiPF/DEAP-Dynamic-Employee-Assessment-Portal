@@ -4,7 +4,7 @@
 Covers two original links together: `modelcontextprotocol/servers` (88.7k★, reference MCP servers — item 7 "GitHub MCP") and `modelcontextprotocol/typescript-sdk` (12.9k★, item 11, mislabelled "TypeScript LSP" in the original list — it's actually the SDK for building MCP servers/clients, not a language server).
 
 ## Problem It Solves
-Two related gaps: (1) knowing *which* existing MCP server to reach for instead of reinventing file/git/memory access as bash calls, and (2) knowing how to scope a *custom* MCP server when a business need (a StaffiQ/StaffiQ integration, an n8n bridge) isn't covered by an existing one. Without a playbook, both decisions get made ad hoc each time.
+Two related gaps: (1) knowing *which* existing MCP server to reach for instead of reinventing file/git/memory access as bash calls, and (2) knowing how to scope a *custom* MCP server when a business need (a StaffiQ integration, an n8n bridge) isn't covered by an existing one. Without a playbook, both decisions get made ad hoc each time.
 
 ## Core Mechanism (reverse-engineered)
 **Selection tier** — before writing custom integration code, check whether an existing reference server already solves it: `filesystem` (scoped file ops), `git` (repo read/search/manipulate), `memory` (persistent knowledge graph across sessions), `fetch` (web content), `time` (timezone conversion), `sequential-thinking` (structured multi-step reasoning). Note: the reference **GitHub** server specifically is archived — check the MCP Registry for its current maintained replacement rather than assuming the old one still works.
@@ -35,7 +35,7 @@ Before writing custom integration code, check whether one of these reference ser
 Note: the reference **GitHub** server is archived — don't assume it's still maintained; check the MCP Registry (modelcontextprotocol.io) for the current equivalent before building around it.
 
 ## Step 2: If nothing fits, scope a custom server narrowly
-When building a custom MCP server (e.g. a bespoke StaffiQ/StaffiQ data source, an n8n bridge):
+When building a custom MCP server (e.g. a bespoke StaffiQ data source, an n8n bridge):
 - Expose a small number of specific tools, each doing one clear thing (e.g. `get_client_status`, not `run_arbitrary_query`).
 - Validate every tool's input against a schema — don't accept freeform strings that get passed straight to an external system.
 - Prefer read-only tools by default; only add write/mutating tools when the task genuinely requires them, and flag those clearly.

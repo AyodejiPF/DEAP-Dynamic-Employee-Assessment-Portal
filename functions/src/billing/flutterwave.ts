@@ -14,7 +14,20 @@
  *
  * Note: This is a stub implementation. Full production integration
  * requires Flutterwave API keys in environment variables.
+ *
+ * ⚠ CAPABILITY WARNING — 25 July 2026 feature parity audit, Build Gaps.
+ * chargeAuthorization() and createRefund() below both throw, they are not
+ * implemented. As of this audit nothing in the codebase calls either of
+ * them for Flutterwave (recurring charges are hard-coded to paystackProvider
+ * in billing/endpoints.ts, and no refund flow calls any provider yet), so
+ * this is currently safe. If you wire up generic, provider-dispatched
+ * recurring billing or refunds in the future, route Flutterwave tenants to
+ * Paystack instead, or check FLUTTERWAVE_RECURRING_SUPPORTED /
+ * FLUTTERWAVE_REFUNDS_SUPPORTED below first, until these are genuinely built.
  */
+
+export const FLUTTERWAVE_RECURRING_SUPPORTED = false
+export const FLUTTERWAVE_REFUNDS_SUPPORTED = false
 
 import type {
   PaymentProvider,

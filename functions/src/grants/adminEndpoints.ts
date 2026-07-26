@@ -17,13 +17,16 @@ import type { DelegatedRole, GrantCheckContext } from './types'
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-function extractCaller(req: functions.https.Request): GrantCheckContext {
-  const body = req.body ?? {}
-  return {
-    userId: body.callerUserId ?? req.headers['x-user-id'] ?? '',
-    role: body.callerRole ?? req.headers['x-user-role'] ?? '',
-    fullName: body.callerFullName ?? req.headers['x-user-fullname'] ?? '',
-  }
+// SECURITY (fail closed): this TypeScript entry (lib/index.js) is NOT the deployed
+// entry — functions/index.js is. The deployed grant endpoints derive identity from
+// the HMAC signed session via verifyTenantSession. Trusting caller identity from the
+// request body or headers is an authorization bypass, so this dormant copy now returns
+// an EMPTY identity, which makes isPlatformOwner() false and every endpoint respond 403.
+// Do NOT switch the deployment entry to lib/index.js until these endpoints verify the
+// signed session the same way functions/index.js does.
+function extractCaller(_req: functions.https.Request): GrantCheckContext {
+  void _req
+  return { userId: '', role: '', fullName: '' }
 }
 
 function requireOwnerOrFail(caller: GrantCheckContext): void {

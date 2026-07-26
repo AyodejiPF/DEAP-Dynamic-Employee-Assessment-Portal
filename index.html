@@ -2,6 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Hide the raw Firebase hosting hosts completely, same pattern used on
+      // Task Pulse (see src/middleware.ts there). StaffiQ is a static Vite SPA
+      // with no server side middleware, so the equivalent guard runs here, as
+      // early as possible in <head>, before the app boots. Any visit to the
+      // raw *.web.app or *.firebaseapp.com host is bounced to staffiq.ng with
+      // the same path and query preserved, using replace() so the raw host
+      // never sits in browser history. Localhost and any already-branded host
+      // are left alone.
+      (function () {
+        var rawHosts = [
+          'training-assessment-1c8ef.web.app',
+          'training-assessment-1c8ef.firebaseapp.com',
+          'iicocece-assessment.web.app',
+          'iicocece-assessment.firebaseapp.com'
+        ];
+        var host = window.location.hostname.toLowerCase();
+        if (rawHosts.indexOf(host) !== -1) {
+          var target = 'https://staffiq.ng' + window.location.pathname + window.location.search + window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#004331" />
