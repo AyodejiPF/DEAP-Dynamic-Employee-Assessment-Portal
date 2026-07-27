@@ -404,3 +404,22 @@ without reading this note first.
 - Ran `firebase deploy --project iicocece-assessment --only functions,hosting,firestore` for real, via a one shot Scheduled Task to survive past any single tool call (the same workaround the Task Pulse deploy used, direct process launches were getting killed when a tool call ended). Full log captured: every function showed "Skipped (No changes detected)", meaning the earlier cut off attempt had in fact already deployed them successfully before it was interrupted, hosting finalised and released cleanly this run, ending in `+ Deploy complete!`.
 - Confirmed live: `https://training-assessment-1c8ef.web.app` returns 301 (the raw host guard added earlier tonight is working, it redirects rather than serving the app directly). `https://staffiq.ng` returns 200 with the real StaffiQ title and description, resolving to a genuine Firebase Hosting IP. Worth noting for whoever reads this: the GA4 measurement ID served on staffiq.ng (`G-70WMCDHYC0`) does not match the one hardcoded in this repo's `index.html` (`G-PYTVN2Y33X`), so staffiq.ng is likely being served from a separate marketing/landing build rather than this app repo directly. Not investigated further tonight, flagging honestly rather than guessing.
 **Not done**: the DeepSeek/"Mr Ayo" API key Ayodeji mentioned wanting checked or created does not exist yet in Secret Manager under any obvious name in either project, still needs him to supply the real key. Registrar level DNS work for staffiq.ng appears to be unnecessary now, it is already live and correctly branded.
+
+---
+
+### Claude (Cowork) to others
+
+**Date**: 2026-07-27
+**Prompt Ref**: Chat, Ayodeji: "always use test admin user for your own access ... store this info globally and also in both projects that for you or any other ide to login, you should use test admin user, and if you need to use the user, use the test user as they have different levels of access."
+**Task**: Standing instruction, not code. Recording the test login credentials for this app (StaffiQ / DEAP) so any agent or IDE working here signs in with a controlled demo account rather than Ayodeji's real account or real client data.
+**Files**: This log entry only. No source touched.
+**Status**: completed (reference recorded; live login not re verified this session, see Notes)
+**Evidence**: Read directly from `src/App.tsx`'s `testerAccountDefinitions` (lines ~2329 to 2361):
+
+| Account | Email | Role | Default password |
+|---|---|---|---|
+| Test admin | `testadmin@example.local` | Admin | `@dm1N#` |
+| Test user | `testuser@example.local` | Employee | `t#stus#r` |
+
+Both are managed live from Super Admin → Tester Account Control (`src/superadmin/components/TesterAccountControl.tsx`): enable/disable, generate a fresh password, set a chosen password, or reset to the default above, all from that panel. If a password stops working, that panel is the fix, not a guess.
+**Notes**: Same session confirmed TaskPulse's equivalent test admin account (`AGENT-COMMS.md` in that repo) no longer accepts its documented default password live, so treat any "default password" here as best available documentation, not a guarantee, until it's actually tried. Did not attempt a live login against this app tonight (browser session became unstable mid check on the sister project); the values above come straight from source, not a live test. Whoever next has a working browser session here should do one real login as test admin to confirm, then append a short verification note.
