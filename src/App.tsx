@@ -103,6 +103,7 @@ import {
   loginToTenant,
   readSessionUser,
   readTenantStored,
+  removeTenantStored,
   resetTenantUserPassword,
   switchTenant,
   tenantFetch,
@@ -136,6 +137,12 @@ type Difficulty = 'Easy' | 'Medium' | 'Hard'
 type OptionKey = 'A' | 'B' | 'C' | 'D' | 'E'
 type ThemeMode = 'light' | 'dark'
 type SyncState = 'saved' | 'saving' | 'delayed' | 'offline'
+interface PendingCloudSave {
+  nextState: SharedAppState
+  changedFields: Partial<SharedAppState>
+  failureMessage: string
+}
+const pendingCloudSaveStorageKey = 'staffiq-pending-cloud-save'
 type AnalyticsChartFocus = 'all' | 'activity' | 'outcomes' | 'mastery' | 'risk'
 type StaffiqIconName =
   | 'dashboard'
@@ -5746,6 +5753,7 @@ function App() {
   const cloudHydratedRef = useRef(false)
   const cloudWriteStateRef = useRef<SharedAppState | undefined>(undefined)
   const cloudSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const pendingCloudSaveTokenRef = useRef(0)
   const questionBankCatalogueSyncRef = useRef('')
   const questionBankCloudFetchRef = useRef(new Set<string>())
   const questionBankCloudSyncRef = useRef(new Set<string>())
@@ -6080,6 +6088,14 @@ function App() {
     changedFields: Partial<SharedAppState>,
     failureMessage: string,
   ) {
+    // Persist what we are about to try to save BEFORE attempting it, so a dropped
+    // connection, a closed tab, or a refresh mid outage does not silently lose an
+    // admin change. Each pending write gets its own token; on success we only clear
+    // storage if nothing newer has since been queued behind it.
+    pendingCloudSaveTokenRef.current += 1
+    const token = pendingCloudSaveTokenRef.current
+    writeStored(pendingCloudSaveStorageKey, { nextState, changedFields, failureMessage, token })
+
     const saveTask = async () => {
       let baseState = cloudWriteStateRef.current
       if (!baseState && !cloudHydratedRef.current) {
@@ -6100,12 +6116,24 @@ function App() {
       if (saved) {
         cloudHydratedRef.current = true
         cloudWriteStateRef.current = stateToSave
+        const stillPending = readStored<{ token?: number } | undefined>(pendingCloudSaveStorageKey, undefined)
+        if (stillPending?.token === token) removeTenantStored(pendingCloudSaveStorageKey)
       }
       setSyncState(saved ? 'saved' : navigator.onLine ? 'delayed' : 'offline')
       if (!saved) setToast(failureMessage)
     }
     cloudSaveQueueRef.current = cloudSaveQueueRef.current.catch(() => undefined).then(saveTask)
     return cloudSaveQueueRef.current
+  }
+
+  function retryPendingCloudSave() {
+    const pending = readStored<(PendingCloudSave & { token?: number }) | undefined>(pendingCloudSaveStorageKey, undefined)
+    if (!pending) {
+      setSyncState('saved')
+      return
+    }
+    setSyncState('saving')
+    void saveSharedStateAfterHydration(pending.nextState, pending.changedFields, pending.failureMessage)
   }
 
   async function refreshTestAvailabilityNow() {
@@ -6379,14 +6407,24 @@ function App() {
     return () => window.removeEventListener('scroll', updateAppearanceFade)
   }, [])
   useEffect(() => {
-    const markOnline = () => setSyncState('saved')
+    // The connection dropping and coming back must actually re send whatever
+    // failed to save, not just relabel the status pill. A missed 'online' event
+    // (known to happen on flaky mobile networks and captive portal Wifi) is
+    // covered by the periodic check below as a safety net.
+    const markOnline = () => retryPendingCloudSave()
     const markOffline = () => setSyncState('offline')
     window.addEventListener('online', markOnline)
     window.addEventListener('offline', markOffline)
+    if (navigator.onLine) retryPendingCloudSave()
+    const safetyNetInterval = window.setInterval(() => {
+      if (navigator.onLine) retryPendingCloudSave()
+    }, 20000)
     return () => {
       window.removeEventListener('online', markOnline)
       window.removeEventListener('offline', markOffline)
+      window.clearInterval(safetyNetInterval)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
