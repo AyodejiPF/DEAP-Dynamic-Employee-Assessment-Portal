@@ -204,6 +204,7 @@ type AppView =
   | 'settings'
   | 'my-tests'
   | 'my-results'
+  | 'my-team'
   | 'help'
   | 'taking-test'
   | 'result'
@@ -2655,6 +2656,10 @@ const navItems = [
 const employeeNav = [
   ['my-tests', 'my-tests', 'My Tests'],
   ['my-results', 'my-results', 'My Results'],
+  // 'My Team' is visible only to users who are an actual supervisorId target of at
+  // least one other user (see isDirectSupervisor below) — this is the single-manager
+  // reporting hierarchy build book item, StaffiQ Part 4 High priority #1, 27 Jul 2026.
+  ['my-team', 'employees', 'My Team'],
 ] as const
 const universalNav = [['help', 'help', 'Learning / Help']] as const
 const participationNav = [['bug-feedback', 'feedback', 'Bug Report and Feedback']] as const
@@ -6528,7 +6533,18 @@ function App() {
   const activeSession = sessions.find((session) => session.id === activeSessionId && !isSessionNullified(session))
   const currentPermissions = currentUser ? (isAdmin && !isTesterAccount(currentUser) ? defaultPermissionsFor(currentUser) : (permissions[currentUser.id] ?? defaultPermissionsFor(currentUser))) : undefined
   const hasPermission = (permission: PermissionKey) => Boolean((isAdmin && !isTesterAccount(currentUser)) || currentPermissions?.[permission])
+  // Single-manager reporting hierarchy (StaffiQ Part 4 High priority #1, 27 Jul 2026):
+  // supervisorId scopes exactly one nav item and one view, "My Team", to whoever is
+  // actually named as another user's supervisorId. This is a structural fact from the
+  // data, not an admin-editable permission flag, so it is computed here rather than
+  // added to PermissionKey. Multi-level chains (a manager's manager also seeing the
+  // team) are explicitly out of scope, flagged as a fast follow in the build book.
+  const directReportsOfCurrentUser = currentUser
+    ? usersVisibleToCurrentUser.filter((user) => user.supervisorId && user.supervisorId === currentUser.userId)
+    : []
+  const isDirectSupervisor = directReportsOfCurrentUser.length > 0
   const visibleEmployeeNav = employeeNav.filter(([itemView]) => {
+    if (itemView === 'my-team') return isDirectSupervisor
     const required = employeeViewPermissions[itemView]
     return required ? hasPermission(required) : true
   })
@@ -7792,6 +7808,37 @@ function App() {
     recordAudit('Password reset', `${user?.fullName ?? 'A user'} received a new generated password.`)
     recordAnalytics('password_reset', { userId, outcome: 'reset' })
     setToast('Password reset. Click the hidden password button to copy the updated credential.')
+  }
+
+  /**
+   * Sets or clears one user's supervisorId, i.e. their single direct manager.
+   * Before this function existed, supervisorId could only ever be set via the
+   * CSV/XLSX bulk import parser, there was no way to set or correct it for one
+   * person from inside the product. StaffiQ Part 4 High priority #1, 27 Jul 2026.
+   * Multi-level manager chains are explicitly out of scope, this only ever writes
+   * one direct supervisorId, never a chain.
+   */
+  function updateUserSupervisor(userId: string, supervisorId: string) {
+    if (!hasPermission('manage_users')) {
+      setToast('You do not have permission to change a user directory record.')
+      return
+    }
+    if (userId === supervisorId) {
+      setToast('A user cannot be set as their own supervisor.')
+      return
+    }
+    const user = users.find((item) => item.id === userId)
+    const supervisor = supervisorId ? users.find((item) => item.userId === supervisorId) : undefined
+    const nextUsers = users.map((item) => (item.id === userId ? { ...item, supervisorId: supervisorId || undefined } : item))
+    setUsers(nextUsers)
+    publishSharedState({ users: nextUsers })
+    recordAudit(
+      'Supervisor updated',
+      supervisorId
+        ? `${user?.fullName ?? 'A user'}'s supervisor was set to ${supervisor?.fullName ?? supervisorId}.`
+        : `${user?.fullName ?? 'A user'}'s supervisor was cleared.`,
+    )
+    setToast(supervisorId ? 'Supervisor updated.' : 'Supervisor cleared.')
   }
 
   function updateTesterAccount(
@@ -9574,7 +9621,7 @@ function App() {
             onTake={startTest}
           />
         )}
-        {view === 'employees' && <EmployeesPanel users={usersVisibleToCurrentUser} sessions={sessions} onResetPassword={resetUserPassword} onToast={setToast} onImportUsers={handleUserImport} />}
+        {view === 'employees' && <EmployeesPanel users={usersVisibleToCurrentUser} sessions={sessions} onResetPassword={resetUserPassword} onUpdateSupervisor={updateUserSupervisor} onToast={setToast} onImportUsers={handleUserImport} />}
         {view === 'analytics' && (
           <Analytics
             sessions={sessions}
@@ -9680,6 +9727,9 @@ function App() {
           />
         )}
         {view === 'my-results' && <MyResults currentUser={currentUser} sessions={sessions} tests={tests} />}
+        {view === 'my-team' && isDirectSupervisor && (
+          <MyTeam currentUser={currentUser} directReports={directReportsOfCurrentUser} sessions={sessions} tests={tests} />
+        )}
         {view === 'help' && (
           <section className="panel">
             <div className="panel-heading-row">
@@ -14254,12 +14304,14 @@ function EmployeesPanel({
   users,
   sessions,
   onResetPassword,
+  onUpdateSupervisor,
   onToast,
   onImportUsers,
 }: {
   users: User[]
   sessions: TestSession[]
   onResetPassword: (userId: string) => void
+  onUpdateSupervisor: (userId: string, supervisorId: string) => void
   onToast: (message: string) => void
   onImportUsers: (file?: File) => void
 }) {
@@ -14271,7 +14323,6 @@ function EmployeesPanel({
     if (!normalized) return users
     return users.filter((user) => `${user.userId} ${user.fullName} ${user.displayName} ${user.department} ${user.jobRole}`.toLowerCase().includes(normalized))
   }, [userFilter, users])
-  const supervisorName = (supervisorId?: string) => users.find((user) => user.userId === supervisorId)?.fullName ?? '—'
   async function copyCredential(user: User) {
     await copyToClipboard(credentialText(user))
     onToast('Username and password copied. You can paste it into WhatsApp now.')
@@ -14337,7 +14388,24 @@ function EmployeesPanel({
               <span>Role</span>
               <strong>{selectedUser.jobRole}</strong>
               <span>Supervisor</span>
-              <strong>{supervisorName(selectedUser.supervisorId)}</strong>
+              <select
+                aria-label="Supervisor"
+                value={selectedUser.supervisorId ?? ''}
+                onChange={(event) => {
+                  const nextSupervisorId = event.target.value
+                  onUpdateSupervisor(selectedUser.id, nextSupervisorId)
+                  setSelectedUser({ ...selectedUser, supervisorId: nextSupervisorId || undefined })
+                }}
+              >
+                <option value="">No supervisor set</option>
+                {users
+                  .filter((candidate) => candidate.userId !== selectedUser.userId)
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.userId}>
+                      {candidate.fullName}
+                    </option>
+                  ))}
+              </select>
               <span>Password</span>
               {showPassword ? <strong>{selectedUser.password}</strong> : <button className="secret-button" type="button" onClick={() => setShowPassword(true)}>Click to view password</button>}
             </div>
@@ -19154,6 +19222,56 @@ function MyTests({
           </section>
         </div>
       )}
+    </section>
+  )
+}
+
+/**
+ * Single-manager reporting hierarchy, "My Team" view (StaffiQ Part 4 High priority #1,
+ * 27 Jul 2026). Scoped entirely by supervisorId: only the direct reports of the
+ * viewing user are ever passed in (see directReportsOfCurrentUser in the parent
+ * component), so this never exposes another manager's team or the whole directory.
+ * Multi-level chains are explicitly out of scope for this build, a manager's manager
+ * does not see this view unless they are also a direct supervisorId themselves.
+ */
+function MyTeam({
+  currentUser,
+  directReports,
+  sessions,
+  tests,
+}: {
+  currentUser: User
+  directReports: User[]
+  sessions: TestSession[]
+  tests: Assessment[]
+}) {
+  const rows = sortReportUsers(directReports).map((member) => {
+    const memberSessions = sessions.filter(
+      (session) => session.userId === member.id && session.status === 'completed' && !isSessionNullified(session),
+    )
+    const latest = memberSessions.slice().sort(
+      (a, b) => new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime(),
+    )[0]
+    const latestTest = latest ? tests.find((test) => test.id === latest.testId) : undefined
+    const latestSummary = latest
+      ? `${latestTest?.name ?? 'Assessment'} — ${latest.percentage}% (${latest.passed ? 'Pass' : 'Fail'})`
+      : 'No completed assessments yet'
+    return [member.fullName, member.department || '—', roleDisplayName(member.role), String(memberSessions.length), latestSummary]
+  })
+  return (
+    <section>
+      <PageTitle eyebrow="My team" title="Direct reports" />
+      <section className="panel">
+        <p>People whose supervisor record on file is {currentUser.fullName}. This is a single-manager view, not multi-level, a direct report's own reports are not shown here.</p>
+        {directReports.length === 0 ? (
+          <EmptyState title="No direct reports" body="No one currently lists you as their supervisor." />
+        ) : (
+          <DataTable
+            columns={['Name', 'Department', 'Role', 'Completed assessments', 'Most recent result']}
+            rows={rows}
+          />
+        )}
+      </section>
     </section>
   )
 }
