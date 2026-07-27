@@ -123,6 +123,8 @@ import './App.css'
 import { isPlatformOwner } from './superadmin/owner'
 import { FeatureParityPanel } from './superadmin/components/FeatureParityPanel'
 import { SuperAdminPanel } from './superadmin/components/SuperAdminPanel'
+import { BrandingControl } from './superadmin/components/BrandingControl'
+import { type Branding, sidebarLogoDimensions, LogoPlaceholder } from './branding'
 
 type OwnerRole = 'super_admin'
 const OWNER_ROLE = ['super', 'admin'].join('_') as OwnerRole
@@ -914,9 +916,8 @@ interface HelpIntelligencePayload {
 
 type QuestionExposureCounts = Record<string, number>
 
-interface Branding {
-  logoUrl: string
-}
+// Branding interface now lives in ./branding.tsx (see import above), shared with
+// src/superadmin/components/BrandingControl.tsx without a circular import.
 
 interface LayoutSettings {
   sidebarWidthPx: number
@@ -1216,10 +1217,7 @@ const sidebarWidthMinPx = 176
 const sidebarWidthMaxPx = 360
 const sidebarWidthStepPx = 16
 
-const sidebarLogoDimensions = {
-  width: 88,
-  height: 52,
-}
+// sidebarLogoDimensions now lives in ./branding.tsx (see import above).
 
 const logoUploadMaxBytes = 1_500_000
 const logoCloudMaxBytes = 420_000
@@ -10454,14 +10452,7 @@ function BrandHeader({ branding, subtitle, className = '' }: { branding: Brandin
   )
 }
 
-function LogoPlaceholder({ large = false }: { large?: boolean }) {
-  return (
-    <span className={`brand-logo-placeholder ${large ? 'large' : ''}`.trim()}>
-      <strong>Logo slot</strong>
-      <em>{sidebarLogoDimensions.width} x {sidebarLogoDimensions.height} px</em>
-    </span>
-  )
-}
+// LogoPlaceholder now lives in ./branding.tsx (see import above).
 
 function SyncIndicator({ state }: { state: SyncState }) {
   const label = state === 'saved' ? 'Cloud saved' : state === 'saving' ? 'Saving changes' : state === 'offline' ? 'Offline copy' : 'Cloud sync unavailable'
@@ -18218,37 +18209,11 @@ function SettingsPanel({
         </section>
       )}
 
+      {/* Build book Part 4 #4, 27 Jul 2026: extracted from an inline block into
+          src/superadmin/components/BrandingControl.tsx, pure code organisation,
+          identical markup, identical behaviour, identical gating. */}
       {activeTab === 'branding' && (
-        <section className="panel branding-panel">
-          <div className="panel-heading-row">
-            <div>
-              <h2>Platform logo</h2>
-              <p>Admin-only logo control. Upload the organisation logo that appears at the top left of every admin and employee screen.</p>
-            </div>
-          </div>
-          <div className="branding-control">
-            <div className="logo-preview-card" aria-label="Current platform logo preview">
-              {branding.logoUrl ? <img src={branding.logoUrl} alt="Current Training and assessment platform logo" /> : <LogoPlaceholder large />}
-            </div>
-            <div className="branding-actions">
-              <label className="upload-button">
-                <Upload size={18} /> Upload new logo
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    void onLogoUpload(event.target.files?.[0])
-                    event.currentTarget.value = ''
-                  }}
-                />
-              </label>
-              <button className="secondary-button" type="button" onClick={onLogoReset}>
-                Remove logo
-              </button>
-              <p className="hint">Expected display slot: {sidebarLogoDimensions.width} x {sidebarLogoDimensions.height} px. Recommended upload: PNG, JPG, SVG, or WebP under 1.5 MB. Staffiq optimises raster logos before syncing them to every user.</p>
-            </div>
-          </div>
-        </section>
+        <BrandingControl branding={branding} onLogoUpload={onLogoUpload} onLogoReset={onLogoReset} />
       )}
 
       {activeTab === 'appearance' && (
