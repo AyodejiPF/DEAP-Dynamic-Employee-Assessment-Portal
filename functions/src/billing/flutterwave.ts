@@ -24,8 +24,24 @@
  * recurring billing or refunds in the future, route Flutterwave tenants to
  * Paystack instead, or check FLUTTERWAVE_RECURRING_SUPPORTED /
  * FLUTTERWAVE_REFUNDS_SUPPORTED below first, until these are genuinely built.
+ *
+ * ⚠ DO NOT REMOVE THIS GUARD — StaffiQ build book Part 4 High priority #3,
+ * 27 Jul 2026. As of this note, no plan manager, checkout, or subscription
+ * screen anywhere in src/ actually offers Flutterwave as a choice to a
+ * client (billing/endpoints.ts imports and calls only paystackProvider,
+ * never flutterwaveProvider, confirmed by direct code search on 27 Jul
+ * 2026). Recurring charges and refunds are not implemented at all, so if a
+ * checkout were ever allowed to start on Flutterwave, it could take a
+ * client's first payment successfully and then fail silently, with real
+ * customer money, the first time a renewal or refund was attempted.
+ * createCheckout() below is therefore deliberately gated off by
+ * FLUTTERWAVE_CHECKOUT_SELECTABLE until chargeAuthorization() and
+ * createRefund() are genuinely finished. Do not flip this flag, and do not
+ * delete this guard, without first finishing recurring charges and
+ * refunds for real.
  */
 
+export const FLUTTERWAVE_CHECKOUT_SELECTABLE = false
 export const FLUTTERWAVE_RECURRING_SUPPORTED = false
 export const FLUTTERWAVE_REFUNDS_SUPPORTED = false
 
@@ -53,6 +69,16 @@ export const flutterwaveProvider: PaymentProvider = {
   id: 'flutterwave',
 
   async createCheckout(params: CheckoutParams): Promise<CheckoutSession> {
+    // Gated off — see the CAPABILITY WARNING at the top of this file and
+    // StaffiQ build book Part 4 High priority #3, 27 Jul 2026. Flutterwave
+    // cannot yet complete a full billing lifecycle (recurring charges and
+    // refunds both still throw below), so no checkout is allowed to start
+    // on it, to avoid silently failing against real customer money later.
+    if (!FLUTTERWAVE_CHECKOUT_SELECTABLE) {
+      throw new Error(
+        'Flutterwave is not yet enabled for checkout — recurring charges and refunds are not implemented. Use Paystack. See StaffiQ build book Part 4 High priority #3.',
+      )
+    }
     if (!SECRET_KEY) throw new Error('Flutterwave secret key not configured')
 
     const body = {
