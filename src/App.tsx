@@ -9742,7 +9742,10 @@ function App() {
             <HelpFaq currentUser={currentUser} tenantId={activeTenant.tenantId} />
           </section>
         )}
-        {view === 'ai-usage' && currentUser?.userId === 'U001' && (
+        {/* Build book Part 4 #2, 27 Jul 2026: was a bare `currentUser?.userId === 'U001'`
+            ad hoc literal check, replaced with the same canonical Platform Owner check
+            used one block below for Super Admin, isAyodejiTokenOwner(). */}
+        {view === 'ai-usage' && isAyodejiTokenOwner(currentUser) && currentUser && (
           <AIUsageDashboard currentUserId={currentUser.userId} onToast={setToast} />
         )}
         {view === 'superadmin' && isAyodejiTokenOwner(currentUser) && (

@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { isPlatformOwner } from '../superadmin/owner'
 
 interface EntitlementResult {
   allowed: boolean
@@ -65,12 +66,12 @@ export function useEntitlement(
       return
     }
 
-    // Platform Owner bypass (client-side)
-    if (
-      currentUser.userId === 'U001' &&
-      currentUser.role === 'super_admin' &&
-      currentUser.fullName.trim().toLowerCase() === 'ayodeji falope'
-    ) {
+    // Platform Owner bypass (client-side). Build book Part 4 #2, 27 Jul 2026:
+    // this used to duplicate the userId/role/fullName literals inline instead of
+    // importing the single canonical check from src/superadmin/owner.ts, whose own
+    // header comment says "every other module must import from here — never
+    // duplicate the check."
+    if (isPlatformOwner(currentUser)) {
       const r: EntitlementResult = { allowed: true, loading: false }
       setCache(featureKey, activeTenant.tenantId, r)
       setResult(r)
