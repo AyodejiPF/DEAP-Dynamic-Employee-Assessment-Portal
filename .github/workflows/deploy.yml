@@ -52,6 +52,12 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # Quality gate added 27 Jul 2026 (world class readiness pass), same pattern
+      # added to Task Pulse's pipeline the same day. The build step above already
+      # fails the job on a broken build, this adds an explicit lint gate too.
+      - name: Lint gate
+        run: npm run lint
+
       # ---------- Marketing website (low risk, static) ----------
       - name: Build website
         working-directory: staffiq-website
