@@ -41,6 +41,25 @@ export interface ChangeCatalogEntry {
 
 export const CHANGE_CATALOG_ENTRIES: ChangeCatalogEntry[] = [
   {
+    version: 'VT-25',
+    title: 'Public Website Load Speed: Smaller Favicon, Optimised Social Image, Self Hosted Fonts',
+    period: 'July 2026',
+    date: '2026-07-28',
+    changeType: 'Improved Feature',
+    status: 'Pending Deployment',
+    categories: ['Website', 'Performance'],
+    summary: 'Three front loading weight reductions across all 30 pages of the public StaffiQ website, with no visual change to any of them. Recorded honestly as Pending Deployment: both commits exist and are real, but they sit on the branch speed/staffiq-favicon-og-optimisation and have not been merged to main or deployed, and both commit messages themselves say awaiting review.',
+    changes: [
+      'The browser tab icon was a 1254 by 1254 source image of 328,594 bytes being downloaded in full on every one of the 30 pages purely to draw a tiny tab icon. Replaced with a proper 64 by 64 version of the same artwork at 3,705 bytes, a 98.9 per cent reduction, with all 30 pages repointed at it.',
+      'The social sharing image was losslessly re optimised in place, same format and same dimensions, from 1,143,275 down to 1,039,732 bytes, roughly 9 per cent smaller.',
+      'Inter and Space Grotesk were being pulled from two external font origins on every page, each needing its own DNS lookup, connection, and security handshake, with a render blocking round trip before the font file could even be requested. The exact same Latin subset font files are now served from the site itself, 70,544 bytes total for every weight of both families, covered by the existing one year immutable cache rule with no extra configuration.',
+      'Net effect: two fewer external origins per page and a materially smaller first load, with identical rendering.',
+    ],
+    learningAndHelp: 'Nothing user facing to document. Relevant to Ayodeji only as evidence of the website speed work, and as a reminder that this improvement is not live until the branch is merged.',
+    deploymentNote: 'NOT DEPLOYED. Committed on branch speed/staffiq-favicon-og-optimisation only, not merged into main, not published. Merge the branch and redeploy the website to make this real for visitors.',
+    source: 'Commits 813baa8 and 3230e4c on branch speed/staffiq-favicon-og-optimisation; byte counts quoted directly from those commit messages and from SPEED_IMPROVEMENTS_CHANGELOG.md.',
+  },
+  {
     version: 'VT-24',
     title: 'Version Tracker & Help Centre Content Refresh',
     period: 'July 2026',
